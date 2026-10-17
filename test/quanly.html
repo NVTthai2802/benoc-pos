@@ -64,9 +64,6 @@
 .chrow input[type=text], .chrow input[type=number] { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 15px; width: 100%; min-width: 0; background: var(--card); }
 .chrow label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
 @media (max-width: 480px) { .chrow { grid-template-columns: minmax(0, 1fr) 84px auto; } .chrow label:nth-of-type(2) { grid-column: 1; } }
-.rline { display: grid; grid-template-columns: minmax(0, 1fr) 80px 110px auto; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1.5px dashed var(--line); }
-.rline input { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px; font-size: 15px; width: 100%; min-width: 0; background: var(--card); }
-@media (max-width: 480px) { .rline { grid-template-columns: minmax(0, 1fr) 70px; } .rline .rcost { grid-column: 1; } }
 .big-num { font: 800 40px/1 var(--f-head); color: var(--red); }
 .clock-card { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
 .clock-card .state { font: 700 22px/1.3 var(--f-head); }
@@ -83,7 +80,7 @@
 .inline-confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-weight: 600; font-size: 14px; }
 </style>
 
-<div class="demo-note" id="demoNote" hidden><div class="wrap" style="max-width:980px">Bản xem thử: số liệu doanh thu, ca làm và kho là dữ liệu mẫu. Mọi thay đổi chỉ lưu trong trình duyệt này.</div></div>
+<div class="demo-note" id="demoNote" hidden><div class="wrap" style="max-width:980px">Bản xem thử: số liệu doanh thu và ca làm là dữ liệu mẫu. Mọi thay đổi chỉ lưu trong trình duyệt này.</div></div>
 <div id="app"><p class="wrap loading">Đang tải…</p></div>
 
 <script src="config.js"></script>
@@ -97,7 +94,6 @@ const { api, ui, esc, K, vnd, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, to
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const COLORS = [['vang', 'Vàng'], ['cam', 'Cam'], ['hong', 'Hồng'], ['xanhla', 'Xanh lá'], ['xanhduong', 'Xanh dương'], ['tim', 'Tím'], ['nau', 'Nâu']];
-const REASON = { nhap: 'Nhập hàng', su_dung: 'Dùng', hong: 'Hỏng / hết hạn', kiem_kho: 'Kiểm kho' };
 const MODE = { up: 'làm tròn lên', down: 'làm tròn xuống', nearest: 'làm tròn gần nhất' };
 /* Hai mã QR gọi món: mỗi mã mở đúng một menu, đơn về đúng một quầy */
 const QRS = [
@@ -122,10 +118,10 @@ const PAY_COLOR = { tien_mat: '#E2325C', chuyen_khoan: '#3A7FC2' };
 const ICON_BOWL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>';
 const ICON_CUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.5 13h-9z"/><path d="M5 8h14M12 8l2-6"/></svg>';
 const TABS = {
-  owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['kho', 'Kho hàng', 'xanhla'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
-  staff: [['chamcong', 'Chấm công', 'cam'], ['kho', 'Kho hàng', 'xanhla']]
+  owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
+  staff: [['chamcong', 'Chấm công', 'cam']]
 };
-const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', invCat: 'all', invQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
+const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
 
 $('#demoNote').hidden = !DEMO;
 BN.staff.requireLogin($('#app'), { title: 'Quản lý quán', onReady: s => { state.session = s; boot(); } });
@@ -168,7 +164,7 @@ function go(tab) {
   BN.store.set('qltab.' + BN.SLOT, tab);
   $$('.nav [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
   const main = $('#main'); main.onclick = null; main.onchange = null; main.innerHTML = '<p class="loading">Đang tải…</p>';
-  ({ doanhthu: renderRevenue, menu: renderMenu, kho: renderStock, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
+  ({ doanhthu: renderRevenue, menu: renderMenu, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
     .catch(e => { main.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; });
 }
 const rerender = () => go(state.tab);
@@ -424,170 +420,6 @@ function editGroup(g) {
 }
 
 /* =====================================================================
-   KHO HÀNG
-   ===================================================================== */
-const qtyFmt = n => (Math.round(Number(n) * 100) / 100).toLocaleString('vi-VN');
-async function decodeBarcode(file) {
-  if ('BarcodeDetector' in window) {
-    try { const det = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] }); const r = await det.detect(await createImageBitmap(file)); if (r.length) return r[0].rawValue; } catch (e) { /* dùng thư viện bên dưới */ }
-  }
-  await loadScript('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js');
-  let el = document.getElementById('bcReader');
-  if (!el) { el = document.createElement('div'); el.id = 'bcReader'; el.style.cssText = 'position:absolute;left:-9999px;width:300px;height:300px'; document.body.appendChild(el); }
-  const h = new window.Html5Qrcode('bcReader');
-  try { return await h.scanFile(file, false); } catch (e) { return null; } finally { try { h.clear(); } catch (e) { /* bỏ qua */ } }
-}
-const scanBtn = (id, label) => '<label class="btn btn-soft filebtn" for="' + id + '">' + (label || 'Chụp mã vạch') + '<input type="file" accept="image/*" capture="environment" id="' + id + '"></label>';
-
-async function renderStock(main) {
-  const inv = await api.inventory(); state.inv = inv;
-  const q = state.invQuery.trim().toLowerCase();
-  const low = inv.products.filter(p => p.is_active && Number(p.stock_qty) <= Number(p.min_qty));
-  const list = inv.products.filter(p => (state.invCat === 'all' || p.category_id === state.invCat) && (!q || p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q)));
-  const catColor = ['vang', 'xanhduong', 'cam', 'hong', 'tim', 'nau', 'xanhla'];
-  main.innerHTML = '<div class="ptitle"><h1>Kho hàng</h1><div class="row"><button class="btn" type="button" id="newReceipt">Nhập hàng</button>' + scanBtn('scanFind', 'Chụp mã để tìm') + '</div></div>' +
-    (low.length ? '<section class="box cc-hong"><h2 class="box-title"><span>Sắp hết (' + low.length + ')</span></h2><ul class="list">' + low.map(p => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-prod="' + esc(p.id) + '"><span class="lname">' + esc(p.name) + '</span><span class="pill pill-red num">còn ' + qtyFmt(p.stock_qty) + ' ' + esc(p.unit) + '</span></button></li>').join('') + '</ul></section>' : '') +
-    '<div class="toolbar"><input class="search" id="iq" type="search" placeholder="Tìm tên hoặc mã vạch…" value="' + esc(state.invQuery) + '" aria-label="Tìm hàng"><button class="btn btn-line" type="button" id="newProd">+ Thêm hàng</button></div>' +
-    '<div class="chips"><button class="chipbtn" type="button" data-icat="all" aria-pressed="' + (state.invCat === 'all') + '">Tất cả</button>' + inv.categories.map(c => '<button class="chipbtn" type="button" data-icat="' + c.id + '" aria-pressed="' + (state.invCat === c.id) + '">' + esc(c.name) + '</button>').join('') +
-    (isOwner() ? '<button class="chipbtn" type="button" id="newPCat">+ Thêm loại</button>' : '') + '</div>' +
-    inv.categories.filter(c => state.invCat === 'all' || state.invCat === c.id).map((c, i) => {
-      const ps = list.filter(p => p.category_id === c.id); if (!ps.length) return '';
-      return '<section class="box cc-' + catColor[i % catColor.length] + '"><h2 class="box-title"><span>' + esc(c.name) + '</span></h2><ul class="list">' + ps.map(p => {
-        const isLow = Number(p.stock_qty) <= Number(p.min_qty);
-        return '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-prod="' + esc(p.id) + '"><span class="lmain"><span class="lname">' + esc(p.name) + (p.is_active ? '' : ' <span class="pill pill-mute">Ngừng dùng</span>') + '</span><span class="lsub num">' + (p.barcode ? 'Mã ' + esc(p.barcode) : 'Không có mã vạch') + ' · báo khi còn ≤ ' + qtyFmt(p.min_qty) + '</span></span>' +
-          '<span class="lside"><b class="num" style="font:800 20px/1 var(--f-head)' + (isLow ? ';color:var(--danger)' : '') + '">' + qtyFmt(p.stock_qty) + '</b><span class="small muted">' + esc(p.unit) + '</span></span></button></li>';
-      }).join('') + '</ul></section>';
-    }).join('') + (list.length ? '' : '<p class="empty">Không có hàng nào khớp.</p>') +
-    '<section class="box cc-nau"><h2 class="box-title"><span>Lịch sử kho gần đây</span></h2><div id="hist"><p class="loading">Đang tải…</p></div></section>';
-  $$('[data-icat]', main).forEach(b => b.onclick = () => { state.invCat = b.dataset.icat === 'all' ? 'all' : Number(b.dataset.icat); rerender(); });
-  const iq = $('#iq', main); iq.oninput = () => { state.invQuery = iq.value; clearTimeout(iq._t); iq._t = setTimeout(async () => { const pos = iq.selectionStart; await renderStock(main); const n = $('#iq', main); n.focus(); n.setSelectionRange(pos, pos); }, 250); };
-  main.onclick = e => {
-    const p = e.target.closest('[data-prod]');
-    if (p) openProduct(inv.products.find(x => x.id === p.dataset.prod));
-    else if (e.target.closest('#newReceipt')) openReceipt();
-    else if (e.target.closest('#newProd')) productForm(null, null, () => { ui.close(); rerender(); });
-    else if (e.target.closest('#newPCat')) newProductCategory();
-  };
-  $('#scanFind', main).onchange = async e => {
-    const f = e.target.files[0]; e.target.value = ''; if (!f) return; ui.toast('Đang đọc mã vạch…');
-    const code = await decodeBarcode(f).catch(() => null);
-    if (!code) { ui.toast('Không đọc được mã. Chụp gần, đủ sáng và thẳng mã vạch.'); return; }
-    const p = await api.findProductByBarcode(code);
-    if (p) openProduct(p); else productForm(null, code, () => { ui.close(); rerender(); });
-  };
-  const hist = await api.movements(null, 15);
-  $('#hist', main).innerHTML = histHtml(hist, true);
-}
-function histHtml(rows, withName) {
-  if (!rows.length) return '<p class="empty">Chưa có thay đổi nào.</p>';
-  return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th>' + (withName ? '<th>Hàng</th>' : '') + '<th>Việc</th><th class="r">Số lượng</th><th>Người ghi</th></tr></thead><tbody>' +
-    rows.map(m => '<tr><td class="num">' + ddmm(m.created_at) + ' ' + hhmm(m.created_at) + '</td>' + (withName ? '<td>' + esc(m.product_name || '') + '</td>' : '') +
-      '<td>' + REASON[m.reason] + (m.supplier ? ' · ' + esc(m.supplier) : '') + (m.note ? '<br><span class="small muted">' + esc(m.note) + '</span>' : '') + '</td>' +
-      '<td class="r num" style="color:' + (m.qty_change > 0 ? 'var(--ok)' : 'var(--danger)') + '">' + (m.qty_change > 0 ? '+' : '') + qtyFmt(m.qty_change) + ' ' + esc(m.unit || '') + '</td><td>' + esc(m.by_name || '') + '</td></tr>').join('') + '</tbody></table></div>';
-}
-function newProductCategory() {
-  ui.sheet(ui.head('Thêm loại hàng') + '<div class="sh-body"><label class="field" for="pcName">Tên loại<input id="pcName" maxlength="40" placeholder="Ví dụ: Rau củ"></label><p class="msg" id="pcMsg" hidden></p></div><div class="sh-foot"><button class="btn grow" type="button" id="pcSave">Lưu</button></div>', sh => {
-    $('#pcSave', sh).onclick = async () => {
-      const name = $('#pcName', sh).value.trim(); if (!name) return;
-      try { await api.saveProductCategory({ name }); ui.close(); ui.toast('Đã thêm loại hàng'); rerender(); } catch (err) { const m = $('#pcMsg', sh); m.textContent = errText(err); m.hidden = false; }
-    };
-  });
-}
-/* Tạo / sửa hàng. Gọi onSaved(product) khi lưu xong. */
-function productForm(p, barcode, onSaved) {
-  const inv = state.inv, isNew = !p;
-  p = p || { name: '', category_id: (state.invCat !== 'all' && state.invCat) || (inv.categories[0] && inv.categories[0].id), barcode: barcode || '', unit: 'cái', min_qty: 0, is_active: true };
-  ui.sheet(ui.head(isNew ? 'Hàng mới' : 'Sửa thông tin hàng', isNew && barcode ? 'Mã ' + esc(barcode) + ' chưa có trong kho. Nhập thông tin một lần, lần sau quét là ra.' : '') + '<div class="sh-body">' +
-    '<label class="field" for="pName">Tên hàng <span class="req">*</span><input id="pName" maxlength="80" value="' + esc(p.name) + '"></label>' +
-    '<div class="grid2"><label class="field" for="pCat">Loại<select id="pCat">' + inv.categories.map(c => '<option value="' + c.id + '"' + (c.id === p.category_id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select></label>' +
-    '<label class="field" for="pUnit">Đơn vị<input id="pUnit" maxlength="20" value="' + esc(p.unit) + '" placeholder="gói, chai, thùng…"></label></div>' +
-    '<div class="grid2"><label class="field" for="pCode">Mã vạch<input id="pCode" inputmode="numeric" value="' + esc(p.barcode || '') + '" placeholder="Để trống nếu không có"></label>' +
-    '<label class="field" for="pMin">Báo sắp hết khi còn ≤<input id="pMin" type="number" min="0" step="any" value="' + p.min_qty + '"></label></div>' +
-    (isNew ? '' : '<label class="switch"><input type="checkbox" id="pActive"' + (p.is_active ? ' checked' : '') + '><span class="track"></span>Còn dùng</label>') +
-    '<div class="row">' + scanBtn('pScan', 'Chụp mã vạch') + '<span class="small muted">Hoặc gõ số dưới mã vạch.</span></div><p class="msg" id="pMsg" hidden></p></div>' +
-    '<div class="sh-foot"><button class="btn grow" type="button" id="pSave">' + (isNew ? 'Thêm hàng' : 'Lưu') + '</button></div>', sh => {
-    $('#pScan', sh).onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const code = await decodeBarcode(f).catch(() => null); if (code) { $('#pCode', sh).value = code; ui.toast('Đã đọc mã ' + code); } else ui.toast('Không đọc được mã, hãy gõ tay.'); };
-    $('#pSave', sh).onclick = async () => {
-      const msg = $('#pMsg', sh), name = $('#pName', sh).value.trim(); msg.hidden = true;
-      if (!name) { msg.textContent = 'Nhập tên hàng.'; msg.hidden = false; return; }
-      try {
-        const saved = await api.saveProduct(Object.assign({}, p, { name, category_id: Number($('#pCat', sh).value), unit: $('#pUnit', sh).value.trim() || 'cái', barcode: $('#pCode', sh).value.trim(), min_qty: Number($('#pMin', sh).value) || 0, is_active: $('#pActive', sh) ? $('#pActive', sh).checked : true }));
-        ui.toast(isNew ? 'Đã thêm hàng' : 'Đã lưu'); onSaved(saved);
-      } catch (err) { msg.textContent = errText(err); msg.hidden = false; }
-    };
-  });
-}
-async function openProduct(p) {
-  const cat = state.inv.categories.find(c => c.id === p.category_id);
-  ui.sheet(ui.head(esc(p.name), esc(cat ? cat.name : '') + (p.barcode ? ' · mã ' + esc(p.barcode) : '')) + '<div class="sh-body">' +
-    '<div class="row" style="justify-content:space-between"><div><span class="small muted">Tồn kho</span><div class="big-num num">' + qtyFmt(p.stock_qty) + ' <span style="font-size:18px;color:var(--ink-2)">' + esc(p.unit) + '</span></div></div>' + (isOwner() ? '<button class="btn btn-sm btn-line" type="button" id="pEdit">Sửa thông tin</button>' : '') + '</div>' +
-    '<section class="box"><h3 class="box-title">Ghi xuất / kiểm kho</h3><div class="grid2"><label class="field" for="mvReason">Việc<select id="mvReason"><option value="su_dung">Dùng cho bếp</option><option value="hong">Hỏng / hết hạn</option><option value="kiem_kho">Kiểm kho (đếm lại)</option></select></label>' +
-    '<label class="field" for="mvQty"><span id="mvQtyLabel">Số lượng lấy ra</span><input id="mvQty" type="number" min="0" step="any" inputmode="decimal"></label></div>' +
-    '<label class="field" for="mvNote">Ghi chú<input id="mvNote" maxlength="120"></label><p class="msg" id="mvMsg" hidden></p><button class="btn" type="button" id="mvSave">Ghi lại</button></section>' +
-    '<h3 class="box-title" style="margin:0">Lịch sử</h3><div id="pHist"><p class="loading">Đang tải…</p></div></div>', async sh => {
-    if ($('#pEdit', sh)) $('#pEdit', sh).onclick = () => productForm(p, null, saved => { ui.close(); rerender(); });
-    $('#mvReason', sh).onchange = e => { $('#mvQtyLabel', sh).textContent = e.target.value === 'kiem_kho' ? 'Số đếm được thực tế' : 'Số lượng lấy ra'; };
-    $('#mvSave', sh).onclick = async () => {
-      const reason = $('#mvReason', sh).value, v = Number($('#mvQty', sh).value), msg = $('#mvMsg', sh); msg.hidden = true;
-      if ($('#mvQty', sh).value === '' || !(v >= 0)) { msg.textContent = 'Nhập số lượng.'; msg.hidden = false; return; }
-      const change = reason === 'kiem_kho' ? v - Number(p.stock_qty) : -v;
-      if (change === 0) { msg.textContent = reason === 'kiem_kho' ? 'Số đếm khớp tồn kho, không cần ghi.' : 'Số lượng phải lớn hơn 0.'; msg.hidden = false; return; }
-      try { await api.addMovement({ product_id: p.id, reason, qty_change: change, note: $('#mvNote', sh).value.trim() }); ui.close(); ui.toast('Đã ghi ' + REASON[reason].toLowerCase()); rerender(); }
-      catch (err) { msg.textContent = errText(err); msg.hidden = false; }
-    };
-    $('#pHist', sh).innerHTML = histHtml(await api.movements(p.id, 20), false);
-  });
-}
-function openReceipt() {
-  const lines = [];
-  const draw = sh => {
-    $('#rLines', sh).innerHTML = lines.length ? lines.map((l, i) => '<div class="rline"><span class="lmain"><span class="lname">' + esc(l.product.name) + '</span><span class="lsub">' + esc(l.product.unit) + (l.product.barcode ? ' · ' + esc(l.product.barcode) : '') + '</span></span>' +
-      '<input type="number" min="0" step="any" inputmode="decimal" value="' + l.qty + '" data-qty="' + i + '" aria-label="Số lượng ' + esc(l.product.name) + '">' +
-      '<input class="rcost" type="number" min="0" step="1000" inputmode="numeric" placeholder="Giá / đơn vị" value="' + (l.unit_cost || '') + '" data-cost="' + i + '" aria-label="Giá nhập ' + esc(l.product.name) + '">' +
-      '<button class="x" type="button" data-rmline="' + i + '" aria-label="Bỏ dòng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>').join('') : '<p class="empty">Chưa có hàng. Chụp mã vạch, gõ mã hoặc chọn từ danh sách.</p>';
-    const cost = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0), 0);
-    $('#rTotal', sh).textContent = cost ? 'Tổng tiền hàng: ' + vnd(cost) : '';
-    $('#rSave', sh).disabled = !lines.length;
-  };
-  const addProduct = (sh, p) => {
-    const ex = lines.find(l => l.product.id === p.id);
-    if (ex) ex.qty = Number(ex.qty || 0) + 1; else lines.push({ product: p, qty: 1, unit_cost: '' });
-    draw(sh); ui.toast('Đã thêm ' + p.name);
-  };
-  const byCode = async (sh, code) => {
-    code = String(code || '').trim(); if (!code) return;
-    const p = await api.findProductByBarcode(code);
-    if (p) { addProduct(sh, p); return; }
-    // Hàng mới: tạo một lần, lần sau quét là ra. Sau khi tạo quay lại phiếu nhập.
-    const keep = { supplier: $('#rSup', sh).value, note: $('#rNote', sh).value };
-    productForm(null, code, saved => { state.inv.products.push(saved); reopen(keep); const s2 = document.getElementById('bnSheet'); addProduct(s2, saved); });
-  };
-  const reopen = keep => {
-    ui.sheet(ui.head('Nhập hàng', 'Mỗi lần hàng về tạo một phiếu') + '<div class="sh-body">' +
-      '<div class="grid2"><label class="field" for="rSup">Nhà cung cấp<input id="rSup" maxlength="60" value="' + esc(keep.supplier || '') + '" placeholder="Ví dụ: Đại lý A"></label><label class="field" for="rNote">Ghi chú<input id="rNote" maxlength="120" value="' + esc(keep.note || '') + '"></label></div>' +
-      '<section class="box"><div class="row">' + scanBtn('rScan') + '<input class="search" style="flex:1;min-width:140px" id="rCode" inputmode="numeric" placeholder="Hoặc gõ mã vạch rồi Enter" aria-label="Mã vạch"></div>' +
-      '<label class="field" for="rPick" style="margin-top:10px">Hàng không có mã vạch<select id="rPick"><option value="">Chọn từ danh sách…</option>' + state.inv.products.filter(p => p.is_active).map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('') + '</select></label></section>' +
-      '<div class="small muted" style="display:grid;grid-template-columns:minmax(0,1fr) 80px 110px 36px;gap:8px"><span>Hàng</span><span>Số lượng</span><span>Giá nhập / đơn vị</span><span></span></div><div id="rLines"></div><b id="rTotal" class="num"></b><p class="msg" id="rMsg" hidden></p></div>' +
-      '<div class="sh-foot"><button class="btn grow" type="button" id="rSave">Lưu phiếu nhập</button></div>', sh => {
-      draw(sh);
-      $('#rScan', sh).onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; ui.toast('Đang đọc mã vạch…'); const code = await decodeBarcode(f).catch(() => null); if (code) byCode(sh, code); else ui.toast('Không đọc được mã. Chụp gần, đủ sáng, hoặc gõ số dưới mã vạch.'); };
-      $('#rCode', sh).onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); const v = e.target.value; e.target.value = ''; byCode(sh, v); } };
-      $('#rPick', sh).onchange = e => { const p = state.inv.products.find(x => x.id === e.target.value); e.target.value = ''; if (p) addProduct(sh, p); };
-      sh.addEventListener('input', e => { const q = e.target.dataset.qty, c = e.target.dataset.cost; if (q != null) lines[q].qty = e.target.value; if (c != null) lines[c].unit_cost = e.target.value; const cost = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0), 0); $('#rTotal', sh).textContent = cost ? 'Tổng tiền hàng: ' + vnd(cost) : ''; });
-      sh.addEventListener('click', e => { const rm = e.target.closest('[data-rmline]'); if (rm) { lines.splice(Number(rm.dataset.rmline), 1); draw(sh); } });
-      $('#rSave', sh).onclick = async () => {
-        const msg = $('#rMsg', sh); msg.hidden = true;
-        if (lines.some(l => !(Number(l.qty) > 0))) { msg.textContent = 'Số lượng mỗi dòng phải lớn hơn 0.'; msg.hidden = false; return; }
-        const btn = $('#rSave', sh); btn.disabled = true;
-        try { await api.createReceipt({ supplier: $('#rSup', sh).value.trim(), note: $('#rNote', sh).value.trim(), lines: lines.map(l => ({ product_id: l.product.id, qty: Number(l.qty), unit_cost: l.unit_cost === '' ? null : Number(l.unit_cost) })) }); ui.close(); ui.toast('Đã nhập ' + lines.length + ' mặt hàng vào kho'); rerender(); }
-        catch (err) { msg.textContent = errText(err); msg.hidden = false; btn.disabled = false; }
-      };
-    }, { wide: true });
-  };
-  reopen({});
-}
-
-/* =====================================================================
    NHÂN VIÊN & LƯƠNG (chủ quán)
    ===================================================================== */
 function staffRangeOf(k) {
@@ -734,7 +566,7 @@ async function renderSettings(main) {
       '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">' + q.desc + '</p><label class="field" for="qUrl-' + q.key + '">Địa chỉ mã này mở ra<input id="qUrl-' + q.key + '" value="' + esc(orderUrl + q.query) + '"></label>' +
       (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') +
       '<div class="row"><a class="btn btn-sm btn-line" href="index.html' + q.query + '" target="_blank">Mở menu này</a><a class="btn btn-sm btn-line" href="' + q.screen + '" target="_blank">Mở màn hình ' + q.screenName + '</a></div></div></div></section>').join('') +
-    (DEMO ? '<section class="box"><h2 class="box-title">Dữ liệu xem thử</h2><p class="muted" style="margin-top:0">Đưa mọi thứ về như lúc đầu: menu, đơn, kho, ca làm.</p><button class="btn btn-danger" type="button" id="reset">Xoá dữ liệu xem thử</button>' + confirmBox('Xoá toàn bộ thay đổi trong bản xem thử?', 'Xoá và tải lại', 'resetBox') + '</section>' : '');
+    (DEMO ? '<section class="box"><h2 class="box-title">Dữ liệu xem thử</h2><p class="muted" style="margin-top:0">Đưa mọi thứ về như lúc đầu: menu, đơn, ca làm.</p><button class="btn btn-danger" type="button" id="reset">Xoá dữ liệu xem thử</button>' + confirmBox('Xoá toàn bộ thay đổi trong bản xem thử?', 'Xoá và tải lại', 'resetBox') + '</section>' : '');
   const readRule = () => ({ round_minutes: $('#sRoundOn', main).checked ? Number($('#sStep', main).value) : 1, round_mode: $('#sMode', main).value, pay_round: Number($('#sPay', main).value) });
   const ex = () => {
     const r = readRule(); $('#sRoundOpts', main).hidden = !$('#sRoundOn', main).checked;
