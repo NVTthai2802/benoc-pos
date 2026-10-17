@@ -268,7 +268,7 @@ function supabaseApi() {
       return c.storage.from('menu-images').getPublicUrl(path).data.publicUrl;
     },
     async saveGroup(g) {
-      const c = await cl(); const row = { name: g.name, title: g.title, min_select: g.min_select, max_select: g.max_select, sort_order: g.sort_order || 0 };
+      const c = await cl(); const row = { name: g.name, title: g.title, kind: g.kind === 'do_uong' ? 'do_uong' : 'do_an', min_select: g.min_select, max_select: g.max_select, sort_order: g.sort_order || 0 };
       let id = g.id;
       if (id) await q(c.from('option_groups').update(row).eq('id', id));
       else id = (await q(c.from('option_groups').insert(row).select('id').single())).id;
@@ -383,7 +383,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v4'; // v4: bỏ kho hàng (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v5'; // v5: tuỳ chọn chia đồ uống / đồ ăn, gộp size thành Upsize (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /phache\.html$/.test(location.pathname) ? 'phache' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
@@ -626,7 +626,7 @@ function demoApi() {
     async saveGroup(g) {
       need('owner');
       return tx(db => {
-        const row = { name: g.name, title: g.title, min_select: g.min_select, max_select: g.max_select, sort_order: g.sort_order || 0 };
+        const row = { name: g.name, title: g.title, kind: g.kind === 'do_uong' ? 'do_uong' : 'do_an', min_select: g.min_select, max_select: g.max_select, sort_order: g.sort_order || 0 };
         let id = g.id;
         if (id) Object.assign(db.option_groups.find(x => x.id === id), row); else { id = db.seq.option_groups++; db.option_groups.push(Object.assign({ id }, row)); }
         const keep = g.choices.filter(c => c.id).map(c => c.id);
