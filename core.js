@@ -34,6 +34,14 @@ const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 
 const toLocalInput = d => { const x = new Date(d); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()) + 'T' + pad(x.getHours()) + ':' + pad(x.getMinutes()); };
 const phoneToEmail = p => String(p).replace(/\D/g, '') + '@' + CONFIG.LOGIN_DOMAIN;
 const DRINK_CATS = /trà|cà phê|matcha|nước|món nên thử|khoai môn tươi|sữa/i;
+/* Đơn mang về: không có số thẻ, hiện ô "MANG VỀ" có hình túi thay cho số */
+const ICON_BAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 12.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>';
+const isTakeaway = o => !!o && (o.dine_type === 'mang_ve' || o.dine === 'mang_ve');
+const qboxHtml = (o, extra) => isTakeaway(o)
+  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>Mang về</span></div>'
+  : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Số</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
+/* "số 12" hoặc "mang về của Lan" — dùng trong thông báo */
+const orderLabel = o => isTakeaway(o) ? 'mang về của ' + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(SP + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -167,8 +175,9 @@ function supabaseApi() {
     /* ---------- Khách ---------- */
     getMenu: () => rpc('get_menu'),
     placeOrder: o => rpc('place_order', {
-      p_queue_number: o.queue, p_customer_name: o.name, p_items: o.items,
-      p_customer_phone: o.phone || null, p_confirm_duplicate: !!o.confirm, p_note: o.note || null
+      p_queue_number: o.dine === 'mang_ve' ? null : o.queue, p_customer_name: o.name, p_items: o.items,
+      p_customer_phone: o.phone || null, p_confirm_duplicate: !!o.confirm, p_note: o.note || null,
+      p_dine_type: o.dine === 'mang_ve' ? 'mang_ve' : 'tai_quan'
     }),
     getMyOrder: token => rpc('get_my_order', { p_token: token }),
     callStaff: token => rpc('call_staff', { p_token: token }),
@@ -383,7 +392,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v6'; // v6: thêm topping đồ uống, lượng đường, lượng đá (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v7'; // v7: đơn mang về (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /phache\.html$/.test(location.pathname) ? 'phache' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
@@ -464,7 +473,7 @@ function demoSeed() {
       const m = pick(nm); const extra = (opts || []).reduce((s, o) => s + o.price, 0); total += (m.price + extra) * qty;
       db.order_items.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: m.price + extra, options: opts || [], qty, note: inote || null, station: stationOf(db, m.id) });
     });
-    db.orders.push({ id, access_token: uuid(), queue_number: queue, customer_name: name, customer_phone: null, note: note || null, status: 'cho_nhan', total, created_at: new Date(created).toISOString(), accepted_at: null, estimated_ready_at: null, served_at: null });
+    db.orders.push({ id, access_token: uuid(), queue_number: queue, dine_type: queue ? 'tai_quan' : 'mang_ve', customer_name: name, customer_phone: null, note: note || null, status: 'cho_nhan', total, created_at: new Date(created).toISOString(), accepted_at: null, estimated_ready_at: null, served_at: null });
     [...new Set(db.order_items.filter(i => i.order_id === id).map(i => i.station))].forEach(st => {
       const on = (cooking || []).indexOf(st) >= 0;
       db.order_stations.push({ order_id: id, station: st, status: on ? 'dang_lam' : 'cho_nhan', accepted_at: on ? new Date(created + 60e3).toISOString() : null, estimated_ready_at: on ? new Date(created + 13 * 60e3).toISOString() : null, served_at: null });
@@ -472,8 +481,9 @@ function demoSeed() {
     refreshOrder(db, id);
   };
   mk(7, 'Minh', 6, [['Cơm heo chua ngọt', 1, [{ group: 'Topping thêm', choice: 'Trứng ốp la', price: 5000 }], 'ít cay'], ['Hồng trà sữa trân châu', 1]], null, ['bep']);
-  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size to', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
-  mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Chọn size', choice: 'M', price: 0 }]]]);
+  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Upsize', choice: 'Upsize', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
+  mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Đường', choice: 'Ít đường', price: 0 }]]]);
+  mk(null, 'Hà', 3, [['Cơm gà viên', 1], ['Trà quất', 1, [{ group: 'Đá', choice: 'Ít đá', price: 0 }]]]); // đơn mang về (không có số thẻ)
   return db;
 }
 
@@ -503,13 +513,14 @@ function demoApi() {
   const api = {
     /* ---------- Khách ---------- */
     async getMenu() { await wait(120); return buildPublicMenu(load()); },
-    async placeOrder({ queue, name, phone, items, confirm, note }) {
+    async placeOrder({ queue, name, phone, items, confirm, note, dine }) {
       await wait(350);
-      if (!(queue > 0)) fail('MISSING_QUEUE_NUMBER');
+      const takeaway = dine === 'mang_ve'; if (takeaway) queue = null;
+      if (!takeaway && !(queue > 0)) fail('MISSING_QUEUE_NUMBER');
       if (!String(name || '').trim()) fail('MISSING_NAME');
       if (!items || !items.length) fail('EMPTY_ORDER');
       return tx(db => {
-        const dup = db.orders.find(o => o.queue_number === queue);
+        const dup = !takeaway && db.orders.find(o => o.queue_number === queue);
         if (dup && !confirm) fail('DUPLICATE_QUEUE', 'Số ' + queue + ' đang có đơn của ' + dup.customer_name + ' chưa thanh toán');
         const id = uuid(), lines = []; let total = 0;
         for (const li of items) {
@@ -532,7 +543,7 @@ function demoApi() {
           lines.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: unit, options: opts, qty, note: li.note ? String(li.note).trim() : null, station: stationOf(db, m.id) });
           total += unit * qty;
         }
-        const o = { id, access_token: uuid(), queue_number: queue, customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
+        const o = { id, access_token: uuid(), queue_number: queue, dine_type: takeaway ? 'mang_ve' : 'tai_quan', customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
         db.orders.push(o); lines.forEach(l => db.order_items.push(l));
         [...new Set(lines.map(l => l.station))].forEach(st => db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null }));
         return { order_id: o.id, access_token: o.access_token, total };
@@ -541,7 +552,7 @@ function demoApi() {
     async getMyOrder(token) {
       const db = load(); const o = db.orders.find(x => x.access_token === token); if (!o) return null;
       return {
-        queue_number: o.queue_number, customer_name: o.customer_name, status: o.status, total: o.total, note: o.note,
+        queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', customer_name: o.customer_name, status: o.status, total: o.total, note: o.note,
         created_at: o.created_at, estimated_ready_at: o.estimated_ready_at, orders_ahead: ordersAhead(db, o),
         has_open_call: db.staff_calls.some(c => c.order_id === o.id && !c.resolved_at),
         stations: db.order_stations.filter(x => x.order_id === o.id).map(x => ({ station: x.station, status: x.status, estimated_ready_at: x.estimated_ready_at })).sort((a, b) => a.station < b.station ? -1 : 1),
@@ -593,7 +604,7 @@ function demoApi() {
         const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
         const items = db.order_items.filter(i => i.order_id === id).map(i => ({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }));
         const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
-        db.sales.push({ id: o.id, queue_number: o.queue_number, total: o.total, payment_method: method, items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: iso(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: e.id });
+        db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method, items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: iso(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: e.id });
         db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
       });
     },
@@ -714,6 +725,7 @@ const api = DEMO ? demoApi() : supabaseApi();
 
 window.BN = {
   CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
+  ICON_BAG, isTakeaway, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
 

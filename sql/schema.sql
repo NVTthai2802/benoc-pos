@@ -129,7 +129,8 @@ create type order_status as enum ('cho_nhan', 'dang_lam', 'da_ra_mon');
 create table orders (
   id                 uuid primary key default gen_random_uuid(),
   access_token       uuid not null unique default gen_random_uuid(), -- khách dùng để xem đơn của mình
-  queue_number       int  not null check (queue_number > 0),         -- số thứ tự khách lấy ở bếp
+  queue_number       int  check (queue_number > 0),                  -- số thứ tự khách lấy ở bếp (trống nếu mang về)
+  dine_type          text not null default 'tai_quan' check (dine_type in ('tai_quan', 'mang_ve')), -- ăn tại quán / mang về
   customer_name      text not null check (length(trim(customer_name)) > 0),
   customer_phone     text,
   note               text,          -- ghi chú chung cho cả đơn (khách viết ở cuối giỏ hàng)
@@ -141,6 +142,7 @@ create table orders (
   served_at          timestamptz    -- lúc ra món
 );
 create index orders_queue_number on orders(queue_number);
+alter table orders add constraint orders_queue_or_takeaway check (dine_type = 'mang_ve' or queue_number is not null);
 create index orders_status_created on orders(status, created_at);
 
 create table order_items (
@@ -170,7 +172,7 @@ create index order_stations_station_status on order_stations(station, status);
 create table staff_calls (         -- khách bấm "gọi nhân viên"
   id           bigserial primary key,
   order_id     uuid references orders(id) on delete cascade,
-  queue_number int  not null,
+  queue_number int,                  -- trống nếu đơn mang về
   message      text,
   created_at   timestamptz not null default now(),
   resolved_at  timestamptz
@@ -182,7 +184,8 @@ create table staff_calls (         -- khách bấm "gọi nhân viên"
 -- =====================================================================
 create table sales (
   id             uuid primary key,          -- = id của order đã thanh toán
-  queue_number   int  not null,
+  queue_number   int,                       -- trống nếu đơn mang về
+  dine_type      text not null default 'tai_quan' check (dine_type in ('tai_quan', 'mang_ve')),
   total          int  not null,
   payment_method text not null check (payment_method in ('tien_mat', 'chuyen_khoan')),
   items          jsonb not null,            -- [{menu_item_id, name, price, qty, options}]
@@ -346,10 +349,13 @@ create or replace function place_order(
   p_items             jsonb,
   p_customer_phone    text    default null,
   p_confirm_duplicate boolean default false,
-  p_note              text    default null
+  p_note              text    default null,
+  p_dine_type         text    default 'tai_quan'   -- 'tai_quan' (ăn tại quán) | 'mang_ve' (mang về, không cần số thẻ)
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
+  v_dine       text := case when p_dine_type = 'mang_ve' then 'mang_ve' else 'tai_quan' end;
+  v_queue      int  := case when p_dine_type = 'mang_ve' then null else p_queue_number end;
   v_order      orders;
   v_dup        text;
   v_bad        text;
@@ -362,7 +368,7 @@ declare
   it           jsonb;
   mi           menu_items;
 begin
-  if p_queue_number is null or p_queue_number <= 0 then
+  if v_dine = 'tai_quan' and (v_queue is null or v_queue <= 0) then
     raise exception 'MISSING_QUEUE_NUMBER' using hint = 'Vui lòng nhập số thứ tự trên thẻ bạn vừa lấy';
   end if;
   if coalesce(trim(p_customer_name), '') = '' then
@@ -372,15 +378,17 @@ begin
     raise exception 'EMPTY_ORDER';
   end if;
 
-  select o.customer_name into v_dup from orders o where o.queue_number = p_queue_number limit 1;
-  if found and not p_confirm_duplicate then
-    raise exception 'DUPLICATE_QUEUE'
-      using hint = format('Số %s đang có đơn của %s chưa thanh toán', p_queue_number, v_dup);
+  if v_queue is not null then
+    select o.customer_name into v_dup from orders o where o.queue_number = v_queue limit 1;
+    if found and not p_confirm_duplicate then
+      raise exception 'DUPLICATE_QUEUE'
+        using hint = format('Số %s đang có đơn của %s chưa thanh toán', v_queue, v_dup);
+    end if;
   end if;
 
-  insert into orders (queue_number, customer_name, customer_phone, note)
-  values (p_queue_number, trim(p_customer_name), nullif(trim(p_customer_phone), ''),
-          nullif(left(trim(p_note), 300), ''))
+  insert into orders (queue_number, customer_name, customer_phone, note, dine_type)
+  values (v_queue, trim(p_customer_name), nullif(trim(p_customer_phone), ''),
+          nullif(left(trim(p_note), 300), ''), v_dine)
   returning * into v_order;
 
   for it in select * from jsonb_array_elements(p_items) loop
@@ -440,6 +448,7 @@ create or replace function get_my_order(p_token uuid) returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'queue_number',       o.queue_number,
+    'dine_type',          o.dine_type,
     'customer_name',      o.customer_name,
     'status',             o.status,
     'total',              o.total,
@@ -552,9 +561,9 @@ begin
   select * into o from orders where id = p_order_id for update;
   if not found then raise exception 'ORDER_NOT_FOUND'; end if;
 
-  insert into sales (id, queue_number, total, payment_method, items,
+  insert into sales (id, queue_number, dine_type, total, payment_method, items,
                      ordered_at, accepted_at, served_at, cook_minutes, station_minutes, cashier_id)
-  select o.id, o.queue_number, o.total, p_method,
+  select o.id, o.queue_number, o.dine_type, o.total, p_method,
          coalesce((select jsonb_agg(jsonb_build_object(
                      'menu_item_id', i.menu_item_id, 'name', i.item_name,
                      'price', i.unit_price, 'qty', i.qty, 'options', i.options, 'station', i.station))
@@ -691,7 +700,7 @@ grant usage on schema public to anon, authenticated;
 -- Khách (chưa đăng nhập): chỉ đọc menu + gọi các hàm đặt món
 grant select on menu_categories, menu_items, option_groups, option_choices, menu_item_option_groups to anon;
 grant execute on function get_menu(), get_my_order(uuid), call_staff(uuid, text), has_owner(),
-  place_order(int, text, jsonb, text, boolean, text) to anon;
+  place_order(int, text, jsonb, text, boolean, text, text) to anon;
 -- Nhân viên / chủ (đã đăng nhập): RLS lọc theo vai trò
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;

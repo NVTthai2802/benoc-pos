@@ -45,6 +45,28 @@
 .tk-title { margin: 0; font-weight: 600; }
 .tk-name { font: 700 22px/1.2 var(--f-hand); overflow-wrap: anywhere; }
 .tk-hint { font-size: 13px; color: var(--ink-2); }
+.tk-num--mv { color: var(--warn); background: var(--warn-soft); border-radius: 14px 0 0 14px; }
+.tk-num--mv svg { width: 42px; height: 42px; }
+.tk-num--mv .tk-label { color: var(--warn); font-weight: 800; font-size: 13px; }
+.tk-links { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+/* Chọn ăn tại quán / mang về */
+.ticket--pick { display: block; padding: 14px; }
+.ticket--pick::before, .ticket--pick::after { display: none; }
+.dp-title { margin: 0 0 10px; font: 700 18px/1.3 var(--f-head); text-align: center; }
+.dp-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dp-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px 12px; border: 2px solid var(--line); border-radius: 14px; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+.dp-btn:hover, .dp-btn:focus-visible { border-color: var(--red); background: var(--red-soft); }
+.dp-btn svg { width: 44px; height: 44px; color: var(--red); }
+.dp-btn[data-dine="mang_ve"] svg { color: var(--warn); }
+.dp-btn b { font: 700 17px/1.2 var(--f-head); }
+.dp-btn span { font-size: 13px; color: var(--ink-2); }
+.dine-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dine-seg label { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 2px solid var(--line); border-radius: 12px; background: var(--card); font-weight: 600; cursor: pointer; }
+.dine-seg label:has(input:checked) { border-color: var(--red); background: var(--red-soft); }
+.dine-seg input { accent-color: var(--red); margin: 0; }
+.dine-seg svg { width: 20px; height: 20px; }
+.dine-seg.invalid label { border-color: var(--warn); background: var(--warn-soft); }
+#fQueue[hidden] + #fName { grid-column: 1 / -1; }
 
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-block: 10px 0; padding: 12px 14px; border: 2px solid var(--red); border-radius: 14px; background: var(--red-soft); color: var(--ink); text-align: left; font-weight: 600; }
 .banner span:last-child { white-space: nowrap; color: var(--red); }
@@ -179,7 +201,7 @@
 <script>
 (function () {
 'use strict';
-const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS } = BN;
+const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, qboxHtml, orderLabel } = BN;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const ICON = {
@@ -190,7 +212,7 @@ const ICON = {
 
 const state = {
   menu: [], items: new Map(), itemCat: new Map(),
-  info: Object.assign({ queue: '', name: '', phone: '' }, store.get('info', {})),
+  info: Object.assign({ queue: '', name: '', phone: '', dine: '', dineAt: 0 }, store.get('info', {})),
   cart: [], cartNote: '',
   orders: store.get(DEMO ? 'demo.orders' : 'orders', []),
   orderData: {}, editingInfo: false, view: 'menu',
@@ -226,27 +248,76 @@ function thumbHtml(it, size) {
 
 /* ---------- Vé số thứ tự ---------- */
 const queueNum = () => parseInt(state.info.queue, 10);
-const infoReady = () => queueNum() > 0 && state.info.name.trim() !== '';
+/* Ăn tại quán / mang về. Hỏi lại nếu lần chọn trước đã quá 4 giờ (khách quay lại hôm khác). */
+const DINE_TTL = 4 * 3600e3;
+const dineMode = () => (state.info.dine && Date.now() - (state.info.dineAt || 0) < DINE_TTL) ? state.info.dine : '';
+const isTake = () => dineMode() === 'mang_ve';
+function setDine(d) { state.info.dine = d; state.info.dineAt = Date.now(); saveInfo(); }
+const infoReady = () => !!dineMode() && state.info.name.trim() !== '' && (isTake() || queueNum() > 0);
+const dinePickHtml = () => '<p class="dp-title">Bạn ăn tại quán hay mang về?</p><div class="dp-btns">' +
+  '<button class="dp-btn" type="button" data-dine="tai_quan">' + ICON.bowl + '<b>Ăn tại quán</b><span>Lấy thẻ số ở quầy</span></button>' +
+  '<button class="dp-btn" type="button" data-dine="mang_ve">' + ICON_BAG + '<b>Mang về</b><span>Không cần thẻ số</span></button></div>';
+/* Chưa chọn ăn tại quán / mang về thì hỏi trước, chọn xong mới làm tiếp (thêm món, mở món…) */
+function needDine(then) {
+  if (dineMode()) { then(); return; }
+  ui.sheet(ui.head('Trước khi chọn món') + '<div class="sh-body">' + dinePickHtml() + '</div>', sh => {
+    sh.addEventListener('click', e => { const b = e.target.closest('[data-dine]'); if (!b) return; setDine(b.dataset.dine); ui.close(); renderTicket(); then(); });
+  });
+}
 function renderChip() {
   const c = $('#chip');
-  if (queueNum() > 0) { c.className = 'chip'; c.innerHTML = 'Số <b class="num">' + esc(queueNum()) + '</b>'; c.setAttribute('aria-label', 'Số thứ tự ' + queueNum() + ', bấm để sửa'); }
+  if (!dineMode()) { c.className = 'chip chip--warn'; c.textContent = 'Ăn ở đây hay mang về?'; c.setAttribute('aria-label', 'Chưa chọn ăn tại quán hay mang về, bấm để chọn'); }
+  else if (isTake()) { c.className = 'chip'; c.innerHTML = 'Mang về'; c.setAttribute('aria-label', 'Đơn mang về, bấm để sửa'); }
+  else if (queueNum() > 0) { c.className = 'chip'; c.innerHTML = 'Số <b class="num">' + esc(queueNum()) + '</b>'; c.setAttribute('aria-label', 'Số thứ tự ' + queueNum() + ', bấm để sửa'); }
   else { c.className = 'chip chip--warn'; c.textContent = 'Chưa có số'; c.setAttribute('aria-label', 'Chưa nhập số thứ tự, bấm để nhập'); }
 }
 function renderTicket() {
   const el = $('#ticket'); renderChip();
+  el.className = 'ticket';
+  if (!dineMode()) {
+    el.className = 'ticket ticket--pick'; el.setAttribute('aria-label', 'Ăn tại quán hay mang về');
+    el.innerHTML = dinePickHtml();
+    el.onclick = e => { const b = e.target.closest('[data-dine]'); if (!b) return; setDine(b.dataset.dine); state.editingInfo = !infoReady(); renderTicket(); };
+    return;
+  }
+  el.onclick = null; el.setAttribute('aria-label', isTake() ? 'Đơn mang về' : 'Số thứ tự của bạn');
+  const switchLink = '<button class="link" type="button" id="tkSwitch">' + (isTake() ? 'Đổi sang ăn tại quán' : 'Đổi sang mang về') + '</button>';
+  const wireSwitch = () => { $('#tkSwitch').onclick = () => { setDine(isTake() ? 'tai_quan' : 'mang_ve'); state.editingInfo = !infoReady(); renderTicket(); renderChip(); }; };
+  if (isTake()) {
+    const head = '<div class="tk-num tk-num--mv">' + ICON_BAG + '<span class="tk-label">Mang về</span></div>';
+    if (infoReady() && !state.editingInfo) {
+      el.innerHTML = head + '<div class="tk-body"><span class="tk-name">' + esc(state.info.name) + '</span><span class="tk-hint">Món xong quán sẽ gọi tên bạn ra quầy nhận. Không cần lấy thẻ số.</span>' +
+        '<div class="tk-links"><button class="link" type="button" id="tkEdit">Sửa tên</button>' + switchLink + '</div></div>';
+      $('#tkEdit').onclick = () => { state.editingInfo = true; renderTicket(); $('#inName').focus(); };
+      wireSwitch(); return;
+    }
+    el.innerHTML = head + '<div class="tk-body"><p class="tk-title">Đơn mang về: chỉ cần tên của bạn, không cần thẻ số.</p>' +
+      '<label class="field" for="inName">Tên của bạn <input id="inName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi món xong" value="' + esc(state.info.name) + '"></label>' +
+      '<p class="msg" id="tkMsg" hidden></p>' +
+      '<div class="row"><button class="btn btn-sm" type="button" id="tkSave">Lưu</button></div><div class="tk-links">' + switchLink + '</div></div>';
+    const n = $('#inName');
+    n.oninput = () => { state.info.name = n.value; saveInfo(); };
+    $('#tkSave').onclick = () => {
+      const m = $('#tkMsg');
+      if (!state.info.name.trim()) { m.textContent = ERR.MISSING_NAME; m.hidden = false; n.focus(); return; }
+      state.editingInfo = false; renderTicket(); ui.toast('Đã lưu: mang về');
+    };
+    wireSwitch(); return;
+  }
   if (infoReady() && !state.editingInfo) {
     el.innerHTML = '<div class="tk-num"><span class="tk-label">Số của bạn</span><b class="num">' + esc(queueNum()) + '</b></div>' +
       '<div class="tk-body"><span class="tk-name">' + esc(state.info.name) + '</span><span class="tk-hint">Nhân viên sẽ mang món tới chỗ có thẻ số này.</span>' +
-      '<div class="row"><button class="link" type="button" id="tkEdit">Sửa số hoặc tên</button></div></div>';
+      '<div class="tk-links"><button class="link" type="button" id="tkEdit">Sửa số hoặc tên</button>' + switchLink + '</div></div>';
     $('#tkEdit').onclick = () => { state.editingInfo = true; renderTicket(); $('#inQueue').focus(); };
-    return;
+    wireSwitch(); return;
   }
   el.innerHTML = '<div class="tk-num"><label class="tk-label" for="inQueue">Số trên thẻ</label>' +
     '<input id="inQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" autocomplete="off" value="' + esc(state.info.queue) + '"></div>' +
     '<div class="tk-body"><p class="tk-title">Lấy thẻ số ở quầy bếp, nhập số trên thẻ và tên của bạn.</p>' +
     '<label class="field" for="inName">Tên của bạn <input id="inName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
     '<p class="msg" id="tkMsg" hidden></p>' +
-    '<div class="row"><button class="btn btn-sm" type="button" id="tkSave">Lưu</button>' + (state.editingInfo ? '' : '<span class="tk-hint">Bạn có thể xem menu trước.</span>') + '</div></div>';
+    '<div class="row"><button class="btn btn-sm" type="button" id="tkSave">Lưu</button>' + (state.editingInfo ? '' : '<span class="tk-hint">Bạn có thể xem menu trước.</span>') + '</div><div class="tk-links">' + switchLink + '</div></div>';
+  wireSwitch();
   const q = $('#inQueue'), n = $('#inName');
   q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderChip(); };
   n.oninput = () => { state.info.name = n.value; saveInfo(); };
@@ -259,8 +330,10 @@ function renderTicket() {
 }
 $('#chip').onclick = () => {
   if (state.view !== 'menu') showView('menu');
-  state.editingInfo = true; renderTicket();
-  $('#ticket').scrollIntoView({ block: 'center' }); $('#inQueue').focus({ preventScroll: true });
+  if (dineMode()) state.editingInfo = true;
+  renderTicket();
+  $('#ticket').scrollIntoView({ block: 'center' });
+  const f = $('#inQueue') || $('#inName'); if (f) f.focus({ preventScroll: true });
 };
 
 /* ---------- Menu ---------- */
@@ -369,6 +442,7 @@ function levelIcon(name) {
   return LV[kind + (/không/.test(n) ? 0 : /\bít\b|^ít|\sít/.test(n) ? 1 : 2)];
 }
 function quickAdd(id) {
+  if (!dineMode()) { needDine(() => quickAdd(id)); return; }
   const it = state.items.get(id); if (!it) return;
   const choices = []; let ok = true;
   it.option_groups.forEach(g => {
@@ -380,6 +454,7 @@ function quickAdd(id) {
   ui.toast('Đã thêm ' + it.name + (choices.length ? ' (' + choices.map(c => c.name).join(', ') + ')' : ''));
 }
 function openItem(id) {
+  if (!dineMode()) { needDine(() => openItem(id)); return; }
   const it = state.items.get(id); if (!it) return;
   const cat = state.itemCat.get(id);
   const sel = new Map(); it.option_groups.forEach(g => sel.set(g.id, new Set(g.choices.filter(c => c.default).map(c => c.id))));
@@ -447,11 +522,14 @@ function openCart() {
     '<span class="line-sub">' + esc(lineSub(l)) + '</span>' +
     '<div class="stepper stepper--sm" role="group" aria-label="Số lượng ' + esc(l.name) + '"><button type="button" data-line="' + i + '" data-d="-1" aria-label="Bớt 1">−</button><output class="num">' + l.qty + '</output><button type="button" data-line="' + i + '" data-d="1" aria-label="Thêm 1"' + (l.qty >= 50 ? ' disabled' : '') + '>+</button></div></li>').join('') + '</ul>'
     : '<p class="empty">Giỏ đang trống.</p>';
-  ui.sheet(ui.head('Giỏ của bạn', 'Kiểm tra món, nhập số thứ tự rồi gửi cho quán.') +
+  ui.sheet(ui.head('Giỏ của bạn', 'Kiểm tra món rồi gửi cho quán.') +
     '<div class="sh-body"><div id="cLines">' + linesHtml() + '</div>' +
     '<div class="sum"><span>Tổng cộng</span><b class="num" id="cTotal">' + vnd(cartTotal()) + '</b></div>' +
     '<div class="who">' +
-    '<label class="field" id="fQueue" for="cQueue">Số trên thẻ <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(state.info.queue) + '"></label>' +
+    '<div class="dine-seg wide" role="radiogroup" aria-label="Ăn tại quán hay mang về" id="fDine">' +
+    '<label><input type="radio" name="cDine" value="tai_quan"' + (dineMode() === 'tai_quan' ? ' checked' : '') + '>' + ICON.bowl + 'Ăn tại quán</label>' +
+    '<label><input type="radio" name="cDine" value="mang_ve"' + (isTake() ? ' checked' : '') + '>' + ICON_BAG + 'Mang về</label></div>' +
+    '<label class="field" id="fQueue" for="cQueue"' + (isTake() ? ' hidden' : '') + '>Số trên thẻ <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(state.info.queue) + '"></label>' +
     '<label class="field" id="fName" for="cName">Tên của bạn <span class="req">*</span><input id="cName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
     '<label class="field wide" for="cPhone">Số điện thoại (không bắt buộc)<input id="cPhone" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
     '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300">' + esc(state.cartNote) + '</textarea></label>' +
@@ -470,6 +548,7 @@ function openCart() {
       q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderTicket(); $('#fQueue', sh).classList.remove('invalid'); $('#cDup', sh).hidden = true; };
       n.oninput = () => { state.info.name = n.value; saveInfo(); renderTicket(); $('#fName', sh).classList.remove('invalid'); };
       p.oninput = () => { state.info.phone = p.value; saveInfo(); };
+      $$('input[name=cDine]', sh).forEach(r => r.onchange = () => { setDine(r.value); $('#fQueue', sh).hidden = isTake(); $('#fDine', sh).classList.remove('invalid'); $('#cMsg', sh).hidden = true; $('#cDup', sh).hidden = true; renderTicket(); });
       nt.oninput = () => { state.cartNote = nt.value; saveCart(); };
       $('#cSend', sh).onclick = () => sendOrder(sh, false);
     });
@@ -477,16 +556,17 @@ function openCart() {
 async function sendOrder(sh, confirm) {
   const msg = $('#cMsg', sh), dup = $('#cDup', sh), btn = $('#cSend', sh);
   msg.hidden = true; dup.hidden = true;
-  if (!(queueNum() > 0)) { $('#fQueue', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_QUEUE_NUMBER; msg.hidden = false; $('#cQueue', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
+  if (!dineMode()) { $('#fDine', sh).classList.add('invalid'); msg.textContent = 'Bạn ăn tại quán hay mang về? Chọn một ô ở trên nhé.'; msg.hidden = false; msg.scrollIntoView({ block: 'nearest' }); return; }
+  if (!isTake() && !(queueNum() > 0)) { $('#fQueue', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_QUEUE_NUMBER; msg.hidden = false; $('#cQueue', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
   if (!state.info.name.trim()) { $('#fName', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_NAME; msg.hidden = false; $('#cName', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
-  const mine = state.orders.some(o => !o.paid && o.queue === queueNum());
+  const mine = !isTake() && state.orders.some(o => !o.paid && o.dine !== 'mang_ve' && o.queue === queueNum());
   btn.disabled = true; btn.textContent = 'Đang gửi…';
   try {
     const res = await api.placeOrder({
-      queue: queueNum(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine,
+      queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine,
       items: state.cart.map(l => ({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }))
     });
-    state.orders.unshift({ token: res.access_token, queue: queueNum(), paid: false }); saveOrders();
+    state.orders.unshift({ token: res.access_token, queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), paid: false }); saveOrders();
     state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons();
     state.editingInfo = false; renderTicket();
     ui.close(); showView('status'); startPolling(); ui.toast('Đã gửi đơn cho quán');
@@ -530,16 +610,17 @@ function statusText(d) {
     if (left !== null && left > 0) return { title: who + ' đang làm món', sub: '<p class="eta">Còn khoảng <b class="num">' + left + '</b>phút</p><p>Dự kiến xong lúc <span class="num">' + hhmm(d.estimated_ready_at) + '</span></p>' };
     return { title: 'Sắp xong rồi', sub: '<p>Món đang được hoàn thiện, bạn đợi thêm chút nhé.</p>' };
   }
+  if (d.dine_type === 'mang_ve') return { title: 'Món đã xong', sub: '<p>Mời bạn ra quầy nhận món mang về.</p>' };
   return { title: 'Món đã ra', sub: '<p>Nhân viên đang mang tới chỗ có thẻ số ' + esc(d.queue_number) + '.</p>' };
 }
 function orderCard(o) {
-  if (o.paid) return '<article class="oc oc--paid"><div class="qbox"><span>Số</span><b class="num">' + esc(o.queue) + '</b></div><div><h2>Đã thanh toán</h2><p>Cảm ơn bạn, hẹn gặp lại ở Bé Nốc!</p><button class="link" type="button" data-dismiss="' + esc(o.token) + '">Ẩn đơn này</button></div></article>';
+  if (o.paid) return '<article class="oc oc--paid">' + qboxHtml(o) + '<div><h2>Đã thanh toán</h2><p>Cảm ơn bạn, hẹn gặp lại ở Bé Nốc!</p><button class="link" type="button" data-dismiss="' + esc(o.token) + '">Ẩn đơn này</button></div></article>';
   const d = state.orderData[o.token];
-  if (!d) return '<article class="oc"><p class="loading">Đang tải trạng thái đơn số ' + esc(o.queue) + '…</p></article>';
+  if (!d) return '<article class="oc"><p class="loading">Đang tải trạng thái đơn ' + esc(orderLabel(o)) + '…</p></article>';
   const step = { cho_nhan: 0, dang_lam: 1, da_ra_mon: 2 }[d.status], t = statusText(d), items = d.items || [];
   const count = items.reduce((s, i) => s + i.qty, 0);
   return '<article class="oc oc--' + esc(d.status) + '">' +
-    '<div class="oc-top"><div class="qbox"><span>Số</span><b class="num">' + esc(d.queue_number) + '</b></div><div class="oc-state" aria-live="polite"><h2>' + t.title + '</h2>' + t.sub + '</div></div>' +
+    '<div class="oc-top">' + qboxHtml(d) + '<div class="oc-state" aria-live="polite"><h2>' + t.title + '</h2>' + t.sub + '</div></div>' +
     '<ol class="steps">' + ['Chờ nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' + partsHtml(d) +
     '<details class="oc-items"><summary>' + count + ' món · <span class="num">' + vnd(d.total) + '</span> · ' + esc(d.customer_name) + '</summary><ul>' +
     items.map(i => '<li><span>' + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
@@ -565,7 +646,7 @@ function renderBanner() {
   const act = activeOrders(), el = $('#banner');
   if (!act.length || state.view !== 'menu') { el.innerHTML = ''; return; }
   const d = state.orderData[act[0].token];
-  const label = !d ? 'Đơn số ' + act[0].queue : 'Số ' + d.queue_number + ' · ' + ({ cho_nhan: 'Chờ bếp nhận', dang_lam: 'Bếp đang làm', da_ra_mon: 'Món đã ra' }[d.status]);
+  const label = !d ? 'Đơn ' + orderLabel(act[0]) : (d.dine_type === 'mang_ve' ? 'Mang về' : 'Số ' + d.queue_number) + ' · ' + ({ cho_nhan: 'Chờ bếp nhận', dang_lam: 'Bếp đang làm', da_ra_mon: 'Món đã ra' }[d.status]);
   el.innerHTML = '<button class="banner" type="button" id="toStatus"><span>' + esc(label) + (act.length > 1 ? ' (+' + (act.length - 1) + ' đơn)' : '') + '</span><span>Xem đơn →</span></button>';
   $('#toStatus').onclick = () => showView('status');
 }
