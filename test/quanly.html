@@ -518,7 +518,7 @@ async function editShift(s) {
     '<div class="pbig">' + ['Ảnh vào ca', 'Ảnh ra ca'].map((t, i) => '<figure>' + (urls[i] ? '<img src="' + esc(urls[i]) + '" alt="' + t + '">' : '<div class="ph">Không có ảnh</div>') + '<figcaption>' + t + ' · ' + (i ? (s.check_out_at ? hhmm(s.check_out_at) : 'chưa ra ca') : hhmm(s.check_in_at)) + '</figcaption></figure>').join('') + '</div>' +
     (s.check_out_at ? '<p class="msg msg-ok">' + payLine(s) + '<br><span class="small">Quy tắc của ca này: ' + ruleText(s) + '</span></p>' : '') +
     (isOwner() ? '<h3 class="box-title" style="margin:0">Sửa giờ (khi nhân viên quên chấm)</h3><div class="grid2"><label class="field" for="sIn">Giờ vào<input id="sIn" type="datetime-local" value="' + toLocalInput(s.check_in_at) + '"></label><label class="field" for="sOut">Giờ ra<input id="sOut" type="datetime-local" value="' + (s.check_out_at ? toLocalInput(s.check_out_at) : '') + '"></label></div>' +
-      '<label class="field" for="sNote">Ghi chú<input id="sNote" maxlength="120" value="' + esc(s.note || '') + '" placeholder="Ví dụ: quên chấm ra, đã hỏi lại"></label><p class="msg" id="sMsg" hidden></p>' : '') + '</div>' +
+      '<label class="field" for="sNote">Ghi chú<input id="sNote" maxlength="120" value="' + esc(s.note || '') + '"></label><p class="msg" id="sMsg" hidden></p>' : '') + '</div>' +
     (isOwner() ? '<div class="sh-foot"><button class="btn grow" type="button" id="sSave">Lưu và tính lại lương</button></div>' : ''), sh => {
     if (!$('#sSave', sh)) return;
     $('#sSave', sh).onclick = async () => {
