@@ -715,6 +715,20 @@ create policy call_done  on staff_calls for update using (my_role() is not null)
 create policy sales_owner on sales for select using (my_role() = 'owner');
 
 -- =====================================================================
+-- 10b. QUYỀN TRUY CẬP API (ghi rõ để chạy được kể cả khi project tắt
+--      "Automatically expose new tables"). RLS ở trên vẫn quyết định ai thấy dòng nào.
+-- =====================================================================
+grant usage on schema public to anon, authenticated;
+-- Khách (chưa đăng nhập): chỉ đọc menu + gọi các hàm đặt món
+grant select on menu_categories, menu_items, option_groups, option_choices, menu_item_option_groups to anon;
+grant execute on function get_menu(), get_my_order(uuid), call_staff(uuid, text), has_owner(),
+  place_order(int, text, jsonb, text, boolean, text) to anon;
+-- Nhân viên / chủ (đã đăng nhập): RLS lọc theo vai trò
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on all functions in schema public to authenticated;
+
+-- =====================================================================
 -- 11. REALTIME cho màn hình bếp
 --    (Khách không dùng realtime mà gọi get_my_order định kỳ → tiết kiệm kết nối)
 -- =====================================================================
