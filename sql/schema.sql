@@ -12,8 +12,11 @@ create extension if not exists pgcrypto;
 create table shop_settings (
   id               int primary key default 1 check (id = 1),
   shop_name        text not null default 'Quán của tôi',
-  round_minutes    int  not null default 15 check (round_minutes in (1, 5, 10, 15, 30, 60)),
+  -- Làm tròn giờ công: mặc định 1 = KHÔNG làm tròn, tính đúng từng phút. Chủ quán tự bật trong Cài đặt.
+  round_minutes    int  not null default 1 check (round_minutes in (1, 5, 10, 15, 30, 60)),
   round_mode       text not null default 'nearest' check (round_mode in ('up', 'down', 'nearest')),
+  -- Làm tròn tiền lương mỗi ca tới bội số này (gần nhất). 1 = giữ nguyên số lẻ.
+  pay_round        int  not null default 1000 check (pay_round in (1, 100, 500, 1000)),
   kitchen_capacity int  not null default 2 check (kitchen_capacity > 0), -- số đơn bếp làm song song
   updated_at       timestamptz not null default now()
 );
@@ -44,8 +47,9 @@ create table shifts (
   check_out_at    timestamptz,
   check_out_photo text,
   hourly_rate     int  not null,  -- chụp lại lương/giờ lúc vào ca, đổi lương sau không ảnh hưởng ca cũ
-  round_minutes   int,            -- quy tắc làm tròn đã áp dụng (lưu để đối chiếu)
+  round_minutes   int,            -- quy tắc làm tròn giờ đã áp dụng (1 = không làm tròn)
   round_mode      text,
+  pay_round       int,            -- làm tròn tiền đã áp dụng (lưu để đối chiếu)
   actual_minutes  int generated always as (
                     case when check_out_at is null then null
                          else floor(extract(epoch from (check_out_at - check_in_at)) / 60)::int end
@@ -261,6 +265,12 @@ language sql immutable as $$
           end)::int
 $$;
 
+-- Làm tròn tiền tới bội số gần nhất, ví dụ 96.667 với bước 1.000 -> 97.000
+create or replace function round_money(p_amount numeric, p_step int) returns int
+language sql immutable as $$
+  select (round(p_amount / greatest(coalesce(p_step, 1), 1)) * greatest(coalesce(p_step, 1), 1))::int
+$$;
+
 -- =====================================================================
 -- 7. CHẤM CÔNG (giờ lấy từ server)
 -- =====================================================================
@@ -304,8 +314,9 @@ begin
          check_out_photo = p_photo,
          round_minutes   = cfg.round_minutes,
          round_mode      = cfg.round_mode,
+         pay_round       = cfg.pay_round,
          paid_minutes    = pm,
-         pay_amount      = round(pm * s.hourly_rate / 60.0)
+         pay_amount      = round_money(pm * s.hourly_rate / 60.0, cfg.pay_round)
    where id = s.id
   returning * into s;
   return s;
@@ -639,8 +650,9 @@ begin
          check_out_at  = p_out,
          round_minutes = coalesce(s.round_minutes, cfg.round_minutes),
          round_mode    = coalesce(s.round_mode, cfg.round_mode),
+         pay_round     = coalesce(s.pay_round, cfg.pay_round),
          paid_minutes  = pm,
-         pay_amount    = round(pm * s.hourly_rate / 60.0),
+         pay_amount    = round_money(pm * s.hourly_rate / 60.0, coalesce(s.pay_round, cfg.pay_round)),
          note          = nullif(trim(p_note), '')
    where id = p_id
   returning * into s;
