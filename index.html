@@ -350,7 +350,8 @@ function shownCats() {
   const o = MENU[OTHER_KIND];
   [['#otherTop', 'Gọi ' + (OTHER_KIND === 'pha_che' ? 'đồ uống' : 'đồ ăn') + '? Xem menu ' + o.link + ' →'],
    ['#otherEnd', '<b>Xem menu ' + o.link + ' →</b><span>' + o.linkDesc + '</span>']].forEach(([id, html]) => {
-    const a = $(id); a.hidden = !hasOther || !mineCats.length; a.href = 'index.html' + o.query; a.innerHTML = html;
+    // &xem=menu: sang menu kia thì mở thẳng menu, kể cả khi đang có đơn (không bị đưa về màn hình theo dõi đơn)
+    const a = $(id); a.hidden = !hasOther || !mineCats.length; a.href = 'index.html' + o.query + '&xem=menu'; a.innerHTML = html;
   });
   return mineCats.length ? mineCats : state.menu;
 }
@@ -566,7 +567,7 @@ async function sendOrder(sh, confirm) {
       queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine,
       items: state.cart.map(l => ({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }))
     });
-    state.orders.unshift({ token: res.access_token, queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), paid: false }); saveOrders();
+    state.orders.unshift({ token: res.access_token, id: res.order_id, queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), paid: false }); saveOrders();
     state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons();
     state.editingInfo = false; renderTicket();
     ui.close(); showView('status'); startPolling(); ui.toast('Đã gửi đơn cho quán');
@@ -651,8 +652,17 @@ function renderBanner() {
   $('#toStatus').onclick = () => showView('status');
 }
 let pollTimer = null, polling = false;
+/* Nghe tín hiệu của từng đơn đang mở: bếp/pha chế bấm là khách thấy ngay, không phải chờ lần hỏi 15 giây */
+const watchers = new Map();
+let pollSoon = null, pollAgain = false;
+const pollNow = () => { clearTimeout(pollSoon); pollSoon = setTimeout(poll, 250); }; // gộp nhiều tín hiệu sát nhau thành 1 lần hỏi
+function syncWatchers() {
+  const act = new Set(activeOrders().filter(o => o.id).map(o => o.id));
+  act.forEach(id => { if (!watchers.has(id)) { watchers.set(id, null); api.watchOrder(id, pollNow).then(stop => { if (watchers.has(id)) watchers.set(id, stop); else stop(); }).catch(() => watchers.delete(id)); } });
+  [...watchers.keys()].forEach(id => { if (!act.has(id)) { const stop = watchers.get(id); watchers.delete(id); if (stop) stop(); } });
+}
 async function poll() {
-  if (polling) return; polling = true;
+  if (polling) { pollAgain = true; return; } polling = true; pollAgain = false;
   try {
     await Promise.all(activeOrders().map(async o => {
       try { const d = await api.getMyOrder(o.token); if (d === null) { o.paid = true; delete state.orderData[o.token]; } else state.orderData[o.token] = d; }
@@ -660,10 +670,11 @@ async function poll() {
     }));
     saveOrders();
   } finally { polling = false; }
-  renderStatus(); renderBanner();
+  renderStatus(); renderBanner(); syncWatchers();
   if (!activeOrders().length) clearInterval(pollTimer);
+  if (pollAgain) pollNow();
 }
-function startPolling() { clearInterval(pollTimer); poll(); pollTimer = setInterval(poll, (DEMO ? 2 : CONFIG.POLL_SECONDS) * 1000); }
+function startPolling() { syncWatchers(); clearInterval(pollTimer); poll(); pollTimer = setInterval(poll, (DEMO ? 2 : CONFIG.POLL_SECONDS) * 1000); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && activeOrders().length) startPolling(); });
 setInterval(() => { if (state.view === 'status') renderStatus(); }, 30000);
 
@@ -681,6 +692,8 @@ async function loadMenu() {
 }
 $('#demoNote').hidden = !DEMO;
 ui.init(); renderTicket();
-loadMenu().then(() => { if (activeOrders().length) { showView('status'); startPolling(); } else showView('menu'); });
+const wantMenu = BN.PARAMS.get('xem') === 'menu';
+if (wantMenu) { try { const u = new URL(location.href); u.searchParams.delete('xem'); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ } }
+loadMenu().then(() => { if (activeOrders().length) { showView(wantMenu ? 'menu' : 'status'); startPolling(); } else showView('menu'); });
 })();
 </script>
