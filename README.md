@@ -8,4 +8,6 @@ Gọi món qua QR, màn hình bếp nóng, màn hình quầy pha chế và quả
 - `kitchen.js`, `kitchen.css` — mã dùng chung của hai màn hình trên
 - `quanly.html` — quản lý / chấm công
 - `sql/` — cơ sở dữ liệu Supabase (`schema.sql` rồi `seed_menu.sql`; các file `cap-nhat-*.sql` để nâng cấp bản đã cài; `xoa-du-lieu-test.sql` để dọn dữ liệu thử)
-- `HUONG-DAN.md` — hướng dẫn cài đặt
+- `test/` — bản của MÔI TRƯỜNG TEST (tự sinh bằng `scripts/dua-len-test.sh`, đừng sửa tay)
+- `scripts/` — đưa bản mới lên test / product
+- `HUONG-DAN.md` — hướng dẫn cài đặt, gồm cách dùng hai môi trường

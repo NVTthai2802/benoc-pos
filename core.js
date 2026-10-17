@@ -10,7 +10,8 @@
 (function () {
 'use strict';
 
-const CONFIG = Object.assign({ SUPABASE_URL: '', SUPABASE_ANON_KEY: '', POLL_SECONDS: 15, LOGIN_DOMAIN: 'benoc.app' }, window.BENOC_CONFIG || {});
+const CONFIG = Object.assign({ SUPABASE_URL: '', SUPABASE_ANON_KEY: '', POLL_SECONDS: 15, LOGIN_DOMAIN: 'benoc.app', STORE_PREFIX: 'benoc.' }, window.BENOC_CONFIG || {});
+const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa product và test
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
@@ -35,9 +36,9 @@ const phoneToEmail = p => String(p).replace(/\D/g, '') + '@' + CONFIG.LOGIN_DOMA
 const DRINK_CATS = /trà|cà phê|matcha|nước|món nên thử|khoai môn tươi|sữa/i;
 
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('benoc.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem('benoc.' + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
-  del(k) { try { localStorage.removeItem('benoc.' + k); } catch (e) { /* bỏ qua */ } }
+  get(k, d) { try { const v = localStorage.getItem(SP + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(SP + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(SP + k); } catch (e) { /* bỏ qua */ } }
 };
 
 function fail(code, hint) { const e = new Error(code); e.code = code; e.hint = hint; throw e; }
@@ -536,7 +537,7 @@ function demoApi() {
     if (!store.set(DEMO_KEY, cache)) ui.toast('Bộ nhớ trình duyệt đầy. Bớt ảnh hoặc xoá dữ liệu xem thử trong Cài đặt.');
     window.dispatchEvent(new Event('benoc-db'));
   };
-  window.addEventListener('storage', e => { if (e.key === 'benoc.' + DEMO_KEY) { cache = null; window.dispatchEvent(new Event('benoc-db')); } });
+  window.addEventListener('storage', e => { if (e.key === SP + DEMO_KEY) { cache = null; window.dispatchEvent(new Event('benoc-db')); } });
   const tx = fn => { const db = load(); const r = fn(db); save(); return r; };
   const me = () => { const id = store.get(SESSION_KEY, null); const e = id && load().employees.find(x => x.id === id && x.is_active); return e || null; };
   const need = role => { const e = me(); if (!e || (role && e.role !== role)) fail('FORBIDDEN'); return e; };
@@ -778,7 +779,7 @@ function demoApi() {
     async settings() { return Object.assign({}, load().shop_settings); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {
-      try { Object.keys(localStorage).filter(k => k.indexOf('benoc.') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
+      try { Object.keys(localStorage).filter(k => k.indexOf(SP) === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
       cache = null;
     },
     demoSummary() {
@@ -850,5 +851,15 @@ function mountTestBar() {
 }
 if (DEMO) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountTestBar); else mountTestBar();
+}
+
+/* Môi trường TEST nối Supabase riêng: dải báo trên cùng để không nhầm với quán thật */
+function mountEnvBanner() {
+  const b = document.createElement('div'); b.className = 'envbar'; b.id = 'envBar';
+  b.innerHTML = '<b>MÔI TRƯỜNG TEST</b><span>Dữ liệu thử, không phải quán thật</span>';
+  document.body.insertBefore(b, document.body.firstChild);
+}
+if (window.BENOC_ENV === 'test' && !DEMO) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountEnvBanner); else mountEnvBanner();
 }
 })();

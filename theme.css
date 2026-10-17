@@ -132,6 +132,9 @@ button { cursor: pointer; }
 
 /* Thanh "Chế độ test" (chỉ bản xem thử) — màu nâu đậm để tách khỏi giao diện thật */
 .testbar { background: #3B2A24; color: #FFF8EC; }
+.envbar { background: repeating-linear-gradient(135deg, #F4C430 0 14px, #3B2A24 14px 28px); color: #3B2A24; text-align: center; padding: 6px 12px; font-size: 13px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; }
+.envbar b, .envbar span { background: #F4C430; padding: 1px 8px; border-radius: 6px; }
+.envbar b { letter-spacing: .06em; }
 .testbar-in { max-width: 980px; margin: 0 auto; padding-block: 8px 10px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 6px; }
 .tb-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; letter-spacing: .02em; opacity: .9; }
 .tb-help { border: 1.5px solid rgba(255, 248, 236, .5); background: none; color: #FFF8EC; border-radius: 999px; padding: 3px 12px; font-size: 13px; font-weight: 600; }
