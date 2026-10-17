@@ -18,6 +18,7 @@ create table shop_settings (
   -- Làm tròn tiền lương mỗi ca tới bội số này (gần nhất). 1 = giữ nguyên số lẻ.
   pay_round        int  not null default 1000 check (pay_round in (1, 100, 500, 1000)),
   kitchen_capacity int  not null default 2 check (kitchen_capacity > 0), -- số đơn bếp làm song song
+  bar_capacity     int  not null default 2 check (bar_capacity > 0),     -- số đơn quầy pha chế làm song song
   updated_at       timestamptz not null default now()
 );
 insert into shop_settings default values;
@@ -25,14 +26,14 @@ insert into shop_settings default values;
 -- =====================================================================
 -- 1. NHÂN VIÊN & CHẤM CÔNG
 -- =====================================================================
-create type staff_role as enum ('owner', 'kitchen', 'staff');
+create type staff_role as enum ('owner', 'kitchen', 'bar', 'staff');
 
 create table employees (
   id           uuid primary key default gen_random_uuid(),
   auth_user_id uuid unique references auth.users(id) on delete set null, -- tài khoản đăng nhập
   full_name    text not null,
   phone        text,
-  role         staff_role not null default 'staff',  -- 'kitchen' = tài khoản của tablet bếp
+  role         staff_role not null default 'staff',  -- 'kitchen' = tablet bếp, 'bar' = tablet quầy pha chế
   hourly_rate  int  not null default 0 check (hourly_rate >= 0), -- VNĐ/giờ
   is_active    boolean not null default true,
   created_at   timestamptz not null default now()
@@ -137,7 +138,8 @@ create table menu_categories (
   name       text not null,
   color      text not null default 'vang'   -- màu khung + nền tiêu đề giống tờ menu
              check (color in ('vang', 'cam', 'hong', 'xanhla', 'xanhduong', 'tim', 'nau')),
-  sort_order int  not null default 0
+  sort_order int  not null default 0,
+  station    text not null default 'bep' check (station in ('bep', 'pha_che')) -- món làm ở đâu: bếp nóng hay quầy pha chế
 );
 
 create table menu_items (
@@ -212,7 +214,20 @@ create table order_items (
   unit_price   int  not null,   -- giá 1 phần ĐÃ cộng tuỳ chọn
   options      jsonb not null default '[]'::jsonb, -- [{"group":"Chọn size","choice":"L","price":5000}]
   qty          int  not null check (qty between 1 and 50),
-  note         text             -- "ít cay", "không hành"...
+  note         text,            -- "ít cay", "không hành"...
+  station      text not null default 'bep' check (station in ('bep', 'pha_che')) -- chụp lại trạm lúc đặt
+);
+
+-- Mỗi đơn có một dòng cho mỗi trạm có món trong đơn. Trạng thái làm món theo dõi riêng từng trạm;
+-- orders.status là trạng thái chung, tự tính lại bằng refresh_order_status().
+create table order_stations (
+  order_id           uuid not null references orders(id) on delete cascade,
+  station            text not null check (station in ('bep', 'pha_che')),
+  status             order_status not null default 'cho_nhan',
+  accepted_at        timestamptz,   -- lúc trạm bấm nhận
+  estimated_ready_at timestamptz,   -- giờ dự kiến xong của trạm
+  served_at          timestamptz,   -- lúc trạm ra món
+  primary key (order_id, station)
 );
 
 create table staff_calls (         -- khách bấm "gọi nhân viên"
@@ -238,7 +253,8 @@ create table sales (
   accepted_at    timestamptz,
   served_at      timestamptz,
   paid_at        timestamptz not null default now(),
-  cook_minutes   int,                       -- từ lúc bếp nhận đến lúc ra món (để ước tính chờ)
+  cook_minutes   int,                       -- từ lúc nhận đơn đến lúc ra món (tổng cả đơn)
+  station_cook   jsonb,                     -- phút làm của từng trạm, ví dụ {"bep": 9, "pha_che": 5} (để ước tính chờ)
   cashier_id     uuid references employees(id)
 );
 create index sales_paid_at on sales(paid_at desc);
@@ -383,6 +399,7 @@ declare
   v_opts       jsonb;
   v_choice_ids int[];
   v_total      int := 0;
+  v_station    text;
   it           jsonb;
   mi           menu_items;
 begin
@@ -443,12 +460,17 @@ begin
       from option_choices ch join option_groups g on g.id = ch.group_id
      where ch.id = any(v_choice_ids);
 
-    insert into order_items (order_id, menu_item_id, item_name, unit_price, options, qty, note)
-    values (v_order.id, mi.id, mi.name, mi.price + v_extra, v_opts, v_qty, nullif(trim(it ->> 'note'), ''));
+    -- Món thuộc trạm nào do danh mục quyết định (chụp lại lúc đặt)
+    v_station := coalesce((select mc.station from menu_categories mc where mc.id = mi.category_id), 'bep');
+    insert into order_items (order_id, menu_item_id, item_name, unit_price, options, qty, note, station)
+    values (v_order.id, mi.id, mi.name, mi.price + v_extra, v_opts, v_qty, nullif(trim(it ->> 'note'), ''), v_station);
     v_total := v_total + (mi.price + v_extra) * v_qty;
   end loop;
 
   update orders set total = v_total where id = v_order.id;
+  -- Một dòng trạng thái cho mỗi trạm có món trong đơn
+  insert into order_stations (order_id, station)
+  select distinct v_order.id, i.station from order_items i where i.order_id = v_order.id;
   return jsonb_build_object('order_id', v_order.id, 'access_token', v_order.access_token, 'total', v_total);
 end $$;
 
@@ -467,9 +489,13 @@ language sql stable security definer set search_path = public as $$
     'orders_ahead', (select count(*) from orders x
                       where x.status in ('cho_nhan', 'dang_lam') and x.created_at < o.created_at),
     'has_open_call', exists (select 1 from staff_calls c where c.order_id = o.id and c.resolved_at is null),
+    'stations', coalesce((select jsonb_agg(jsonb_build_object(
+                       'station', t.station, 'status', t.status,
+                       'estimated_ready_at', t.estimated_ready_at) order by t.station)
+                from order_stations t where t.order_id = o.id), '[]'::jsonb),
     'items', (select jsonb_agg(jsonb_build_object(
                        'name', i.item_name, 'qty', i.qty, 'note', i.note,
-                       'price', i.unit_price, 'options', i.options) order by i.id)
+                       'price', i.unit_price, 'options', i.options, 'station', i.station) order by i.id)
                 from order_items i where i.order_id = o.id)
   )
   from orders o where o.access_token = p_token
@@ -492,11 +518,38 @@ end $$;
 -- 9. ORDER PHÍA BẾP / THU NGÂN
 -- =====================================================================
 
--- Gợi ý số phút chờ khi bếp nhận đơn:
---   thời gian món lâu nhất trong đơn
--- + (số đơn đang làm / số đơn bếp làm song song) × thời gian nấu trung bình 14 ngày gần nhất
--- làm tròn lên bội số 5 phút. Bếp có thể chỉnh trước khi bấm nhận.
-create or replace function suggest_wait_minutes(p_order_id uuid) returns int
+-- Tính lại trạng thái chung của đơn từ trạng thái từng trạm (bếp / quầy pha chế).
+--   mọi trạm chờ nhận → cho_nhan; mọi trạm đã ra món → da_ra_mon; còn lại → dang_lam.
+-- Khách và màn thu tiền chỉ cần nhìn trạng thái chung này.
+create or replace function refresh_order_status(p_order_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  n      int;
+  n_wait int;
+  n_done int;
+begin
+  select count(*), count(*) filter (where status = 'cho_nhan'), count(*) filter (where status = 'da_ra_mon')
+    into n, n_wait, n_done
+    from order_stations where order_id = p_order_id;
+  if n = 0 then return; end if;
+  update orders
+     set status = (case when n_done = n then 'da_ra_mon'
+                        when n_wait = n then 'cho_nhan'
+                        else 'dang_lam' end)::order_status,
+         accepted_at = (select min(accepted_at) from order_stations where order_id = p_order_id),
+         estimated_ready_at = (select coalesce(max(estimated_ready_at) filter (where status = 'dang_lam'),
+                                               max(estimated_ready_at))
+                                 from order_stations where order_id = p_order_id),
+         served_at = case when n_done = n
+                           then (select max(served_at) from order_stations where order_id = p_order_id) end
+   where id = p_order_id;
+end $$;
+
+-- Gợi ý số phút chờ khi một trạm nhận đơn (p_station: 'bep' hoặc 'pha_che'):
+--   thời gian món lâu nhất của trạm đó trong đơn
+-- + (số đơn trạm đó đang làm / số đơn trạm làm song song) × thời gian làm trung bình 14 ngày gần nhất của trạm
+-- làm tròn lên bội số 5 phút. Người làm có thể chỉnh trước khi bấm nhận.
+create or replace function suggest_wait_minutes(p_order_id uuid, p_station text default 'bep') returns int
 language plpgsql stable security definer set search_path = public as $$
 declare
   v_own   int;
@@ -506,41 +559,50 @@ declare
 begin
   select coalesce(max(m.prep_minutes), 10) into v_own
     from order_items i join menu_items m on m.id = i.menu_item_id
-   where i.order_id = p_order_id;
-  select count(*) into v_ahead from orders where status = 'dang_lam';
-  select kitchen_capacity into v_cap from shop_settings where id = 1;
-  select avg(cook_minutes) into v_avg from sales
-   where paid_at > now() - interval '14 days' and cook_minutes is not null;
-  return (ceil((v_own + floor(v_ahead::numeric / v_cap) * coalesce(v_avg, v_own)) / 5.0) * 5)::int;
+   where i.order_id = p_order_id and i.station = p_station;
+  select count(*) into v_ahead from order_stations where station = p_station and status = 'dang_lam';
+  select case when p_station = 'pha_che' then bar_capacity else kitchen_capacity end into v_cap
+    from shop_settings where id = 1;
+  select avg((station_cook ->> p_station)::numeric) into v_avg from sales
+   where paid_at > now() - interval '14 days' and station_cook ? p_station;
+  if v_avg is null and p_station = 'bep' then
+    -- hoá đơn cũ (trước khi chia trạm) chỉ có tổng thời gian, coi như của bếp
+    select avg(cook_minutes) into v_avg from sales
+     where paid_at > now() - interval '14 days' and cook_minutes is not null and station_cook is null;
+  end if;
+  return (ceil((v_own + floor(v_ahead::numeric / greatest(v_cap, 1)) * coalesce(v_avg, v_own)) / 5.0) * 5)::int;
 end $$;
 
-create or replace function accept_order(p_order_id uuid, p_minutes int) returns void
+create or replace function accept_order(p_order_id uuid, p_minutes int, p_station text default 'bep') returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if my_role() is null then raise exception 'FORBIDDEN'; end if;
-  update orders
+  update order_stations
      set status = 'dang_lam',
          accepted_at = now(),
          estimated_ready_at = now() + make_interval(mins => greatest(p_minutes, 1))
-   where id = p_order_id and status = 'cho_nhan';
+   where order_id = p_order_id and station = p_station and status = 'cho_nhan';
+  perform refresh_order_status(p_order_id);
 end $$;
 
--- Bếp báo "cần thêm X phút"
-create or replace function extend_wait(p_order_id uuid, p_extra_minutes int) returns void
+-- "Cần thêm X phút" của một trạm
+create or replace function extend_wait(p_order_id uuid, p_extra_minutes int, p_station text default 'bep') returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if my_role() is null then raise exception 'FORBIDDEN'; end if;
-  update orders
+  update order_stations
      set estimated_ready_at = greatest(estimated_ready_at, now()) + make_interval(mins => p_extra_minutes)
-   where id = p_order_id and status = 'dang_lam';
+   where order_id = p_order_id and station = p_station and status = 'dang_lam';
+  perform refresh_order_status(p_order_id);
 end $$;
 
-create or replace function mark_served(p_order_id uuid) returns void
+create or replace function mark_served(p_order_id uuid, p_station text default 'bep') returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if my_role() is null then raise exception 'FORBIDDEN'; end if;
-  update orders set status = 'da_ra_mon', served_at = now()
-   where id = p_order_id and status = 'dang_lam';
+  update order_stations set status = 'da_ra_mon', served_at = now()
+   where order_id = p_order_id and station = p_station and status = 'dang_lam';
+  perform refresh_order_status(p_order_id);
 end $$;
 
 -- Huỷ đơn (đơn ảo, khách bỏ về): xoá hẳn, không tính doanh thu
@@ -551,7 +613,7 @@ begin
   delete from orders where id = p_order_id;
 end $$;
 
--- Thanh toán: chép tóm tắt sang sales rồi xoá order (order_items, staff_calls xoá theo)
+-- Thanh toán: chép tóm tắt sang sales rồi xoá order (order_items, order_stations, staff_calls xoá theo)
 create or replace function complete_payment(p_order_id uuid, p_method text) returns void
 language plpgsql security definer set search_path = public as $$
 declare o orders;
@@ -561,15 +623,18 @@ begin
   if not found then raise exception 'ORDER_NOT_FOUND'; end if;
 
   insert into sales (id, queue_number, total, payment_method, items,
-                     ordered_at, accepted_at, served_at, cook_minutes, cashier_id)
+                     ordered_at, accepted_at, served_at, cook_minutes, station_cook, cashier_id)
   select o.id, o.queue_number, o.total, p_method,
          coalesce((select jsonb_agg(jsonb_build_object(
                      'menu_item_id', i.menu_item_id, 'name', i.item_name,
-                     'price', i.unit_price, 'qty', i.qty, 'options', i.options))
+                     'price', i.unit_price, 'qty', i.qty, 'options', i.options, 'station', i.station))
                    from order_items i where i.order_id = o.id), '[]'::jsonb),
          o.created_at, o.accepted_at, o.served_at,
          case when o.accepted_at is not null and o.served_at is not null
               then round(extract(epoch from (o.served_at - o.accepted_at)) / 60)::int end,
+         (select jsonb_object_agg(s.station, round(extract(epoch from (s.served_at - s.accepted_at)) / 60)::int)
+            from order_stations s
+           where s.order_id = o.id and s.accepted_at is not null and s.served_at is not null),
          my_employee_id();
 
   delete from orders where id = o.id;
@@ -679,6 +744,7 @@ alter table option_choices     enable row level security;
 alter table menu_item_option_groups enable row level security;
 alter table orders             enable row level security;
 alter table order_items        enable row level security;
+alter table order_stations     enable row level security;
 alter table staff_calls        enable row level security;
 alter table sales              enable row level security;
 
@@ -720,6 +786,7 @@ create policy miog_owner on menu_item_option_groups for all using (my_role() = '
 -- Order: nhân viên đọc (màn hình bếp nghe realtime); mọi thay đổi đi qua các hàm ở trên
 create policy ord_read   on orders      for select using (my_role() is not null);
 create policy oi_read    on order_items for select using (my_role() is not null);
+create policy ostn_read  on order_stations for select using (my_role() is not null);
 create policy call_read  on staff_calls for select using (my_role() is not null);
 create policy call_done  on staff_calls for update using (my_role() is not null);
 
@@ -744,7 +811,7 @@ grant execute on all functions in schema public to authenticated;
 -- 11. REALTIME cho màn hình bếp
 --    (Khách không dùng realtime mà gọi get_my_order định kỳ → tiết kiệm kết nối)
 -- =====================================================================
-alter publication supabase_realtime add table orders, order_items, staff_calls;
+alter publication supabase_realtime add table orders, order_items, order_stations, staff_calls;
 
 -- =====================================================================
 -- 12. LƯU ẢNH CHẤM CÔNG (Supabase Storage, bucket riêng tư)

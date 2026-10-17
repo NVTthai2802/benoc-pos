@@ -135,10 +135,11 @@ button { cursor: pointer; }
 .testbar-in { max-width: 980px; margin: 0 auto; padding-block: 8px 10px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 6px; }
 .tb-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; letter-spacing: .02em; opacity: .9; }
 .tb-help { border: 1.5px solid rgba(255, 248, 236, .5); background: none; color: #FFF8EC; border-radius: 999px; padding: 3px 12px; font-size: 13px; font-weight: 600; }
-.tb-roles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tb-roles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; } /* Khách · Bếp · Pha chế · Chủ quán · Nhân viên */
 .tb-roles a { position: relative; display: flex; align-items: center; justify-content: center; min-height: 40px; padding: 4px 6px; border-radius: 10px; background: rgba(255, 248, 236, .1); color: #FFF8EC; text-decoration: none; font-weight: 600; font-size: 14px; text-align: center; line-height: 1.2; }
 .tb-roles a[aria-current="page"] { background: #FFF8EC; color: #3B2A24; }
 .tb-roles a:focus-visible { outline: 3px solid #FFD966; outline-offset: 2px; }
+@media (max-width: 480px) { .tb-roles { gap: 4px; } .tb-roles a { font-size: 13px; padding-inline: 2px; } }
 .tb-badge { position: absolute; top: -5px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: #E2325C; color: #fff; font: 700 12px/20px var(--f-body); text-align: center; }
 .tg-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
 .tg-steps li { padding-left: 4px; }
