@@ -95,8 +95,9 @@ create table menu_items (
 -- Một nhóm tuỳ chọn dùng chung cho nhiều món, ví dụ "Topping thêm" gắn cho mọi món cơm, mì.
 create table option_groups (
   id         serial primary key,
-  name       text not null unique,  -- tên nội bộ cho chủ quản lý, ví dụ "Size M/L (+5k)"
-  title      text not null,         -- tên khách thấy, ví dụ "Chọn size"
+  name       text not null unique,  -- tên nội bộ cho chủ quản lý, ví dụ "Upsize (+5k)"
+  title      text not null,         -- tên khách thấy, ví dụ "Upsize"
+  kind       text not null default 'do_an' check (kind in ('do_an', 'do_uong')), -- tuỳ chọn cho đồ ăn hay đồ uống
   min_select int  not null default 0 check (min_select >= 0),  -- 1 = bắt buộc chọn
   max_select int  not null default 1 check (max_select >= 1),  -- 1 = chọn một, >1 = chọn nhiều
   sort_order int  not null default 0,
