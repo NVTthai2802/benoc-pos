@@ -79,6 +79,8 @@ async function toJpeg(file, max, quality) {
 const blobToDataUrl = b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
 
 /* Cách tính lương khi kết thúc ca — giống hàm apply_rounding trong SQL */
+/* Làm tròn tiền tới bội số gần nhất — giống hàm round_money trong SQL */
+function roundMoney(n, step) { step = Math.max(1, Number(step) || 1); return Math.round(n / step) * step; }
 function applyRounding(m, step, mode) {
   const x = m / step;
   return (mode === 'up' ? Math.ceil(x) : mode === 'down' ? Math.floor(x) : Math.round(x)) * step;
@@ -370,7 +372,7 @@ function supabaseApi() {
     async settings() { const c = await cl(); return await q(c.from('shop_settings').select('*').eq('id', 1).single()); },
     async saveSettings(s) {
       const c = await cl();
-      await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, kitchen_capacity: s.kitchen_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
+      await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, pay_round: s.pay_round, kitchen_capacity: s.kitchen_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
     }
   };
   return api;
@@ -412,7 +414,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v1';
+const DEMO_KEY = 'demo.db.v2'; // v2: lương tính theo phút (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
@@ -425,7 +427,7 @@ function demoSeed() {
   const S = JSON.parse(JSON.stringify(window.BENOC_SEED || {}));
   const now = Date.now(), R = rng(2802);
   const db = {
-    shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 15, round_mode: 'nearest', kitchen_capacity: 2 },
+    shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2 },
     menu_categories: S.menu_categories || [], menu_items: S.menu_items || [], option_groups: S.option_groups || [],
     option_choices: S.option_choices || [], menu_item_option_groups: S.menu_item_option_groups || [],
     product_categories: S.product_categories || [],
@@ -458,8 +460,8 @@ function demoSeed() {
       const emp = db.employees.find(e => e.id === eid);
       const start = startOfDay(now - d * 864e5).getTime() + (j ? 17 : 10.5) * 3600e3 + Math.round(R() * 20) * 60e3;
       const mins = 180 + Math.round(R() * 120);
-      const pm = applyRounding(mins, 15, 'nearest');
-      db.shifts.push({ id: uuid(), employee_id: eid, employee_name: emp.full_name, check_in_at: new Date(start).toISOString(), check_in_photo: '', check_out_at: new Date(start + mins * 60e3).toISOString(), check_out_photo: '', hourly_rate: emp.hourly_rate, round_minutes: 15, round_mode: 'nearest', actual_minutes: mins, paid_minutes: pm, pay_amount: Math.round(pm * emp.hourly_rate / 60), note: null, paid_out_at: d > 7 ? new Date(now - 7 * 864e5).toISOString() : null });
+      const pm = mins;
+      db.shifts.push({ id: uuid(), employee_id: eid, employee_name: emp.full_name, check_in_at: new Date(start).toISOString(), check_in_photo: '', check_out_at: new Date(start + mins * 60e3).toISOString(), check_out_photo: '', hourly_rate: emp.hourly_rate, round_minutes: 1, round_mode: 'nearest', pay_round: 1000, actual_minutes: mins, paid_minutes: pm, pay_amount: roundMoney(pm * emp.hourly_rate / 60, 1000), note: null, paid_out_at: d > 7 ? new Date(now - 7 * 864e5).toISOString() : null });
     });
   }
   // Doanh thu mẫu 30 ngày qua
@@ -708,9 +710,9 @@ function demoApi() {
         s.check_in_at = a.toISOString(); s.note = note ? String(note).trim() : null;
         if (!b) { Object.assign(s, { check_out_at: null, actual_minutes: null, paid_minutes: null, pay_amount: null }); return s; }
         const cfg = db.shop_settings; const m = Math.floor((b - a) / 60000);
-        s.round_minutes = s.round_minutes || cfg.round_minutes; s.round_mode = s.round_mode || cfg.round_mode;
+        s.round_minutes = s.round_minutes || cfg.round_minutes; s.round_mode = s.round_mode || cfg.round_mode; s.pay_round = s.pay_round || cfg.pay_round || 1000;
         const pm = applyRounding(m, s.round_minutes, s.round_mode);
-        Object.assign(s, { check_out_at: b.toISOString(), actual_minutes: m, paid_minutes: pm, pay_amount: Math.round(pm * s.hourly_rate / 60) });
+        Object.assign(s, { check_out_at: b.toISOString(), actual_minutes: m, paid_minutes: pm, pay_amount: roundMoney(pm * s.hourly_rate / 60, s.pay_round) });
         return s;
       });
     },
@@ -730,7 +732,7 @@ function demoApi() {
       return tx(db => {
         const s = db.shifts.find(x => x.employee_id === e.id && !x.check_out_at); if (!s) fail('NOT_CHECKED_IN');
         const cfg = db.shop_settings; const m = Math.floor((Date.now() - new Date(s.check_in_at)) / 60000); const pm = applyRounding(m, cfg.round_minutes, cfg.round_mode);
-        Object.assign(s, { check_out_at: iso(), check_out_photo: photo, round_minutes: cfg.round_minutes, round_mode: cfg.round_mode, actual_minutes: m, paid_minutes: pm, pay_amount: Math.round(pm * s.hourly_rate / 60) });
+        Object.assign(s, { check_out_at: iso(), check_out_photo: photo, round_minutes: cfg.round_minutes, round_mode: cfg.round_mode, pay_round: cfg.pay_round || 1000, actual_minutes: m, paid_minutes: pm, pay_amount: roundMoney(pm * s.hourly_rate / 60, cfg.pay_round || 1000) });
         return Object.assign({}, s);
       });
     },
@@ -738,7 +740,7 @@ function demoApi() {
     /* ---------- Doanh thu & cài đặt ---------- */
     async sales(f) { const a = new Date(f.from), b = new Date(f.to); return load().sales.filter(s => { const t = new Date(s.paid_at); return t >= a && t < b; }).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1); },
     async settings() { return Object.assign({}, load().shop_settings); },
-    async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, kitchen_capacity: Number(s.kitchen_capacity) })); },
+    async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity) })); },
     demoReset() {
       try { Object.keys(localStorage).filter(k => k.indexOf('benoc.') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
       cache = null;
@@ -755,7 +757,7 @@ const api = DEMO ? demoApi() : supabaseApi();
 
 window.BN = {
   CONFIG, DEMO, PARAMS, PAGE, SLOT, api, ui, store, ERR, errText, fail,
-  esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, DRINK_CATS
+  esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
 
 /* =====================================================================

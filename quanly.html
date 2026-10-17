@@ -99,6 +99,19 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const COLORS = [['vang', 'Vàng'], ['cam', 'Cam'], ['hong', 'Hồng'], ['xanhla', 'Xanh lá'], ['xanhduong', 'Xanh dương'], ['tim', 'Tím'], ['nau', 'Nâu']];
 const REASON = { nhap: 'Nhập hàng', su_dung: 'Dùng', hong: 'Hỏng / hết hạn', kiem_kho: 'Kiểm kho' };
 const MODE = { up: 'làm tròn lên', down: 'làm tròn xuống', nearest: 'làm tròn gần nhất' };
+const PAY_STEPS = [[1, 'Không làm tròn (giữ số lẻ)'], [100, 'Làm tròn tới 100đ'], [500, 'Làm tròn tới 500đ'], [1000, 'Làm tròn tới 1.000đ']];
+/* Ca/cài đặt có làm tròn giờ công không (round_minutes = 1 hoặc trống nghĩa là tính đúng từng phút) */
+const isExact = r => !r.round_minutes || Number(r.round_minutes) === 1;
+function ruleText(r) {
+  return (isExact(r) ? 'tính đúng từng phút' : MODE[r.round_mode] + ' giờ công theo ' + r.round_minutes + ' phút') + ', ' +
+    (Number(r.pay_round) > 1 ? 'tiền làm tròn tới ' + vnd(r.pay_round) : 'tiền giữ số lẻ');
+}
+/* Diễn giải lương một ca đã kết thúc, ví dụ "3 giờ 52 phút × 25.000đ/giờ = 96.667đ → 97.000đ" */
+function payLine(s) {
+  const raw = (s.paid_minutes || 0) * (s.hourly_rate || 0) / 60;
+  const time = isExact(s) ? dur(s.actual_minutes) : dur(s.actual_minutes) + ' → tính ' + dur(s.paid_minutes) + ' (' + MODE[s.round_mode] + ' ' + s.round_minutes + ' phút)';
+  return time + ' × ' + vnd(s.hourly_rate) + '/giờ = ' + (Math.abs(raw - s.pay_amount) >= 0.5 ? vnd(raw) + ' → <b>' + vnd(s.pay_amount) + '</b>' : '<b>' + vnd(s.pay_amount) + '</b>');
+}
 const PAY = { tien_mat: 'Tiền mặt', chuyen_khoan: 'Chuyển khoản' };
 const PAY_COLOR = { tien_mat: '#E2325C', chuyen_khoan: '#3A7FC2' };
 const ICON_BOWL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>';
@@ -576,15 +589,15 @@ async function renderStaff(main) {
   const sum = new Map();
   shifts.forEach(s => { const x = sum.get(s.employee_id) || { name: s.employee_name, n: 0, mins: 0, pay: 0, unpaid: 0, unpaidIds: [] }; x.n++; if (s.check_out_at) { x.mins += s.paid_minutes || 0; x.pay += s.pay_amount || 0; if (!s.paid_out_at) { x.unpaid += s.pay_amount || 0; x.unpaidIds.push(s.id); } } sum.set(s.employee_id, x); });
   main.innerHTML = '<div class="ptitle"><h1>Nhân viên</h1><div class="chips">' + [['week', 'Tuần này'], ['month', 'Tháng này'], ['30d', '30 ngày']].map(([k, t]) => '<button class="chipbtn" type="button" data-srange="' + k + '" aria-pressed="' + (state.staffRange === k) + '">' + t + '</button>').join('') + '</div></div>' +
-    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Lương ' + esc(r.label.toLowerCase()) + '</span></h2>' + (sum.size ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th class="r">Số ca</th><th class="r">Giờ tính lương</th><th class="r">Lương</th><th class="r">Chưa trả</th><th></th></tr></thead><tbody>' +
+    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Lương ' + esc(r.label.toLowerCase()) + '</span></h2>' + (sum.size ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th class="r">Số ca</th><th class="r">Giờ làm</th><th class="r">Lương</th><th class="r">Chưa trả</th><th></th></tr></thead><tbody>' +
       [...sum.entries()].map(([id, x]) => '<tr><td><b>' + esc(x.name) + '</b></td><td class="r num">' + x.n + '</td><td class="r num">' + dur(x.mins) + '</td><td class="r num">' + vnd(x.pay) + '</td><td class="r num"' + (x.unpaid ? ' style="color:var(--red);font-weight:600"' : '') + '>' + vnd(x.unpaid) + '</td><td class="r">' + (x.unpaidIds.length ? '<button class="btn btn-sm btn-soft" type="button" data-payout="' + esc(id) + '">Đã trả</button>' : '<span class="pill pill-ok">Đủ</span>') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="empty">Chưa có ca nào trong khoảng này.</p>') + '</section>' +
     '<section class="box cc-vang"><div class="ptitle"><h2 class="box-title" style="margin:0"><span>Danh sách nhân viên</span></h2><button class="btn btn-sm" type="button" id="addEmp">+ Thêm nhân viên</button></div><ul class="list">' +
       emps.map(e => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-emp="' + esc(e.id) + '"><span class="lmain"><span class="lname">' + esc(e.full_name) + (e.is_active ? '' : ' <span class="pill pill-mute">Đã nghỉ</span>') + '</span><span class="lsub num">' + esc(BN.staff.ROLE[e.role]) + (e.phone ? ' · ' + esc(e.phone) : '') + '</span></span><span class="lside num">' + (e.hourly_rate ? vnd(e.hourly_rate) + '/giờ' : '') + '</span></button></li>').join('') + '</ul></section>' +
     '<section class="box cc-cam"><div class="ptitle"><h2 class="box-title" style="margin:0"><span>Các ca làm</span></h2><label class="field" for="shEmp" style="flex-direction:row;align-items:center;gap:8px">Xem<select id="shEmp" style="width:auto"><option value="">Tất cả</option>' + emps.map(e => '<option value="' + esc(e.id) + '"' + (state.shiftEmp === e.id ? ' selected' : '') + '>' + esc(e.full_name) + '</option>').join('') + '</select></label></div>' +
-      (shown.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Nhân viên</th><th>Vào – ra</th><th>Ảnh</th><th class="r">Thực tế → tính lương</th><th class="r">Tiền</th><th></th></tr></thead><tbody>' +
+      (shown.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Nhân viên</th><th>Vào – ra</th><th>Ảnh</th><th class="r">Thời gian làm</th><th class="r">Tiền</th><th></th></tr></thead><tbody>' +
       shown.map(s => '<tr><td class="num">' + ddmm(s.check_in_at) + '</td><td>' + esc(s.employee_name) + '</td><td class="num">' + hhmm(s.check_in_at) + ' – ' + (s.check_out_at ? hhmm(s.check_out_at) : '<span class="pill pill-warn">Đang làm</span>') + (s.note ? '<br><span class="small muted">' + esc(s.note) + '</span>' : '') + '</td>' +
         '<td><span class="photos">' + [s.check_in_photo, s.check_out_photo].map(ph => ph ? '<span class="ph" data-photo="' + esc(s.id) + '"></span>' : '<span class="ph" title="Không có ảnh"></span>').join('') + '</span></td>' +
-        '<td class="r num">' + (s.check_out_at ? dur(s.actual_minutes) + ' → <b>' + dur(s.paid_minutes) + '</b>' : '') + '</td><td class="r num">' + (s.check_out_at ? vnd(s.pay_amount) : '') + (s.paid_out_at ? '<br><span class="pill pill-ok">Đã trả</span>' : '') + '</td>' +
+        '<td class="r num">' + (s.check_out_at ? (isExact(s) ? dur(s.actual_minutes) : dur(s.actual_minutes) + ' → <b>' + dur(s.paid_minutes) + '</b>') : '') + '</td><td class="r num">' + (s.check_out_at ? vnd(s.pay_amount) : '') + (s.paid_out_at ? '<br><span class="pill pill-ok">Đã trả</span>' : '') + '</td>' +
         '<td class="r"><button class="btn btn-sm btn-line" type="button" data-shift="' + esc(s.id) + '">Xem</button></td></tr>').join('') + '</tbody></table></div>' : '<p class="empty">Chưa có ca nào.</p>') + '</section>';
   // Ảnh chấm công: tải đường dẫn xem ảnh (bản thật là đường dẫn có hạn 1 giờ)
   $$('.photos', main).forEach(async (box, i) => {
@@ -632,7 +645,7 @@ async function editShift(s) {
   const urls = await Promise.all([s.check_in_photo, s.check_out_photo].map(p => p ? api.photoUrl(p).catch(() => null) : null));
   ui.sheet(ui.head('Ca của ' + esc(s.employee_name), ddmmyyyy(s.check_in_at)) + '<div class="sh-body">' +
     '<div class="pbig">' + ['Ảnh vào ca', 'Ảnh ra ca'].map((t, i) => '<figure>' + (urls[i] ? '<img src="' + esc(urls[i]) + '" alt="' + t + '">' : '<div class="ph">Không có ảnh</div>') + '<figcaption>' + t + ' · ' + (i ? (s.check_out_at ? hhmm(s.check_out_at) : 'chưa ra ca') : hhmm(s.check_in_at)) + '</figcaption></figure>').join('') + '</div>' +
-    (s.check_out_at ? '<p class="msg msg-ok">Thực tế ' + dur(s.actual_minutes) + ', tính lương ' + dur(s.paid_minutes) + ' (' + (s.round_minutes ? MODE[s.round_mode] + ' ' + s.round_minutes + ' phút' : '') + ') × ' + vnd(s.hourly_rate) + '/giờ = <b>' + vnd(s.pay_amount) + '</b></p>' : '') +
+    (s.check_out_at ? '<p class="msg msg-ok">' + payLine(s) + '<br><span class="small">Quy tắc của ca này: ' + ruleText(s) + '</span></p>' : '') +
     (isOwner() ? '<h3 class="box-title" style="margin:0">Sửa giờ (khi nhân viên quên chấm)</h3><div class="grid2"><label class="field" for="sIn">Giờ vào<input id="sIn" type="datetime-local" value="' + toLocalInput(s.check_in_at) + '"></label><label class="field" for="sOut">Giờ ra<input id="sOut" type="datetime-local" value="' + (s.check_out_at ? toLocalInput(s.check_out_at) : '') + '"></label></div>' +
       '<label class="field" for="sNote">Ghi chú<input id="sNote" maxlength="120" value="' + esc(s.note || '') + '" placeholder="Ví dụ: quên chấm ra, đã hỏi lại"></label><p class="msg" id="sMsg" hidden></p>' : '') + '</div>' +
     (isOwner() ? '<div class="sh-foot"><button class="btn grow" type="button" id="sSave">Lưu và tính lại lương</button></div>' : ''), sh => {
@@ -658,9 +671,9 @@ async function renderClock(main) {
     '<section class="box cc-cam clock-card" id="clockCard">' + (open
       ? '<span class="state">Bạn đang trong ca</span><span>Vào lúc <b class="num">' + hhmm(open.check_in_at) + '</b> · đã làm <b class="num">' + dur(mins) + '</b></span><label class="btn filebtn" for="shot">Chụp ảnh ra ca<input type="file" accept="image/*" capture="user" id="shot"></label>'
       : '<span class="state">Bạn chưa vào ca</span><span class="muted">Chụp một ảnh mặt bạn tại quán để bắt đầu ca. Giờ được lấy theo máy chủ, không theo điện thoại.</span><label class="btn filebtn" for="shot">Chụp ảnh vào ca<input type="file" accept="image/*" capture="user" id="shot"></label>') +
-    '<span class="small muted">Quy tắc tính lương: ' + MODE[cfg.round_mode] + ' theo ' + cfg.round_minutes + ' phút · ' + vnd(state.session.employee.hourly_rate || 0) + '/giờ</span><div id="shotArea"></div></section>' +
-    '<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><span>Ca tháng này</span><b class="num">' + month.length + '</b></div><div class="stat"><span>Giờ tính lương</span><b class="num">' + dur(month.reduce((s, x) => s + (x.paid_minutes || 0), 0)) + '</b></div><div class="stat"><span>Lương tháng này</span><b class="num">' + vnd(month.reduce((s, x) => s + (x.pay_amount || 0), 0)) + '</b></div></div>' +
-    '<section class="box cc-vang"><h2 class="box-title"><span>Ca gần đây</span></h2>' + (mine.length ? '<ul class="list">' + mine.map(s => '<li><div class="lrow" style="grid-template-columns:1fr auto"><span class="lmain"><span class="lname num">' + ddmm(s.check_in_at) + ' · ' + hhmm(s.check_in_at) + ' – ' + (s.check_out_at ? hhmm(s.check_out_at) : 'đang làm') + '</span><span class="lsub">' + (s.check_out_at ? 'Thực tế ' + dur(s.actual_minutes) + ', tính ' + dur(s.paid_minutes) : '') + (s.note ? ' · ' + esc(s.note) : '') + '</span></span><span class="lside"><b class="num">' + (s.check_out_at ? vnd(s.pay_amount) : '') + '</b>' + (s.paid_out_at ? '<span class="pill pill-ok">Đã nhận</span>' : s.check_out_at ? '<span class="pill pill-mute">Chưa nhận</span>' : '') + '</span></div></li>').join('') + '</ul>' : '<p class="empty">Chưa có ca nào.</p>') + '</section>';
+    '<span class="small muted">Cách tính lương: ' + ruleText(cfg) + ' · ' + vnd(state.session.employee.hourly_rate || 0) + '/giờ</span><div id="shotArea"></div></section>' +
+    '<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><span>Ca tháng này</span><b class="num">' + month.length + '</b></div><div class="stat"><span>Giờ làm tháng này</span><b class="num">' + dur(month.reduce((s, x) => s + (x.paid_minutes || 0), 0)) + '</b></div><div class="stat"><span>Lương tháng này</span><b class="num">' + vnd(month.reduce((s, x) => s + (x.pay_amount || 0), 0)) + '</b></div></div>' +
+    '<section class="box cc-vang"><h2 class="box-title"><span>Ca gần đây</span></h2>' + (mine.length ? '<ul class="list">' + mine.map(s => '<li><div class="lrow" style="grid-template-columns:1fr auto"><span class="lmain"><span class="lname num">' + ddmm(s.check_in_at) + ' · ' + hhmm(s.check_in_at) + ' – ' + (s.check_out_at ? hhmm(s.check_out_at) : 'đang làm') + '</span><span class="lsub">' + (s.check_out_at ? (isExact(s) ? 'Làm ' + dur(s.actual_minutes) : 'Thực tế ' + dur(s.actual_minutes) + ', tính ' + dur(s.paid_minutes)) : '') + (s.note ? ' · ' + esc(s.note) : '') + '</span></span><span class="lside"><b class="num">' + (s.check_out_at ? vnd(s.pay_amount) : '') + '</b>' + (s.paid_out_at ? '<span class="pill pill-ok">Đã nhận</span>' : s.check_out_at ? '<span class="pill pill-mute">Chưa nhận</span>' : '') + '</span></div></li>').join('') + '</ul>' : '<p class="empty">Chưa có ca nào.</p>') + '</section>';
   $('#shot', main).onchange = e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     const area = $('#shotArea', main);
@@ -673,7 +686,7 @@ async function renderClock(main) {
       try {
         if (open) {
           const s = await api.checkOut(f);
-          main.innerHTML = '<div class="ptitle"><h1>Chấm công</h1></div><section class="box cc-xanhla clock-card"><span class="state">Đã ra ca. Cảm ơn bạn!</span><span>Ca hôm nay: <b class="num">' + hhmm(s.check_in_at) + ' – ' + hhmm(s.check_out_at) + '</b>, thực tế ' + dur(s.actual_minutes) + '.</span><span>Tính lương <b>' + dur(s.paid_minutes) + '</b> (' + MODE[s.round_mode] + ' ' + s.round_minutes + ' phút) × ' + vnd(s.hourly_rate) + '/giờ = <b class="num" style="color:var(--red);font-size:20px">' + vnd(s.pay_amount) + '</b></span><button class="btn btn-line" type="button" id="back">Xong</button></section>';
+          main.innerHTML = '<div class="ptitle"><h1>Chấm công</h1></div><section class="box cc-xanhla clock-card"><span class="state">Đã ra ca. Cảm ơn bạn!</span><span>Ca hôm nay: <b class="num">' + hhmm(s.check_in_at) + ' – ' + hhmm(s.check_out_at) + '</b>.</span><span>' + payLine(s) + '</span><span>Lương ca này: <b class="num" style="color:var(--red);font-size:22px">' + vnd(s.pay_amount) + '</b></span><button class="btn btn-line" type="button" id="back">Xong</button></section>';
           $('#back', main).onclick = rerender;
         } else { await api.checkIn(f); ui.toast('Đã vào ca lúc ' + hhmm(Date.now())); rerender(); }
       } catch (err) { const m = $('#shotMsg', main); m.textContent = errText(err); m.hidden = false; ev.target.disabled = false; ev.target.textContent = open ? 'Xác nhận ra ca' : 'Xác nhận vào ca'; }
@@ -691,22 +704,31 @@ async function renderSettings(main) {
   main.innerHTML = '<div class="ptitle"><h1>Cài đặt</h1></div>' +
     '<section class="box cc-nau"><h2 class="box-title"><span>Quán</span></h2><div class="sh-body" style="padding:0">' +
     '<label class="field" for="sName">Tên quán<input id="sName" maxlength="40" value="' + esc(cfg.shop_name) + '"></label>' +
-    '<div class="grid2"><label class="field" for="sStep">Làm tròn giờ công theo<select id="sStep">' + [1, 5, 10, 15, 30, 60].map(v => '<option value="' + v + '"' + (cfg.round_minutes === v ? ' selected' : '') + '>' + (v === 1 ? 'Không làm tròn (từng phút)' : v + ' phút') + '</option>').join('') + '</select></label>' +
+    '<h3 class="box-title" style="margin:6px 0 0">Tính lương</h3>' +
+    '<p class="small muted" style="margin:0">Mặc định tính đúng từng phút làm việc. Chỉ bật làm tròn giờ công nếu quán muốn.</p>' +
+    '<label class="switch"><input type="checkbox" id="sRoundOn"' + (isExact(cfg) ? '' : ' checked') + '><span class="track"></span>Làm tròn giờ công</label>' +
+    '<div class="grid2" id="sRoundOpts"' + (isExact(cfg) ? ' hidden' : '') + '><label class="field" for="sStep">Làm tròn theo<select id="sStep">' + [5, 10, 15, 30, 60].map(v => '<option value="' + v + '"' + ((isExact(cfg) ? 15 : cfg.round_minutes) === v ? ' selected' : '') + '>' + v + ' phút</option>').join('') + '</select></label>' +
     '<label class="field" for="sMode">Cách làm tròn<select id="sMode">' + Object.keys(MODE).map(k => '<option value="' + k + '"' + (cfg.round_mode === k ? ' selected' : '') + '>' + MODE[k].replace(/^./, c => c.toUpperCase()) + '</option>').join('') + '</select></label></div>' +
+    '<label class="field" for="sPay">Tiền lương mỗi ca bị lẻ<select id="sPay">' + PAY_STEPS.map(([v, t]) => '<option value="' + v + '"' + (Number(cfg.pay_round || 1000) === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>' +
     '<p class="msg msg-ok" id="sEx"></p>' +
     '<label class="field" for="sCap">Số đơn bếp làm cùng lúc (để ước tính thời gian chờ)<input id="sCap" type="number" min="1" max="10" value="' + cfg.kitchen_capacity + '"></label>' +
-    '<p class="small muted" style="margin:0">Quy tắc làm tròn áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
+    '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
     '<section class="box cc-hong"><h2 class="box-title"><span>Mã QR gọi món cho khách</span></h2><div class="row" style="align-items:flex-start;gap:18px"><div class="qr" id="qr"><p class="loading">Đang tạo mã…</p></div>' +
     '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">In mã này dán ở quầy bếp và trên bàn. Khách quét là mở menu gọi món.</p><label class="field" for="qUrl">Địa chỉ trang khách<input id="qUrl" value="' + esc(orderUrl) + '"></label>' +
     (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') +
     '<div class="row"><a class="btn btn-sm btn-line" href="index.html" target="_blank">Mở trang khách</a><a class="btn btn-sm btn-line" href="bep.html" target="_blank">Mở màn hình bếp</a></div></div></div></section>' +
     (DEMO ? '<section class="box"><h2 class="box-title">Dữ liệu xem thử</h2><p class="muted" style="margin-top:0">Đưa mọi thứ về như lúc đầu: menu, đơn, kho, ca làm.</p><button class="btn btn-danger" type="button" id="reset">Xoá dữ liệu xem thử</button>' + confirmBox('Xoá toàn bộ thay đổi trong bản xem thử?', 'Xoá và tải lại', 'resetBox') + '</section>' : '');
-  const ex = () => { const step = Number($('#sStep', main).value), mode = $('#sMode', main).value; $('#sEx', main).textContent = 'Ví dụ: ca 3 giờ 52 phút → tính ' + dur(applyRounding(232, step, mode)) + '; ca 4 giờ 8 phút → tính ' + dur(applyRounding(248, step, mode)) + '.'; };
-  ex(); $('#sStep', main).onchange = ex; $('#sMode', main).onchange = ex;
+  const readRule = () => ({ round_minutes: $('#sRoundOn', main).checked ? Number($('#sStep', main).value) : 1, round_mode: $('#sMode', main).value, pay_round: Number($('#sPay', main).value) });
+  const ex = () => {
+    const r = readRule(); $('#sRoundOpts', main).hidden = !$('#sRoundOn', main).checked;
+    const shift = m => { const pm = applyRounding(m, r.round_minutes, r.round_mode); return Object.assign({ actual_minutes: m, paid_minutes: pm, hourly_rate: 25000, pay_amount: BN.roundMoney(pm * 25000 / 60, r.pay_round) }, r); };
+    $('#sEx', main).innerHTML = 'Ví dụ với lương 25.000đ/giờ:<br>• ' + payLine(shift(232)) + '<br>• ' + payLine(shift(248));
+  };
+  ex(); ['#sRoundOn', '#sStep', '#sMode', '#sPay'].forEach(id => { $(id, main).onchange = ex; });
   $('#sSave', main).onclick = async e => {
     e.target.disabled = true;
-    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: Number($('#sStep', main).value), round_mode: $('#sMode', main).value, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
+    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
     catch (err) { ui.toast(errText(err)); }
     e.target.disabled = false;
   };
