@@ -121,6 +121,9 @@ button { cursor: pointer; }
 .qbox { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--red); border-radius: 12px; padding: 6px 4px; background: var(--card); }
 .qbox span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); font-weight: 600; }
 .qbox b { font: 800 38px/1 var(--f-head); color: var(--red); }
+.qbox--mv { border-style: solid; border-color: var(--warn); background: var(--warn-soft); color: var(--warn); gap: 2px; }
+.qbox--mv svg { width: 30px; height: 30px; }
+.qbox--mv span { color: var(--warn); font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
 
 .empty { text-align: center; color: var(--ink-2); padding-block: 24px; }
 .loading { color: var(--ink-2); padding-block: 24px; }
