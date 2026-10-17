@@ -6,18 +6,19 @@
 
 -- ---------- Danh mục ----------
 -- color: vang | cam | hong | xanhla | xanhduong | tim | nau (màu khung giống tờ menu)
-insert into menu_categories (name, color, sort_order) values
-  ('Cơm trộn', 'vang', 1),
-  ('Mì trộn', 'hong', 2),
-  ('Kimbap', 'xanhla', 3),
-  ('Đồ ăn vặt', 'cam', 4),
-  ('Trà sữa', 'hong', 5),
-  ('Trà hoa quả', 'cam', 6),
-  ('Sốt khoai môn tươi', 'tim', 7),
-  ('Cà phê', 'nau', 8),
-  ('Matcha · Cacao · Khoai môn', 'xanhla', 9),
-  ('Món nên thử', 'xanhduong', 10),
-  ('Nước uống', 'vang', 11);
+-- station: bep = bếp nóng, pha_che = quầy pha chế (chủ quán đổi được trong Quản lý > Menu > sửa danh mục)
+insert into menu_categories (name, color, sort_order, station) values
+  ('Cơm trộn', 'vang', 1, 'bep'),
+  ('Mì trộn', 'hong', 2, 'bep'),
+  ('Kimbap', 'xanhla', 3, 'bep'),
+  ('Đồ ăn vặt', 'cam', 4, 'bep'),
+  ('Trà sữa', 'hong', 5, 'pha_che'),
+  ('Trà hoa quả', 'cam', 6, 'pha_che'),
+  ('Sốt khoai môn tươi', 'tim', 7, 'pha_che'),
+  ('Cà phê', 'nau', 8, 'pha_che'),
+  ('Matcha · Cacao · Khoai môn', 'xanhla', 9, 'pha_che'),
+  ('Món nên thử', 'xanhduong', 10, 'pha_che'),
+  ('Nước uống', 'vang', 11, 'bep');
 
 -- ---------- Món ----------
 insert into menu_items (category_id, name, price, prep_minutes, tag, description, sort_order)

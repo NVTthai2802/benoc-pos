@@ -113,6 +113,14 @@
 .steps li.done::before { background: var(--red); }
 .steps li.now { color: var(--red); }
 .steps li.now::before { background: linear-gradient(90deg, var(--red) 50%, var(--red-soft) 50%); background-size: 200% 100%; }
+/* Đơn có cả món bếp lẫn đồ uống pha chế: hiện tiến độ từng phần */
+.stn { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.stn li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1.5px solid var(--line); font-size: 14px; }
+.stn li b { font-weight: 600; }
+.stn li span { color: var(--ink-2); text-align: right; }
+.stn li.st-dang_lam { border-color: #65A6DC; background: #E6F2FB; }
+.stn li.st-da_ra_mon { border-color: #78B567; background: #E7F3DF; }
+.stn li.st-da_ra_mon span { color: var(--ink); font-weight: 600; }
 @media (prefers-reduced-motion: no-preference) { .steps li.now::before { animation: slide 1.6s linear infinite; } }
 @keyframes slide { from { background-position: 100% 0; } to { background-position: 0 0; } }
 .oc-items summary { cursor: pointer; font-weight: 600; }
@@ -426,7 +434,22 @@ async function sendOrder(sh, confirm) {
 
 /* ---------- Trạng thái đơn ---------- */
 const activeOrders = () => state.orders.filter(o => !o.paid);
+const STN = { bep: 'Bếp', pha_che: 'Quầy pha chế' };
+const multi = d => (d.stations || []).length > 1;
+function stationText(t) {
+  if (t.status === 'cho_nhan') return 'Chờ nhận đơn';
+  if (t.status === 'da_ra_mon') return 'Đã ra món';
+  const left = t.estimated_ready_at ? Math.ceil((new Date(t.estimated_ready_at) - Date.now()) / 60000) : null;
+  return left !== null && left > 0 ? 'Đang làm · còn khoảng ' + left + ' phút' : 'Sắp xong';
+}
 function statusText(d) {
+  if (multi(d) && d.status === 'cho_nhan') return { title: 'Đang chờ quán nhận đơn', sub: d.orders_ahead > 0 ? '<p class="eta"><b class="num">' + d.orders_ahead + '</b>đơn trước bạn</p>' : '<p>Quán sẽ nhận đơn trong giây lát.</p>' };
+  if (multi(d) && d.status === 'dang_lam') {
+    const running = d.stations.filter(t => t.status === 'dang_lam' && t.estimated_ready_at);
+    const left = running.length ? Math.ceil((Math.max.apply(null, running.map(t => new Date(t.estimated_ready_at))) - Date.now()) / 60000) : null;
+    if (left !== null && left > 0) return { title: 'Quán đang làm món', sub: '<p class="eta">Còn khoảng <b class="num">' + left + '</b>phút</p><p>Bếp và quầy pha chế làm riêng, món nào xong sẽ được mang ra trước.</p>' };
+    return { title: 'Sắp xong rồi', sub: '<p>Quán đang hoàn thiện món, bạn đợi thêm chút nhé.</p>' };
+  }
   if (d.status === 'cho_nhan') return { title: 'Đang chờ bếp nhận đơn', sub: d.orders_ahead > 0 ? '<p class="eta"><b class="num">' + d.orders_ahead + '</b>đơn trước bạn</p>' : '<p>Bếp sẽ nhận đơn trong giây lát.</p>' };
   if (d.status === 'dang_lam') {
     const left = d.estimated_ready_at ? Math.ceil((new Date(d.estimated_ready_at) - Date.now()) / 60000) : null;
@@ -443,7 +466,8 @@ function orderCard(o) {
   const count = items.reduce((s, i) => s + i.qty, 0);
   return '<article class="oc oc--' + esc(d.status) + '">' +
     '<div class="oc-top"><div class="qbox"><span>Số</span><b class="num">' + esc(d.queue_number) + '</b></div><div class="oc-state" aria-live="polite"><h2>' + t.title + '</h2>' + t.sub + '</div></div>' +
-    '<ol class="steps">' + ['Chờ bếp nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' +
+    '<ol class="steps">' + [multi(d) ? 'Chờ quán nhận' : 'Chờ bếp nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' +
+    (multi(d) ? '<ul class="stn" aria-label="Tiến độ từng phần">' + d.stations.map(t => '<li class="st-' + esc(t.status) + '"><b>' + esc(STN[t.station] || t.station) + '</b><span>' + esc(stationText(t)) + '</span></li>').join('') + '</ul>' : '') +
     '<details class="oc-items"><summary>' + count + ' món · <span class="num">' + vnd(d.total) + '</span> · ' + esc(d.customer_name) + '</summary><ul>' +
     items.map(i => '<li><span>' + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
       ((i.options && i.options.length) || i.note ? '<span class="line-sub">' + esc((i.options || []).map(x => x.choice).concat(i.note ? ['Ghi chú: ' + i.note] : []).join(' · ')) + '</span>' : '') + '</li>').join('') +
@@ -468,7 +492,7 @@ function renderBanner() {
   const act = activeOrders(), el = $('#banner');
   if (!act.length || state.view !== 'menu') { el.innerHTML = ''; return; }
   const d = state.orderData[act[0].token];
-  const label = !d ? 'Đơn số ' + act[0].queue : 'Số ' + d.queue_number + ' · ' + ({ cho_nhan: 'Chờ bếp nhận', dang_lam: 'Bếp đang làm', da_ra_mon: 'Món đã ra' }[d.status]);
+  const label = !d ? 'Đơn số ' + act[0].queue : 'Số ' + d.queue_number + ' · ' + (multi(d) ? { cho_nhan: 'Chờ quán nhận', dang_lam: 'Quán đang làm', da_ra_mon: 'Món đã ra' } : { cho_nhan: 'Chờ bếp nhận', dang_lam: 'Bếp đang làm', da_ra_mon: 'Món đã ra' })[d.status];
   el.innerHTML = '<button class="banner" type="button" id="toStatus"><span>' + esc(label) + (act.length > 1 ? ' (+' + (act.length - 1) + ' đơn)' : '') + '</span><span>Xem đơn →</span></button>';
   $('#toStatus').onclick = () => showView('status');
 }
