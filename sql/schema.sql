@@ -1,0 +1,749 @@
+-- =====================================================================
+-- POS QUÁN ĂN — SCHEMA PHÁC THẢO (Supabase / PostgreSQL)
+-- Cách dùng: Supabase Dashboard > SQL Editor > dán toàn bộ file > Run
+-- Quy ước: tiền lưu bằng số nguyên VNĐ; thời gian luôn lấy theo giờ server.
+-- =====================================================================
+
+create extension if not exists pgcrypto;
+
+-- =====================================================================
+-- 0. CẤU HÌNH QUÁN (chỉ có 1 dòng)
+-- =====================================================================
+create table shop_settings (
+  id               int primary key default 1 check (id = 1),
+  shop_name        text not null default 'Quán của tôi',
+  round_minutes    int  not null default 15 check (round_minutes in (1, 5, 10, 15, 30, 60)),
+  round_mode       text not null default 'nearest' check (round_mode in ('up', 'down', 'nearest')),
+  kitchen_capacity int  not null default 2 check (kitchen_capacity > 0), -- số đơn bếp làm song song
+  updated_at       timestamptz not null default now()
+);
+insert into shop_settings default values;
+
+-- =====================================================================
+-- 1. NHÂN VIÊN & CHẤM CÔNG
+-- =====================================================================
+create type staff_role as enum ('owner', 'kitchen', 'staff');
+
+create table employees (
+  id           uuid primary key default gen_random_uuid(),
+  auth_user_id uuid unique references auth.users(id) on delete set null, -- tài khoản đăng nhập
+  full_name    text not null,
+  phone        text,
+  role         staff_role not null default 'staff',  -- 'kitchen' = tài khoản của tablet bếp
+  hourly_rate  int  not null default 0 check (hourly_rate >= 0), -- VNĐ/giờ
+  is_active    boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+
+create table shifts (
+  id              uuid primary key default gen_random_uuid(),
+  employee_id     uuid not null references employees(id),
+  employee_name   text not null,  -- tên lúc vào ca, đổi tên / nghỉ việc sau này ca cũ vẫn giữ tên
+  check_in_at     timestamptz not null default now(),   -- giờ server, client không tự đặt
+  check_in_photo  text not null,                        -- đường dẫn ảnh trong Storage
+  check_out_at    timestamptz,
+  check_out_photo text,
+  hourly_rate     int  not null,  -- chụp lại lương/giờ lúc vào ca, đổi lương sau không ảnh hưởng ca cũ
+  round_minutes   int,            -- quy tắc làm tròn đã áp dụng (lưu để đối chiếu)
+  round_mode      text,
+  actual_minutes  int generated always as (
+                    case when check_out_at is null then null
+                         else floor(extract(epoch from (check_out_at - check_in_at)) / 60)::int end
+                  ) stored,       -- số phút thực tế
+  paid_minutes    int,            -- số phút tính lương sau làm tròn
+  pay_amount      int,            -- tiền lương ca (VNĐ)
+  note            text,           -- chủ ghi chú/điều chỉnh
+  paid_out_at     timestamptz,    -- chủ đã trả lương ca này chưa
+  check (check_out_at is null or check_out_at > check_in_at)
+);
+-- Mỗi nhân viên chỉ có tối đa 1 ca đang mở
+create unique index one_open_shift_per_employee on shifts(employee_id) where check_out_at is null;
+create index shifts_employee_time on shifts(employee_id, check_in_at desc);
+
+-- =====================================================================
+-- 2. KHO / NHẬP HÀNG
+-- =====================================================================
+create table product_categories (   -- chủ tự thêm loại mới (custom)
+  id         serial primary key,
+  name       text not null unique,
+  sort_order int  not null default 0
+);
+insert into product_categories (name, sort_order) values
+  ('Đồ dùng một lần (cốc, ống hút...)', 1),
+  ('Đồ đông lạnh', 2),
+  ('Gia vị', 3);
+
+create table products (
+  id          uuid primary key default gen_random_uuid(),
+  category_id int  not null references product_categories(id),
+  name        text not null,
+  barcode     text unique,            -- null nếu hàng không có mã vạch (chọn thủ công)
+  unit        text not null default 'cái',            -- gói, chai, thùng, kg...
+  stock_qty   numeric(12, 2) not null default 0,      -- tồn kho, do trigger tự cập nhật
+  min_qty     numeric(12, 2) not null default 0,      -- dưới mức này thì cảnh báo sắp hết
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+create table stock_receipts (        -- một lần hàng về
+  id          uuid primary key default gen_random_uuid(),
+  received_at timestamptz not null default now(),
+  supplier    text,
+  note        text,
+  created_by  uuid references employees(id)
+);
+
+create type stock_reason as enum ('nhap', 'su_dung', 'hong', 'kiem_kho');
+
+create table stock_movements (       -- mọi thay đổi tồn kho đều đi qua bảng này
+  id         bigserial primary key,
+  product_id uuid not null references products(id),
+  receipt_id uuid references stock_receipts(id) on delete cascade, -- có nếu reason = 'nhap'
+  reason     stock_reason not null,
+  qty_change numeric(12, 2) not null check (qty_change <> 0),      -- + nhập, - dùng/hỏng
+  unit_cost  int,                    -- giá nhập / đơn vị (VNĐ), chỉ khi nhập
+  note       text,
+  created_by uuid references employees(id),
+  created_at timestamptz not null default now()
+);
+create index stock_movements_product on stock_movements(product_id, created_at desc);
+
+-- Tự cập nhật tồn kho. Không sửa dòng cũ: muốn sửa thì xoá rồi nhập lại.
+-- security definer: nhân viên ghi xuất kho được nhưng không có quyền sửa trực tiếp bảng products
+create or replace function apply_stock_movement() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    update products set stock_qty = stock_qty + new.qty_change where id = new.product_id;
+  elsif tg_op = 'DELETE' then
+    update products set stock_qty = stock_qty - old.qty_change where id = old.product_id;
+  end if;
+  return null;
+end $$;
+
+create trigger trg_stock_movement
+after insert or delete on stock_movements
+for each row execute function apply_stock_movement();
+
+-- =====================================================================
+-- 3. MENU
+-- =====================================================================
+create table menu_categories (
+  id         serial primary key,
+  name       text not null,
+  color      text not null default 'vang'   -- màu khung + nền tiêu đề giống tờ menu
+             check (color in ('vang', 'cam', 'hong', 'xanhla', 'xanhduong', 'tim', 'nau')),
+  sort_order int  not null default 0
+);
+
+create table menu_items (
+  id           uuid primary key default gen_random_uuid(),
+  category_id  int  references menu_categories(id) on delete set null,
+  name         text not null,
+  description  text,
+  price        int  not null check (price >= 0),
+  image_path   text,
+  prep_minutes int  not null default 5 check (prep_minutes > 0), -- dùng để ước tính thời gian chờ
+  tag          text,                                            -- nhãn nổi bật: "Best seller", "Đặc biệt"
+  is_available boolean not null default true,                   -- tắt khi hết món
+  sort_order   int  not null default 0
+);
+
+-- ---------- Tuỳ chọn món (size, topping, combo, chọn kem...) ----------
+-- Một nhóm tuỳ chọn dùng chung cho nhiều món, ví dụ "Topping thêm" gắn cho mọi món cơm, mì.
+create table option_groups (
+  id         serial primary key,
+  name       text not null unique,  -- tên nội bộ cho chủ quản lý, ví dụ "Size M/L (+5k)"
+  title      text not null,         -- tên khách thấy, ví dụ "Chọn size"
+  min_select int  not null default 0 check (min_select >= 0),  -- 1 = bắt buộc chọn
+  max_select int  not null default 1 check (max_select >= 1),  -- 1 = chọn một, >1 = chọn nhiều
+  sort_order int  not null default 0,
+  check (max_select >= min_select)
+);
+
+create table option_choices (
+  id           serial primary key,
+  group_id     int  not null references option_groups(id) on delete cascade,
+  name         text not null,
+  price_delta  int  not null default 0 check (price_delta >= 0), -- cộng thêm vào giá món
+  is_default   boolean not null default false,                 -- chọn sẵn (ví dụ size M)
+  is_available boolean not null default true,                 -- tắt khi hết topping
+  sort_order   int  not null default 0
+);
+
+create table menu_item_option_groups (
+  menu_item_id uuid not null references menu_items(id) on delete cascade,
+  group_id     int  not null references option_groups(id) on delete cascade,
+  sort_order   int  not null default 0,
+  primary key (menu_item_id, group_id)
+);
+
+-- =====================================================================
+-- 4. ORDER (chỉ tồn tại đến khi thanh toán xong)
+-- =====================================================================
+create type order_status as enum ('cho_nhan', 'dang_lam', 'da_ra_mon');
+
+create table orders (
+  id                 uuid primary key default gen_random_uuid(),
+  access_token       uuid not null unique default gen_random_uuid(), -- khách dùng để xem đơn của mình
+  queue_number       int  not null check (queue_number > 0),         -- số thứ tự khách lấy ở bếp
+  customer_name      text not null check (length(trim(customer_name)) > 0),
+  customer_phone     text,
+  note               text,          -- ghi chú chung cho cả đơn (khách viết ở cuối giỏ hàng)
+  status             order_status not null default 'cho_nhan',
+  total              int  not null default 0,
+  created_at         timestamptz not null default now(),
+  accepted_at        timestamptz,   -- lúc bếp bấm nhận
+  estimated_ready_at timestamptz,   -- giờ dự kiến xong, khách thấy đếm ngược
+  served_at          timestamptz    -- lúc ra món
+);
+create index orders_queue_number on orders(queue_number);
+create index orders_status_created on orders(status, created_at);
+
+create table order_items (
+  id           bigserial primary key,
+  order_id     uuid not null references orders(id) on delete cascade,
+  menu_item_id uuid references menu_items(id) on delete set null,
+  item_name    text not null,   -- chụp lại tên/giá lúc đặt, đổi menu sau không ảnh hưởng
+  unit_price   int  not null,   -- giá 1 phần ĐÃ cộng tuỳ chọn
+  options      jsonb not null default '[]'::jsonb, -- [{"group":"Chọn size","choice":"L","price":5000}]
+  qty          int  not null check (qty between 1 and 50),
+  note         text             -- "ít cay", "không hành"...
+);
+
+create table staff_calls (         -- khách bấm "gọi nhân viên"
+  id           bigserial primary key,
+  order_id     uuid references orders(id) on delete cascade,
+  queue_number int  not null,
+  message      text,
+  created_at   timestamptz not null default now(),
+  resolved_at  timestamptz
+);
+
+-- =====================================================================
+-- 5. TÓM TẮT HOÁ ĐƠN (giữ lâu dài để theo dõi doanh thu)
+--    Không lưu tên / SĐT khách.
+-- =====================================================================
+create table sales (
+  id             uuid primary key,          -- = id của order đã thanh toán
+  queue_number   int  not null,
+  total          int  not null,
+  payment_method text not null check (payment_method in ('tien_mat', 'chuyen_khoan')),
+  items          jsonb not null,            -- [{menu_item_id, name, price, qty, options}]
+  ordered_at     timestamptz not null,
+  accepted_at    timestamptz,
+  served_at      timestamptz,
+  paid_at        timestamptz not null default now(),
+  cook_minutes   int,                       -- từ lúc bếp nhận đến lúc ra món (để ước tính chờ)
+  cashier_id     uuid references employees(id)
+);
+create index sales_paid_at on sales(paid_at desc);
+
+-- =====================================================================
+-- 6. HÀM TIỆN ÍCH
+-- =====================================================================
+create or replace function my_role() returns staff_role
+language sql stable security definer set search_path = public as $$
+  select role from employees where auth_user_id = auth.uid() and is_active
+$$;
+
+create or replace function my_employee_id() returns uuid
+language sql stable security definer set search_path = public as $$
+  select id from employees where auth_user_id = auth.uid() and is_active
+$$;
+
+create or replace function apply_rounding(p_minutes int, p_step int, p_mode text) returns int
+language sql immutable as $$
+  select (case p_mode
+            when 'up'   then ceil(p_minutes::numeric / p_step) * p_step
+            when 'down' then floor(p_minutes::numeric / p_step) * p_step
+            else round(p_minutes::numeric / p_step) * p_step
+          end)::int
+$$;
+
+-- =====================================================================
+-- 7. CHẤM CÔNG (giờ lấy từ server)
+-- =====================================================================
+create or replace function check_in(p_photo text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_emp employees;
+  v_id  uuid;
+begin
+  select * into v_emp from employees where auth_user_id = auth.uid() and is_active;
+  if not found then raise exception 'NOT_EMPLOYEE'; end if;
+  if exists (select 1 from shifts where employee_id = v_emp.id and check_out_at is null) then
+    raise exception 'ALREADY_CHECKED_IN' using hint = 'Bạn đang có ca chưa kết thúc';
+  end if;
+  insert into shifts (employee_id, employee_name, check_in_photo, hourly_rate)
+  values (v_emp.id, v_emp.full_name, p_photo, v_emp.hourly_rate)
+  returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function check_out(p_photo text) returns shifts
+language plpgsql security definer set search_path = public as $$
+declare
+  s   shifts;
+  cfg shop_settings;
+  m   int;
+  pm  int;
+begin
+  select * into cfg from shop_settings where id = 1;
+  select sh.* into s
+    from shifts sh join employees e on e.id = sh.employee_id
+   where e.auth_user_id = auth.uid() and sh.check_out_at is null
+   for update of sh;
+  if not found then raise exception 'NOT_CHECKED_IN'; end if;
+
+  m  := floor(extract(epoch from (now() - s.check_in_at)) / 60);
+  pm := apply_rounding(m, cfg.round_minutes, cfg.round_mode);
+
+  update shifts
+     set check_out_at    = now(),
+         check_out_photo = p_photo,
+         round_minutes   = cfg.round_minutes,
+         round_mode      = cfg.round_mode,
+         paid_minutes    = pm,
+         pay_amount      = round(pm * s.hourly_rate / 60.0)
+   where id = s.id
+  returning * into s;
+  return s;
+end $$;
+
+-- =====================================================================
+-- 8. ORDER PHÍA KHÁCH (khách không đăng nhập, chỉ gọi các hàm này)
+-- =====================================================================
+
+-- Toàn bộ menu đang bán, trả về trong 1 lần gọi (trang khách gọi khi mở).
+-- Danh mục không còn món nào đang bán sẽ tự ẩn.
+create or replace function get_menu() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(c order by c_sort, c_id), '[]'::jsonb) from (
+    select mc.id as c_id, mc.sort_order as c_sort,
+      jsonb_build_object(
+        'id', mc.id, 'name', mc.name, 'color', mc.color,
+        'items', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', mi.id, 'name', mi.name, 'description', mi.description,
+            'price', mi.price, 'image_path', mi.image_path, 'tag', mi.tag,
+            'option_groups', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'id', g.id, 'title', g.title, 'min', g.min_select, 'max', g.max_select,
+                'choices', coalesce((
+                  select jsonb_agg(jsonb_build_object(
+                           'id', ch.id, 'name', ch.name,
+                           'price', ch.price_delta, 'default', ch.is_default)
+                         order by ch.sort_order, ch.id)
+                    from option_choices ch
+                   where ch.group_id = g.id and ch.is_available), '[]'::jsonb)
+              ) order by mog.sort_order, g.sort_order, g.id)
+                from menu_item_option_groups mog join option_groups g on g.id = mog.group_id
+               where mog.menu_item_id = mi.id), '[]'::jsonb)
+          ) order by mi.sort_order, mi.name)
+            from menu_items mi
+           where mi.category_id = mc.id and mi.is_available), '[]'::jsonb)
+      ) as c
+    from menu_categories mc
+  ) s
+  where jsonb_array_length(c -> 'items') > 0
+$$;
+
+-- Đặt món.
+-- p_items = [{"menu_item_id": "...", "qty": 2, "note": "ít cay", "choice_ids": [3, 7]}]
+-- Giá luôn tính ở server (giá món + tuỳ chọn), không tin giá client gửi lên.
+-- Nếu số thứ tự đã có đơn chưa thanh toán (gọi thêm món / ngồi ghép / nhập nhầm số)
+-- → báo DUPLICATE_QUEUE, app hỏi lại khách rồi gửi p_confirm_duplicate = true.
+create or replace function place_order(
+  p_queue_number      int,
+  p_customer_name     text,
+  p_items             jsonb,
+  p_customer_phone    text    default null,
+  p_confirm_duplicate boolean default false,
+  p_note              text    default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order      orders;
+  v_dup        text;
+  v_bad        text;
+  v_qty        int;
+  v_extra      int;
+  v_opts       jsonb;
+  v_choice_ids int[];
+  v_total      int := 0;
+  it           jsonb;
+  mi           menu_items;
+begin
+  if p_queue_number is null or p_queue_number <= 0 then
+    raise exception 'MISSING_QUEUE_NUMBER' using hint = 'Vui lòng nhập số thứ tự trên thẻ bạn vừa lấy';
+  end if;
+  if coalesce(trim(p_customer_name), '') = '' then
+    raise exception 'MISSING_NAME' using hint = 'Vui lòng nhập tên để quán liên hệ khi cần';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'EMPTY_ORDER';
+  end if;
+
+  select o.customer_name into v_dup from orders o where o.queue_number = p_queue_number limit 1;
+  if found and not p_confirm_duplicate then
+    raise exception 'DUPLICATE_QUEUE'
+      using hint = format('Số %s đang có đơn của %s chưa thanh toán', p_queue_number, v_dup);
+  end if;
+
+  insert into orders (queue_number, customer_name, customer_phone, note)
+  values (p_queue_number, trim(p_customer_name), nullif(trim(p_customer_phone), ''),
+          nullif(left(trim(p_note), 300), ''))
+  returning * into v_order;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    select * into mi from menu_items where id = (it ->> 'menu_item_id')::uuid and is_available;
+    if not found then
+      raise exception 'ITEM_UNAVAILABLE' using hint = coalesce(it ->> 'menu_item_id', '');
+    end if;
+    v_qty := coalesce((it ->> 'qty')::int, 1);
+    v_choice_ids := array(select e::int
+                            from jsonb_array_elements_text(coalesce(it -> 'choice_ids', '[]'::jsonb)) e);
+
+    -- Mọi lựa chọn phải còn bán và thuộc nhóm tuỳ chọn gắn với món này
+    if exists (select 1 from unnest(v_choice_ids) cid
+                where not exists (select 1 from option_choices ch
+                                    join menu_item_option_groups mog on mog.group_id = ch.group_id
+                                   where ch.id = cid and ch.is_available and mog.menu_item_id = mi.id)) then
+      raise exception 'OPTION_INVALID' using hint = mi.name;
+    end if;
+
+    -- Số lựa chọn trong mỗi nhóm phải nằm trong [min, max] (ví dụ size bắt buộc chọn đúng 1)
+    select g.title into v_bad
+      from menu_item_option_groups mog join option_groups g on g.id = mog.group_id
+     where mog.menu_item_id = mi.id
+       and (select count(*) from option_choices ch
+             where ch.group_id = g.id and ch.id = any(v_choice_ids))
+           not between g.min_select and g.max_select
+     limit 1;
+    if found then
+      raise exception 'OPTION_REQUIRED' using hint = format('%s: kiểm tra lại mục "%s"', mi.name, v_bad);
+    end if;
+
+    select coalesce(sum(ch.price_delta), 0),
+           coalesce(jsonb_agg(jsonb_build_object('group', g.title, 'choice', ch.name, 'price', ch.price_delta)
+                              order by g.sort_order, ch.sort_order, ch.id), '[]'::jsonb)
+      into v_extra, v_opts
+      from option_choices ch join option_groups g on g.id = ch.group_id
+     where ch.id = any(v_choice_ids);
+
+    insert into order_items (order_id, menu_item_id, item_name, unit_price, options, qty, note)
+    values (v_order.id, mi.id, mi.name, mi.price + v_extra, v_opts, v_qty, nullif(trim(it ->> 'note'), ''));
+    v_total := v_total + (mi.price + v_extra) * v_qty;
+  end loop;
+
+  update orders set total = v_total where id = v_order.id;
+  return jsonb_build_object('order_id', v_order.id, 'access_token', v_order.access_token, 'total', v_total);
+end $$;
+
+-- Khách xem trạng thái đơn của mình (app gọi lại mỗi ~15 giây).
+-- Trả về null nghĩa là đơn đã thanh toán xong.
+create or replace function get_my_order(p_token uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'queue_number',       o.queue_number,
+    'customer_name',      o.customer_name,
+    'status',             o.status,
+    'total',              o.total,
+    'note',               o.note,
+    'created_at',         o.created_at,
+    'estimated_ready_at', o.estimated_ready_at,
+    'orders_ahead', (select count(*) from orders x
+                      where x.status in ('cho_nhan', 'dang_lam') and x.created_at < o.created_at),
+    'has_open_call', exists (select 1 from staff_calls c where c.order_id = o.id and c.resolved_at is null),
+    'items', (select jsonb_agg(jsonb_build_object(
+                       'name', i.item_name, 'qty', i.qty, 'note', i.note,
+                       'price', i.unit_price, 'options', i.options) order by i.id)
+                from order_items i where i.order_id = o.id)
+  )
+  from orders o where o.access_token = p_token
+$$;
+
+create or replace function call_staff(p_token uuid, p_message text default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare o orders;
+begin
+  select * into o from orders where access_token = p_token;
+  if not found then raise exception 'ORDER_NOT_FOUND'; end if;
+  -- chống bấm liên tục: tối đa 1 lần gọi chưa xử lý mỗi đơn
+  if exists (select 1 from staff_calls where order_id = o.id and resolved_at is null) then
+    return;
+  end if;
+  insert into staff_calls (order_id, queue_number, message) values (o.id, o.queue_number, p_message);
+end $$;
+
+-- =====================================================================
+-- 9. ORDER PHÍA BẾP / THU NGÂN
+-- =====================================================================
+
+-- Gợi ý số phút chờ khi bếp nhận đơn:
+--   thời gian món lâu nhất trong đơn
+-- + (số đơn đang làm / số đơn bếp làm song song) × thời gian nấu trung bình 14 ngày gần nhất
+-- làm tròn lên bội số 5 phút. Bếp có thể chỉnh trước khi bấm nhận.
+create or replace function suggest_wait_minutes(p_order_id uuid) returns int
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_own   int;
+  v_ahead int;
+  v_cap   int;
+  v_avg   numeric;
+begin
+  select coalesce(max(m.prep_minutes), 10) into v_own
+    from order_items i join menu_items m on m.id = i.menu_item_id
+   where i.order_id = p_order_id;
+  select count(*) into v_ahead from orders where status = 'dang_lam';
+  select kitchen_capacity into v_cap from shop_settings where id = 1;
+  select avg(cook_minutes) into v_avg from sales
+   where paid_at > now() - interval '14 days' and cook_minutes is not null;
+  return (ceil((v_own + floor(v_ahead::numeric / v_cap) * coalesce(v_avg, v_own)) / 5.0) * 5)::int;
+end $$;
+
+create or replace function accept_order(p_order_id uuid, p_minutes int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() is null then raise exception 'FORBIDDEN'; end if;
+  update orders
+     set status = 'dang_lam',
+         accepted_at = now(),
+         estimated_ready_at = now() + make_interval(mins => greatest(p_minutes, 1))
+   where id = p_order_id and status = 'cho_nhan';
+end $$;
+
+-- Bếp báo "cần thêm X phút"
+create or replace function extend_wait(p_order_id uuid, p_extra_minutes int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() is null then raise exception 'FORBIDDEN'; end if;
+  update orders
+     set estimated_ready_at = greatest(estimated_ready_at, now()) + make_interval(mins => p_extra_minutes)
+   where id = p_order_id and status = 'dang_lam';
+end $$;
+
+create or replace function mark_served(p_order_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() is null then raise exception 'FORBIDDEN'; end if;
+  update orders set status = 'da_ra_mon', served_at = now()
+   where id = p_order_id and status = 'dang_lam';
+end $$;
+
+-- Huỷ đơn (đơn ảo, khách bỏ về): xoá hẳn, không tính doanh thu
+create or replace function cancel_order(p_order_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() is null then raise exception 'FORBIDDEN'; end if;
+  delete from orders where id = p_order_id;
+end $$;
+
+-- Thanh toán: chép tóm tắt sang sales rồi xoá order (order_items, staff_calls xoá theo)
+create or replace function complete_payment(p_order_id uuid, p_method text) returns void
+language plpgsql security definer set search_path = public as $$
+declare o orders;
+begin
+  if my_role() is null then raise exception 'FORBIDDEN'; end if;
+  select * into o from orders where id = p_order_id for update;
+  if not found then raise exception 'ORDER_NOT_FOUND'; end if;
+
+  insert into sales (id, queue_number, total, payment_method, items,
+                     ordered_at, accepted_at, served_at, cook_minutes, cashier_id)
+  select o.id, o.queue_number, o.total, p_method,
+         coalesce((select jsonb_agg(jsonb_build_object(
+                     'menu_item_id', i.menu_item_id, 'name', i.item_name,
+                     'price', i.unit_price, 'qty', i.qty, 'options', i.options))
+                   from order_items i where i.order_id = o.id), '[]'::jsonb),
+         o.created_at, o.accepted_at, o.served_at,
+         case when o.accepted_at is not null and o.served_at is not null
+              then round(extract(epoch from (o.served_at - o.accepted_at)) / 60)::int end,
+         my_employee_id();
+
+  delete from orders where id = o.id;
+end $$;
+
+-- =====================================================================
+-- 9b. QUẢN LÝ
+-- =====================================================================
+
+-- Lần đầu cài đặt: người đăng ký đầu tiên tự nhận vai trò chủ quán.
+-- Khi đã có chủ quán thì hàm này bị khoá.
+create or replace function claim_owner(p_full_name text, p_phone text default null) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if auth.uid() is null then raise exception 'NOT_SIGNED_IN'; end if;
+  if exists (select 1 from employees where role = 'owner') then raise exception 'OWNER_EXISTS'; end if;
+  insert into employees (auth_user_id, full_name, phone, role)
+  values (auth.uid(), coalesce(nullif(trim(p_full_name), ''), 'Chủ quán'), p_phone, 'owner')
+  returning id into v_id;
+  return v_id;
+end $$;
+
+-- Ứng dụng hỏi xem đã có chủ quán chưa để hiện màn hình cài đặt lần đầu
+create or replace function has_owner() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from employees where role = 'owner')
+$$;
+
+-- Nhập một lô hàng về: tạo phiếu + các dòng nhập trong cùng một giao dịch.
+-- p_lines = [{"product_id": "...", "qty": 10, "unit_cost": 45000}]
+create or replace function create_receipt(p_supplier text, p_note text, p_lines jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id  uuid;
+  v_emp uuid := my_employee_id();
+  ln    jsonb;
+begin
+  if my_role() is null then raise exception 'FORBIDDEN'; end if;
+  if p_lines is null or jsonb_array_length(p_lines) = 0 then raise exception 'EMPTY_RECEIPT'; end if;
+  insert into stock_receipts (supplier, note, created_by)
+  values (nullif(trim(p_supplier), ''), nullif(trim(p_note), ''), v_emp)
+  returning id into v_id;
+  for ln in select * from jsonb_array_elements(p_lines) loop
+    if coalesce((ln ->> 'qty')::numeric, 0) <= 0 then raise exception 'BAD_QTY'; end if;
+    insert into stock_movements (product_id, receipt_id, reason, qty_change, unit_cost, created_by)
+    values ((ln ->> 'product_id')::uuid, v_id, 'nhap', (ln ->> 'qty')::numeric,
+            nullif(ln ->> 'unit_cost', '')::int, v_emp);
+  end loop;
+  return v_id;
+end $$;
+
+-- Chủ sửa giờ vào/ra của một ca (nhân viên quên chấm, chấm nhầm). Lương tính lại tự động.
+create or replace function owner_update_shift(p_id uuid, p_in timestamptz, p_out timestamptz, p_note text)
+returns shifts
+language plpgsql security definer set search_path = public as $$
+declare
+  s   shifts;
+  cfg shop_settings;
+  m   int;
+  pm  int;
+begin
+  if my_role() is distinct from 'owner' then raise exception 'FORBIDDEN'; end if;
+  if p_out is not null and p_out <= p_in then raise exception 'BAD_TIME'; end if;
+  select * into cfg from shop_settings where id = 1;
+  select * into s from shifts where id = p_id for update;
+  if not found then raise exception 'NOT_FOUND'; end if;
+  if p_out is null then
+    update shifts set check_in_at = p_in, check_out_at = null, paid_minutes = null, pay_amount = null,
+                      note = nullif(trim(p_note), '')
+     where id = p_id returning * into s;
+    return s;
+  end if;
+  m  := floor(extract(epoch from (p_out - p_in)) / 60);
+  pm := apply_rounding(m, coalesce(s.round_minutes, cfg.round_minutes), coalesce(s.round_mode, cfg.round_mode));
+  update shifts
+     set check_in_at   = p_in,
+         check_out_at  = p_out,
+         round_minutes = coalesce(s.round_minutes, cfg.round_minutes),
+         round_mode    = coalesce(s.round_mode, cfg.round_mode),
+         paid_minutes  = pm,
+         pay_amount    = round(pm * s.hourly_rate / 60.0),
+         note          = nullif(trim(p_note), '')
+   where id = p_id
+  returning * into s;
+  return s;
+end $$;
+
+-- =====================================================================
+-- 10. PHÂN QUYỀN (Row Level Security)
+--   Khách (anon): chỉ đọc menu + gọi các hàm ở mục 8.
+--   Nhân viên/bếp: đọc đơn, nhập hàng, xem ca của mình.
+--   Chủ: toàn quyền.
+-- =====================================================================
+alter table shop_settings      enable row level security;
+alter table employees          enable row level security;
+alter table shifts             enable row level security;
+alter table product_categories enable row level security;
+alter table products           enable row level security;
+alter table stock_receipts     enable row level security;
+alter table stock_movements    enable row level security;
+alter table menu_categories    enable row level security;
+alter table menu_items         enable row level security;
+alter table option_groups      enable row level security;
+alter table option_choices     enable row level security;
+alter table menu_item_option_groups enable row level security;
+alter table orders             enable row level security;
+alter table order_items        enable row level security;
+alter table staff_calls        enable row level security;
+alter table sales              enable row level security;
+
+-- Cấu hình
+create policy settings_read  on shop_settings for select using (my_role() is not null);
+create policy settings_owner on shop_settings for update using (my_role() = 'owner');
+
+-- Nhân viên & ca
+create policy emp_self  on employees for select using (auth_user_id = auth.uid());
+create policy emp_owner on employees for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy shift_self  on shifts for select using (employee_id = my_employee_id());
+create policy shift_owner on shifts for all using (my_role() = 'owner') with check (my_role() = 'owner');
+
+-- Kho: nhân viên xem + nhập hàng (kể cả tạo sản phẩm mới khi quét mã lần đầu); chủ sửa/xoá
+create policy pcat_read  on product_categories for select using (my_role() is not null);
+create policy pcat_owner on product_categories for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy prod_read   on products for select using (my_role() is not null);
+create policy prod_insert on products for insert with check (my_role() is not null);
+create policy prod_owner  on products for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy rcpt_read   on stock_receipts for select using (my_role() is not null);
+create policy rcpt_insert on stock_receipts for insert with check (my_role() is not null);
+create policy rcpt_owner  on stock_receipts for delete using (my_role() = 'owner');
+create policy mov_read    on stock_movements for select using (my_role() is not null);
+create policy mov_insert  on stock_movements for insert with check (my_role() is not null);
+create policy mov_owner   on stock_movements for delete using (my_role() = 'owner');
+
+-- Menu: ai cũng xem được, chỉ chủ sửa
+create policy mcat_read  on menu_categories for select using (true);
+create policy mcat_owner on menu_categories for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy mi_read    on menu_items for select using (true);
+create policy mi_owner   on menu_items for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy og_read    on option_groups for select using (true);
+create policy og_owner   on option_groups for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy oc_read    on option_choices for select using (true);
+create policy oc_owner   on option_choices for all using (my_role() = 'owner') with check (my_role() = 'owner');
+create policy miog_read  on menu_item_option_groups for select using (true);
+create policy miog_owner on menu_item_option_groups for all using (my_role() = 'owner') with check (my_role() = 'owner');
+
+-- Order: nhân viên đọc (màn hình bếp nghe realtime); mọi thay đổi đi qua các hàm ở trên
+create policy ord_read   on orders      for select using (my_role() is not null);
+create policy oi_read    on order_items for select using (my_role() is not null);
+create policy call_read  on staff_calls for select using (my_role() is not null);
+create policy call_done  on staff_calls for update using (my_role() is not null);
+
+-- Doanh thu: chỉ chủ xem
+create policy sales_owner on sales for select using (my_role() = 'owner');
+
+-- =====================================================================
+-- 11. REALTIME cho màn hình bếp
+--    (Khách không dùng realtime mà gọi get_my_order định kỳ → tiết kiệm kết nối)
+-- =====================================================================
+alter publication supabase_realtime add table orders, order_items, staff_calls;
+
+-- =====================================================================
+-- 12. LƯU ẢNH CHẤM CÔNG (Supabase Storage, bucket riêng tư)
+--    Đường dẫn ảnh: <auth_user_id>/<thời_gian>.jpg
+-- =====================================================================
+insert into storage.buckets (id, name, public) values ('checkin-photos', 'checkin-photos', false);
+
+create policy checkin_upload on storage.objects for insert to authenticated
+  with check (bucket_id = 'checkin-photos'
+              and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy checkin_view on storage.objects for select to authenticated
+  using (bucket_id = 'checkin-photos'
+         and (public.my_role() = 'owner' or (storage.foldername(name))[1] = auth.uid()::text));
+
+-- =====================================================================
+-- 13. ẢNH MÓN ĂN (bucket công khai: ai cũng xem được, chỉ chủ tải lên/sửa/xoá)
+-- =====================================================================
+insert into storage.buckets (id, name, public) values ('menu-images', 'menu-images', true);
+
+create policy menu_img_read on storage.objects for select
+  using (bucket_id = 'menu-images');
+create policy menu_img_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'menu-images' and public.my_role() = 'owner');
+create policy menu_img_update on storage.objects for update to authenticated
+  using (bucket_id = 'menu-images' and public.my_role() = 'owner');
+create policy menu_img_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'menu-images' and public.my_role() = 'owner');
