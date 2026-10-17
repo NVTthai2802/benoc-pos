@@ -18,6 +18,20 @@ Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**
 - Mỗi menu có nút nhỏ **Xem menu …** để khách sang menu kia. Giỏ hàng hai menu tách riêng, nên mỗi lần gửi là một đơn cho một quầy. Khách dùng chung một số thẻ cho cả hai đơn.
 - Món nào thuộc menu nào là theo **danh mục**. Đổi trong **Quản lý → Menu → Danh mục → Thuộc menu nào**.
 
+## Hai môi trường: Product và Test
+
+| | Product (quán dùng thật) | Test (thử tính năng mới) |
+|---|---|---|
+| Trang | https://nvtthai2802.github.io/benoc-pos/ | https://nvtthai2802.github.io/benoc-pos/test/ |
+| Cơ sở dữ liệu | Supabase **benoc-pos** | Supabase **benoc-pos-test** |
+| Tài khoản, đơn, doanh thu | thật | riêng, thử thoải mái |
+
+- Trang test có dải vàng đen **MÔI TRƯỜNG TEST** ở trên cùng. Mã QR trong Cài đặt của trang test trỏ về trang test, **đừng in mã này dán ở quán**.
+- Tài khoản hai bên tách riêng: tạo chủ quán, máy bếp, máy pha chế ở mỗi bên.
+- `config.js` chứa cấu hình cả hai bên; trang nằm trong thư mục `test/` thì tự dùng Supabase test.
+- Quy trình sửa: làm trên nhánh `test` → `scripts/dua-len-test.sh` (lên trang test) → thử → nếu có `sql/cap-nhat-*.sql` mới thì chạy trên Supabase product → `scripts/dua-len-product.sh` (lên quán).
+- File SQL cập nhật luôn chạy trên Supabase **test trước**, ổn rồi mới chạy trên product.
+
 ## 1. Tạo cơ sở dữ liệu Supabase (miễn phí)
 
 1. Vào https://supabase.com, đăng ký, bấm **New project**. Chọn vùng **Southeast Asia (Singapore)** cho nhanh.
