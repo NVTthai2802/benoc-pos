@@ -15,6 +15,6 @@ done
 git checkout "$SRC" -- .
 git add -A
 if git diff --cached --quiet; then echo "Product đã là bản mới nhất."; exit 0; fi
-git commit -qm "Product: phát hành từ nhánh $SRC ($(git rev-parse --short "$SRC"))"
+git commit -qm "Product: phát hành từ nhánh $SRC ($(git rev-parse --short "$SRC"))" ${COMMIT_TRAILER:+-m "$COMMIT_TRAILER"}
 git push -q origin main
 echo "Đã đưa lên PRODUCT: https://nvtthai2802.github.io/benoc-pos/"

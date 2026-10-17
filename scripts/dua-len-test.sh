@@ -13,6 +13,6 @@ git archive "$SRC" -- '*.html' '*.js' '*.css' img | tar -x -C test
 rm -rf test/scripts
 git add -A test
 if git diff --cached --quiet; then echo "Test đã là bản mới nhất."; exit 0; fi
-git commit -qm "Test: cập nhật từ nhánh $SRC ($(git rev-parse --short "$SRC"))"
+git commit -qm "Test: cập nhật từ nhánh $SRC ($(git rev-parse --short "$SRC"))" ${COMMIT_TRAILER:+-m "$COMMIT_TRAILER"}
 git push -q origin main
 echo "Đã đưa lên TEST. Khoảng 1 phút sau mở: https://nvtthai2802.github.io/benoc-pos/test/"
