@@ -99,6 +99,11 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const COLORS = [['vang', 'Vàng'], ['cam', 'Cam'], ['hong', 'Hồng'], ['xanhla', 'Xanh lá'], ['xanhduong', 'Xanh dương'], ['tim', 'Tím'], ['nau', 'Nâu']];
 const REASON = { nhap: 'Nhập hàng', su_dung: 'Dùng', hong: 'Hỏng / hết hạn', kiem_kho: 'Kiểm kho' };
 const MODE = { up: 'làm tròn lên', down: 'làm tròn xuống', nearest: 'làm tròn gần nhất' };
+/* Hai mã QR gọi món: mỗi mã mở đúng một menu, đơn về đúng một quầy */
+const QRS = [
+  { key: 'an', query: '?menu=an', color: 'vang', title: 'Mã QR bếp nóng · menu Ăn vặt', desc: 'Dán ở khu bếp. Khách quét thấy cơm, mì, kimbap, đồ ăn vặt và nước uống của bếp. Đơn về màn hình bếp, bếp thu tiền.', screen: 'bep.html', screenName: 'bếp' },
+  { key: 'tra', query: '?menu=tra', color: 'hong', title: 'Mã QR quầy pha chế · menu Trà · Cà phê', desc: 'Dán ở quầy pha chế. Khách quét thấy trà sữa, trà hoa quả, cà phê, matcha. Đơn về màn hình pha chế, quầy pha chế thu tiền.', screen: 'phache.html', screenName: 'pha chế' }
+];
 const PAY_STEPS = [[1, 'Không làm tròn (giữ số lẻ)'], [100, 'Làm tròn tới 100đ'], [500, 'Làm tròn tới 500đ'], [1000, 'Làm tròn tới 1.000đ']];
 /* Ca/cài đặt có làm tròn giờ công không (round_minutes = 1 hoặc trống nghĩa là tính đúng từng phút) */
 const isExact = r => !r.round_minutes || Number(r.round_minutes) === 1;
@@ -142,15 +147,16 @@ function wireConfirm(sh, triggerSel, boxId, onYes) {
 }
 
 function boot() {
-  if (role() === 'kitchen') {
-    $('#app').innerHTML = '<div class="wrap login"><div class="login-card"><h1>Bé Nốc</h1><p>Tài khoản máy bếp dùng màn hình bếp.</p><a class="btn btn-block" href="bep.html">Mở màn hình bếp</a><button class="link" type="button" data-logout>Đăng xuất</button></div></div>';
+  if (role() === 'kitchen' || role() === 'bar') {
+    const bar = role() === 'bar';
+    $('#app').innerHTML = '<div class="wrap login"><div class="login-card"><h1>Bé Nốc</h1><p>Tài khoản ' + (bar ? 'máy pha chế dùng màn hình quầy pha chế' : 'máy bếp dùng màn hình bếp') + '.</p><a class="btn btn-block" href="' + (bar ? 'phache.html' : 'bep.html') + '">Mở màn hình ' + (bar ? 'quầy pha chế' : 'bếp') + '</a><button class="link" type="button" data-logout>Đăng xuất</button></div></div>';
     return;
   }
   const tabs = TABS[isOwner() ? 'owner' : 'staff'];
   const want = (location.hash || '').slice(1) || BN.store.get('qltab.' + BN.SLOT, '');
   state.tab = tabs.some(t => t[0] === want) ? want : tabs[0][0];
   $('#app').innerHTML = '<header class="topbar"><div class="topbar-in"><div class="brand"><b>Bé Nốc</b><span>Quản lý</span></div>' +
-    '<a class="btn btn-sm btn-line" href="bep.html">Màn hình bếp</a>' + BN.staff.whoChip(state.session) + '</div>' +
+    '<a class="btn btn-sm btn-line" href="bep.html">Bếp</a><a class="btn btn-sm btn-line" href="phache.html">Pha chế</a>' + BN.staff.whoChip(state.session) + '</div>' +
     '<nav class="nav" aria-label="Mục quản lý"><div class="nav-in">' + tabs.map(([k, t, c]) => '<button type="button" class="cc-' + c + '" data-tab="' + k + '">' + t + '</button>').join('') + '</div></nav></header>' +
     '<main class="page" id="main"></main>';
   $('.nav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
@@ -214,8 +220,12 @@ async function renderRevenue(main) {
   const r = rangeOf(state.range);
   const sales = await api.sales(r);
   const total = sales.reduce((s, x) => s + x.total, 0), count = sales.length;
-  const cooks = sales.filter(x => x.cook_minutes != null);
-  const avgCook = cooks.length ? Math.round(cooks.reduce((s, x) => s + x.cook_minutes, 0) / cooks.length) : null;
+  const avgOf = st => { const v = sales.map(x => x.station_minutes && x.station_minutes[st]).filter(x => x != null); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+  const avgBep = avgOf('bep'), avgBar = avgOf('pha_che');
+  // Quầy thu tiền: đơn chỉ có đồ uống do quầy pha chế thu, còn lại bếp thu
+  const payer = x => (x.items || []).length && (x.items || []).every(i => i.station === 'pha_che') ? 'pha_che' : 'bep';
+  const byCounter = { bep: { n: 0, tien_mat: 0, chuyen_khoan: 0 }, pha_che: { n: 0, tien_mat: 0, chuyen_khoan: 0 } };
+  sales.forEach(x => { const c = byCounter[payer(x)]; c.n++; c[x.payment_method] = (c[x.payment_method] || 0) + x.total; });
   let buckets;
   if (state.range === 'today') {
     let h0 = 8, h1 = 22; sales.forEach(x => { const h = new Date(x.paid_at).getHours(); h0 = Math.min(h0, h); h1 = Math.max(h1, h); });
@@ -239,7 +249,10 @@ async function renderRevenue(main) {
     '<div class="stat"><span>Doanh thu</span><b class="num">' + vnd(total) + '</b><small>' + esc(r.label) + '</small></div>' +
     '<div class="stat"><span>Số đơn</span><b class="num">' + count + '</b><small>đã thanh toán</small></div>' +
     '<div class="stat"><span>Trung bình / đơn</span><b class="num">' + (count ? vnd(total / count) : '–') + '</b></div>' +
-    '<div class="stat"><span>Thời gian nấu TB</span><b class="num">' + (avgCook != null ? avgCook + ' phút' : '–') + '</b><small>từ lúc nhận tới ra món</small></div></div>' +
+    '<div class="stat"><span>Thời gian làm TB</span><b class="num">' + (avgBep != null ? avgBep + "'" : '–') + ' · ' + (avgBar != null ? avgBar + "'" : '–') + '</b><small>bếp · pha chế, từ lúc nhận tới ra món</small></div></div>' +
+    '<section class="box cc-xanhla"><h2 class="box-title"><span>Tiền theo quầy</span></h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quầy thu</th><th class="r">Số đơn</th><th class="r">Tiền mặt</th><th class="r">Chuyển khoản</th><th class="r">Tổng</th></tr></thead><tbody>' +
+      [['bep', 'Bếp nóng'], ['pha_che', 'Quầy pha chế']].map(([k, t]) => { const c = byCounter[k]; return '<tr><td><b>' + t + '</b></td><td class="r num">' + c.n + '</td><td class="r num">' + vnd(c.tien_mat) + '</td><td class="r num">' + vnd(c.chuyen_khoan) + '</td><td class="r num"><b>' + vnd(c.tien_mat + c.chuyen_khoan) + '</b></td></tr>'; }).join('') +
+      '</tbody></table></div><p class="small muted" style="margin:8px 0 0">Dùng cột Tiền mặt để đối chiếu tiền trong két của từng quầy cuối ca.</p></section>' +
     '<section class="box cc-hong"><h2 class="box-title"><span>' + (state.range === 'today' ? 'Theo giờ' : 'Theo ngày') + '</span></h2><div class="chart" id="chart">' + barChart(buckets) + '</div></section>' +
     '<div class="two">' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Cách thanh toán</span></h2>' + (total ? '<div class="split">' + ['tien_mat', 'chuyen_khoan'].filter(k => byPay[k]).map(k => '<span style="width:' + (byPay[k] / total * 100) + '%;background:' + PAY_COLOR[k] + '" title="' + PAY[k] + '"></span>').join('') + '</div>' +
@@ -279,7 +292,7 @@ async function renderMenu(main) {
       }).join('') || '<p class="empty">Không có món nào khớp.</p>';
   } else if (sub === 'danhmuc') {
     body = '<div class="toolbar"><span class="muted small" style="flex:1">Thứ tự ở đây là thứ tự khách thấy trên menu.</span><button class="btn" type="button" id="addCat">+ Thêm danh mục</button></div>' +
-      '<section class="box"><ul class="list">' + m.categories.map((c, i) => '<li class="cc-' + esc(c.color) + '"><div class="lrow"><span class="dot"></span><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-cat="' + c.id + '"><span class="lname">' + esc(c.name) + '</span><span class="lsub">' + m.items.filter(x => x.category_id === c.id).length + ' món</span></button>' +
+      '<section class="box"><ul class="list">' + m.categories.map((c, i) => '<li class="cc-' + esc(c.color) + '"><div class="lrow"><span class="dot"></span><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-cat="' + c.id + '"><span class="lname">' + esc(c.name) + '</span><span class="lsub">' + m.items.filter(x => x.category_id === c.id).length + ' món · ' + ((c.station || 'bep') === 'pha_che' ? 'Quầy pha chế' : 'Bếp nóng') + '</span></button>' +
         '<span class="row"><button class="btn btn-sm btn-line" type="button" data-move="' + c.id + '" data-d="-1" aria-label="Lên"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="btn btn-sm btn-line" type="button" data-move="' + c.id + '" data-d="1" aria-label="Xuống"' + (i === m.categories.length - 1 ? ' disabled' : '') + '>↓</button></span></div></li>').join('') + '</ul></section>';
   } else {
     body = '<div class="toolbar"><span class="muted small" style="flex:1">Nhóm tuỳ chọn dùng chung cho nhiều món, ví dụ size, topping, chọn kem.</span><button class="btn" type="button" id="addGroup">+ Thêm nhóm</button></div>' +
@@ -359,9 +372,10 @@ function editItem(it) {
     });
 }
 function editCat(c) {
-  const isNew = !c; c = c || { name: '', color: 'vang', sort_order: 99 };
+  const isNew = !c; c = c || { name: '', color: 'vang', station: 'bep', sort_order: 99 };
   ui.sheet(ui.head(isNew ? 'Thêm danh mục' : 'Sửa danh mục') + '<div class="sh-body">' +
     '<label class="field" for="cName">Tên danh mục<input id="cName" maxlength="40" value="' + esc(c.name) + '"></label>' +
+    '<label class="field" for="cStation">Thuộc menu nào<select id="cStation"><option value="bep"' + ((c.station || 'bep') === 'bep' ? ' selected' : '') + '>Bếp nóng (menu Ăn vặt, đơn về màn hình bếp)</option><option value="pha_che"' + (c.station === 'pha_che' ? ' selected' : '') + '>Quầy pha chế (menu Trà · Cà phê, đơn về màn hình pha chế)</option></select></label>' +
     '<fieldset style="border:0;padding:0;margin:0"><legend class="field" style="margin-bottom:8px">Màu khung (giống ô trên menu)</legend><div class="swatches">' +
     COLORS.map(([k, t]) => '<label class="cc-' + k + '" title="' + t + '"><input type="radio" name="col" value="' + k + '"' + (c.color === k ? ' checked' : '') + ' aria-label="' + t + '"><span></span></label>').join('') + '</div></fieldset>' +
     '<p class="msg" id="cMsg" hidden></p>' + (isNew ? '' : confirmBox('Xoá danh mục “' + esc(c.name) + '”? Các món trong đó sẽ ẩn khỏi menu khách cho tới khi bạn xếp lại danh mục.', 'Xoá danh mục', 'cDelBox')) + '</div>' +
@@ -370,7 +384,7 @@ function editCat(c) {
     $('#cSave', sh).onclick = async () => {
       const name = $('#cName', sh).value.trim(), msg = $('#cMsg', sh);
       if (!name) { msg.textContent = 'Nhập tên danh mục.'; msg.hidden = false; return; }
-      try { await api.saveCategory(Object.assign({}, c, { name, color: ($('input[name=col]:checked', sh) || {}).value || 'vang', sort_order: isNew ? state.menuData.categories.length + 1 : c.sort_order })); ui.close(); ui.toast('Đã lưu'); rerender(); }
+      try { await api.saveCategory(Object.assign({}, c, { name, station: $('#cStation', sh).value, color: ($('input[name=col]:checked', sh) || {}).value || 'vang', sort_order: isNew ? state.menuData.categories.length + 1 : c.sort_order })); ui.close(); ui.toast('Đã lưu'); rerender(); }
       catch (err) { msg.textContent = errText(err); msg.hidden = false; }
     };
   });
@@ -626,7 +640,7 @@ function editEmployee(e) {
   ui.sheet(ui.head(isNew ? 'Thêm nhân viên' : 'Sửa nhân viên') + '<div class="sh-body">' +
     '<label class="field" for="eName">Họ tên <span class="req">*</span><input id="eName" maxlength="60" value="' + esc(e.full_name) + '"></label>' +
     '<div class="grid2"><label class="field" for="ePhone">Số điện thoại (để đăng nhập)<input id="ePhone" inputmode="tel" value="' + esc(e.phone || '') + '"' + (!isNew && !DEMO ? ' disabled' : '') + '></label>' +
-    '<label class="field" for="eRole">Vai trò<select id="eRole"><option value="staff"' + (e.role === 'staff' ? ' selected' : '') + '>Nhân viên</option><option value="kitchen"' + (e.role === 'kitchen' ? ' selected' : '') + '>Máy bếp (tài khoản dùng chung ở bếp)</option><option value="owner"' + (e.role === 'owner' ? ' selected' : '') + '>Chủ quán</option></select></label></div>' +
+    '<label class="field" for="eRole">Vai trò<select id="eRole"><option value="staff"' + (e.role === 'staff' ? ' selected' : '') + '>Nhân viên</option><option value="kitchen"' + (e.role === 'kitchen' ? ' selected' : '') + '>Máy bếp (tài khoản dùng chung ở bếp)</option><option value="bar"' + (e.role === 'bar' ? ' selected' : '') + '>Máy pha chế (tài khoản dùng chung ở quầy pha chế)</option><option value="owner"' + (e.role === 'owner' ? ' selected' : '') + '>Chủ quán</option></select></label></div>' +
     '<label class="field" for="eRate">Lương mỗi giờ (VNĐ)<input id="eRate" class="num" type="number" min="0" step="1000" value="' + (e.hourly_rate || 0) + '"></label>' +
     (isNew && !DEMO ? '<label class="field" for="ePass">Mật khẩu đăng nhập (ít nhất 6 ký tự)<input id="ePass" type="text" autocomplete="new-password"></label><p class="small muted" style="margin:0">Đưa số điện thoại và mật khẩu này cho nhân viên. Đổi mật khẩu sau này làm trong Supabase (Authentication > Users).</p>' : '') +
     (isNew ? '' : '<label class="switch"><input type="checkbox" id="eActive"' + (e.is_active ? ' checked' : '') + '><span class="track"></span>Đang làm việc (tắt khi nhân viên nghỉ hẳn)</label>') +
@@ -711,13 +725,15 @@ async function renderSettings(main) {
     '<label class="field" for="sMode">Cách làm tròn<select id="sMode">' + Object.keys(MODE).map(k => '<option value="' + k + '"' + (cfg.round_mode === k ? ' selected' : '') + '>' + MODE[k].replace(/^./, c => c.toUpperCase()) + '</option>').join('') + '</select></label></div>' +
     '<label class="field" for="sPay">Tiền lương mỗi ca bị lẻ<select id="sPay">' + PAY_STEPS.map(([v, t]) => '<option value="' + v + '"' + (Number(cfg.pay_round || 1000) === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>' +
     '<p class="msg msg-ok" id="sEx"></p>' +
-    '<label class="field" for="sCap">Số đơn bếp làm cùng lúc (để ước tính thời gian chờ)<input id="sCap" type="number" min="1" max="10" value="' + cfg.kitchen_capacity + '"></label>' +
+    '<div class="grid2"><label class="field" for="sCap">Số đơn bếp làm cùng lúc<input id="sCap" type="number" min="1" max="10" value="' + cfg.kitchen_capacity + '"></label>' +
+    '<label class="field" for="sBar">Số đơn quầy pha chế làm cùng lúc<input id="sBar" type="number" min="1" max="10" value="' + (cfg.bar_capacity || 2) + '"></label></div>' +
+    '<p class="small muted" style="margin:0">Hai số này dùng để ước tính thời gian chờ báo cho khách.</p>' +
     '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
-    '<section class="box cc-hong"><h2 class="box-title"><span>Mã QR gọi món cho khách</span></h2><div class="row" style="align-items:flex-start;gap:18px"><div class="qr" id="qr"><p class="loading">Đang tạo mã…</p></div>' +
-    '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">In mã này dán ở quầy bếp và trên bàn. Khách quét là mở menu gọi món.</p><label class="field" for="qUrl">Địa chỉ trang khách<input id="qUrl" value="' + esc(orderUrl) + '"></label>' +
-    (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') +
-    '<div class="row"><a class="btn btn-sm btn-line" href="index.html" target="_blank">Mở trang khách</a><a class="btn btn-sm btn-line" href="bep.html" target="_blank">Mở màn hình bếp</a></div></div></div></section>' +
+    QRS.map(q => '<section class="box cc-' + q.color + '"><h2 class="box-title"><span>' + q.title + '</span></h2><div class="row" style="align-items:flex-start;gap:18px"><div class="qr" id="qr-' + q.key + '"><p class="loading">Đang tạo mã…</p></div>' +
+      '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">' + q.desc + '</p><label class="field" for="qUrl-' + q.key + '">Địa chỉ mã này mở ra<input id="qUrl-' + q.key + '" value="' + esc(orderUrl + q.query) + '"></label>' +
+      (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') +
+      '<div class="row"><a class="btn btn-sm btn-line" href="index.html' + q.query + '" target="_blank">Mở menu này</a><a class="btn btn-sm btn-line" href="' + q.screen + '" target="_blank">Mở màn hình ' + q.screenName + '</a></div></div></div></section>').join('') +
     (DEMO ? '<section class="box"><h2 class="box-title">Dữ liệu xem thử</h2><p class="muted" style="margin-top:0">Đưa mọi thứ về như lúc đầu: menu, đơn, kho, ca làm.</p><button class="btn btn-danger" type="button" id="reset">Xoá dữ liệu xem thử</button>' + confirmBox('Xoá toàn bộ thay đổi trong bản xem thử?', 'Xoá và tải lại', 'resetBox') + '</section>' : '');
   const readRule = () => ({ round_minutes: $('#sRoundOn', main).checked ? Number($('#sStep', main).value) : 1, round_mode: $('#sMode', main).value, pay_round: Number($('#sPay', main).value) });
   const ex = () => {
@@ -728,7 +744,7 @@ async function renderSettings(main) {
   ex(); ['#sRoundOn', '#sStep', '#sMode', '#sPay'].forEach(id => { $(id, main).onchange = ex; });
   $('#sSave', main).onclick = async e => {
     e.target.disabled = true;
-    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
+    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1), bar_capacity: Math.max(1, Number($('#sBar', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
     catch (err) { ui.toast(errText(err)); }
     e.target.disabled = false;
   };
@@ -738,14 +754,14 @@ async function renderSettings(main) {
     $('[data-no]', box).onclick = () => { box.hidden = true; };
     $('[data-yes]', box).onclick = () => { api.demoReset(); location.reload(); };
   }
-  const drawQr = async () => {
-    const el = $('#qr', main);
+  const drawQr = async q => {
+    const el = $('#qr-' + q.key, main);
     try {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
-      el.innerHTML = ''; new window.QRCode(el, { text: $('#qUrl', main).value.trim() || orderUrl, width: 220, height: 220, colorDark: '#3B2A24', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+      el.innerHTML = ''; new window.QRCode(el, { text: $('#qUrl-' + q.key, main).value.trim() || orderUrl + q.query, width: 220, height: 220, colorDark: '#3B2A24', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
     } catch (err) { el.innerHTML = '<p class="msg">Không tạo được mã QR (cần mạng).</p>'; }
   };
-  drawQr(); $('#qUrl', main).onchange = drawQr;
+  QRS.forEach(q => { drawQr(q); $('#qUrl-' + q.key, main).onchange = () => drawQr(q); });
 }
 })();
 </script>

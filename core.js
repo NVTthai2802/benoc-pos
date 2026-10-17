@@ -203,9 +203,10 @@ function supabaseApi() {
     /* ---------- Bếp ---------- */
     async kitchenOrders() {
       const c = await cl();
-      const rows = await q(c.from('orders').select('*, order_items(*), staff_calls(*)').order('created_at'));
+      const rows = await q(c.from('orders').select('*, order_items(*), order_stations(*), staff_calls(*)').order('created_at'));
       return rows.map(o => Object.assign({}, o, {
         items: (o.order_items || []).sort((a, b) => a.id - b.id),
+        stations: o.order_stations || [],
         calls: (o.staff_calls || []).filter(x => !x.resolved_at)
       }));
     },
@@ -216,15 +217,16 @@ function supabaseApi() {
         ch = c.channel('bep')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => cb())
           .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => cb())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'order_stations' }, () => cb())
           .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_calls' }, () => cb())
           .subscribe();
       });
       return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
     },
-    suggestWait: id => rpc('suggest_wait_minutes', { p_order_id: id }),
-    acceptOrder: (id, minutes) => rpc('accept_order', { p_order_id: id, p_minutes: minutes }),
-    extendWait: (id, minutes) => rpc('extend_wait', { p_order_id: id, p_extra_minutes: minutes }),
-    markServed: id => rpc('mark_served', { p_order_id: id }),
+    suggestWait: (id, station) => rpc('suggest_wait_minutes', { p_order_id: id, p_station: station || 'bep' }),
+    acceptOrder: (id, minutes, station) => rpc('accept_order', { p_order_id: id, p_minutes: minutes, p_station: station || 'bep' }),
+    extendWait: (id, minutes, station) => rpc('extend_wait', { p_order_id: id, p_extra_minutes: minutes, p_station: station || 'bep' }),
+    markServed: (id, station) => rpc('mark_served', { p_order_id: id, p_station: station || 'bep' }),
     cancelOrder: id => rpc('cancel_order', { p_order_id: id }),
     completePayment: (id, method) => rpc('complete_payment', { p_order_id: id, p_method: method }),
     async resolveCall(id) { const c = await cl(); await q(c.from('staff_calls').update({ resolved_at: new Date().toISOString() }).eq('id', id)); },
@@ -242,7 +244,7 @@ function supabaseApi() {
       return assembleAdminMenu(cats, items, groups, choices, links);
     },
     async saveCategory(cat) {
-      const c = await cl(); const row = { name: cat.name, color: cat.color, sort_order: cat.sort_order || 0 };
+      const c = await cl(); const row = { name: cat.name, color: cat.color, station: cat.station || 'bep', sort_order: cat.sort_order || 0 };
       if (cat.id) { await q(c.from('menu_categories').update(row).eq('id', cat.id)); return cat.id; }
       return (await q(c.from('menu_categories').insert(row).select('id').single())).id;
     },
@@ -372,7 +374,7 @@ function supabaseApi() {
     async settings() { const c = await cl(); return await q(c.from('shop_settings').select('*').eq('id', 1).single()); },
     async saveSettings(s) {
       const c = await cl();
-      await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, pay_round: s.pay_round, kitchen_capacity: s.kitchen_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
+      await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, pay_round: s.pay_round, kitchen_capacity: s.kitchen_capacity, bar_capacity: s.bar_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
     }
   };
   return api;
@@ -392,7 +394,7 @@ function assembleAdminMenu(cats, items, groups, choices, links) {
 function buildPublicMenu(db) {
   const groupsById = new Map(db.option_groups.map(g => [g.id, g]));
   return db.menu_categories.slice().sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map(c => ({
-    id: c.id, name: c.name, color: c.color,
+    id: c.id, name: c.name, color: c.color, station: c.station || 'bep',
     items: db.menu_items.filter(m => m.category_id === c.id && m.is_available)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi'))
       .map(m => ({
@@ -414,20 +416,37 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v2'; // v2: lương tính theo phút (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v3'; // v3: tách bếp / quầy pha chế (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
-const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
+const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /phache\.html$/.test(location.pathname) ? 'phache' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
 const SLOT = (PARAMS.get('slot') || PAGE).replace(/[^a-z0-9_-]/gi, '');
 const SESSION_KEY = 'demo.session.' + SLOT;
 
 function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
+/* Nơi làm một món: theo danh mục của món (mặc định bếp) */
+function stationOf(db, menuItemId) {
+  const m = db.menu_items.find(x => x.id === menuItemId); const c = m && db.menu_categories.find(x => x.id === m.category_id);
+  return (c && c.station) || 'bep';
+}
+/* Trạng thái chung của đơn tính từ các nơi — giống hàm refresh_order_status trong SQL */
+function refreshOrder(db, id) {
+  const o = db.orders.find(x => x.id === id); const ss = db.order_stations.filter(x => x.order_id === id); if (!o || !ss.length) return;
+  const all = ss.every(x => x.status === 'da_ra_mon'), any = ss.some(x => x.status !== 'cho_nhan');
+  o.status = all ? 'da_ra_mon' : any ? 'dang_lam' : 'cho_nhan';
+  const acc = ss.map(x => x.accepted_at).filter(Boolean).sort(); o.accepted_at = acc[0] || null;
+  const open = ss.filter(x => x.status !== 'da_ra_mon').map(x => x.estimated_ready_at).filter(Boolean).sort();
+  const etas = ss.map(x => x.estimated_ready_at).filter(Boolean).sort();
+  o.estimated_ready_at = open.length ? open[open.length - 1] : (etas.length ? etas[etas.length - 1] : null);
+  o.served_at = all ? ss.map(x => x.served_at).filter(Boolean).sort().pop() || null : null;
+}
+
 function demoSeed() {
   const S = JSON.parse(JSON.stringify(window.BENOC_SEED || {}));
   const now = Date.now(), R = rng(2802);
   const db = {
-    shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2 },
+    shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2, bar_capacity: 2 },
     menu_categories: S.menu_categories || [], menu_items: S.menu_items || [], option_groups: S.option_groups || [],
     option_choices: S.option_choices || [], menu_item_option_groups: S.menu_item_option_groups || [],
     product_categories: S.product_categories || [],
@@ -435,9 +454,10 @@ function demoSeed() {
       { id: 'e-chu', full_name: 'Chị Nốc', phone: '0900000001', role: 'owner', hourly_rate: 0, is_active: true },
       { id: 'e-lan', full_name: 'Lan', phone: '0900000002', role: 'staff', hourly_rate: 25000, is_active: true },
       { id: 'e-minh', full_name: 'Minh', phone: '0900000003', role: 'staff', hourly_rate: 22000, is_active: true },
-      { id: 'e-bep', full_name: 'Máy bếp', phone: '0900000009', role: 'kitchen', hourly_rate: 0, is_active: true }
+      { id: 'e-bep', full_name: 'Máy bếp', phone: '0900000009', role: 'kitchen', hourly_rate: 0, is_active: true },
+      { id: 'e-bar', full_name: 'Máy pha chế', phone: '0900000008', role: 'bar', hourly_rate: 0, is_active: true }
     ],
-    products: [], stock_receipts: [], stock_movements: [], shifts: [], orders: [], order_items: [], staff_calls: [], sales: [],
+    products: [], stock_receipts: [], stock_movements: [], shifts: [], orders: [], order_items: [], order_stations: [], staff_calls: [], sales: [],
     seq: { option_groups: 100, option_choices: 100, menu_categories: 100, product_categories: 100, order_items: 1, staff_calls: 1, stock_movements: 1 }
   };
   // Hàng hoá mẫu (mã vạch mẫu, không phải mã thật)
@@ -477,23 +497,30 @@ function demoSeed() {
         const m = sellable[Math.floor(Math.pow(R(), 1.6) * sellable.length)]; const qty = R() < 0.8 ? 1 : 2;
         items.push({ menu_item_id: m.id, name: m.name, price: m.price, qty, options: [] }); total += m.price * qty;
       }
-      const cook = 5 + Math.round(R() * 12);
-      db.sales.push({ id: uuid(), queue_number: 1 + Math.floor(R() * 40), total, payment_method: R() < 0.6 ? 'chuyen_khoan' : 'tien_mat', items, ordered_at: new Date(paid - (cook + 18) * 60e3).toISOString(), accepted_at: new Date(paid - (cook + 15) * 60e3).toISOString(), served_at: new Date(paid - 15 * 60e3).toISOString(), paid_at: new Date(paid).toISOString(), cook_minutes: cook, cashier_id: 'e-lan' });
+      const cook = 5 + Math.round(R() * 12), bar = 3 + Math.round(R() * 5);
+      const sts = new Set(items.map(i => stationOf(db, i.menu_item_id)));
+      const station_minutes = {}; if (sts.has('bep')) station_minutes.bep = cook; if (sts.has('pha_che')) station_minutes.pha_che = bar;
+      db.sales.push({ station_minutes, id: uuid(), queue_number: 1 + Math.floor(R() * 40), total, payment_method: R() < 0.6 ? 'chuyen_khoan' : 'tien_mat', items, ordered_at: new Date(paid - (cook + 18) * 60e3).toISOString(), accepted_at: new Date(paid - (cook + 15) * 60e3).toISOString(), served_at: new Date(paid - 15 * 60e3).toISOString(), paid_at: new Date(paid).toISOString(), cook_minutes: cook, cashier_id: 'e-lan' });
     }
   }
-  // Hai đơn đang mở để màn hình bếp có việc ngay
+  // Vài đơn đang mở để bếp và quầy pha chế có việc ngay
   const pick = n => db.menu_items.find(m => m.name === n);
-  const mk = (queue, name, status, minsAgo, lines, note) => {
-    const id = uuid(); let total = 0;
+  const mk = (queue, name, minsAgo, lines, note, cooking) => {
+    const id = uuid(); let total = 0; const created = now - minsAgo * 60e3;
     lines.forEach(([nm, qty, opts, inote]) => {
       const m = pick(nm); const extra = (opts || []).reduce((s, o) => s + o.price, 0); total += (m.price + extra) * qty;
-      db.order_items.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: m.price + extra, options: opts || [], qty, note: inote || null });
+      db.order_items.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: m.price + extra, options: opts || [], qty, note: inote || null, station: stationOf(db, m.id) });
     });
-    const created = now - minsAgo * 60e3;
-    db.orders.push({ id, access_token: uuid(), queue_number: queue, customer_name: name, customer_phone: null, note: note || null, status, total, created_at: new Date(created).toISOString(), accepted_at: status !== 'cho_nhan' ? new Date(created + 60e3).toISOString() : null, estimated_ready_at: status !== 'cho_nhan' ? new Date(created + 13 * 60e3).toISOString() : null, served_at: null });
+    db.orders.push({ id, access_token: uuid(), queue_number: queue, customer_name: name, customer_phone: null, note: note || null, status: 'cho_nhan', total, created_at: new Date(created).toISOString(), accepted_at: null, estimated_ready_at: null, served_at: null });
+    [...new Set(db.order_items.filter(i => i.order_id === id).map(i => i.station))].forEach(st => {
+      const on = (cooking || []).indexOf(st) >= 0;
+      db.order_stations.push({ order_id: id, station: st, status: on ? 'dang_lam' : 'cho_nhan', accepted_at: on ? new Date(created + 60e3).toISOString() : null, estimated_ready_at: on ? new Date(created + 13 * 60e3).toISOString() : null, served_at: null });
+    });
+    refreshOrder(db, id);
   };
-  mk(7, 'Minh', 'dang_lam', 6, [['Cơm heo chua ngọt', 1, [{ group: 'Topping thêm', choice: 'Trứng ốp la', price: 5000 }], 'ít cay'], ['Hồng trà sữa trân châu', 1]]);
-  mk(15, 'Thảo', 'cho_nhan', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size to', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
+  mk(7, 'Minh', 6, [['Cơm heo chua ngọt', 1, [{ group: 'Topping thêm', choice: 'Trứng ốp la', price: 5000 }], 'ít cay'], ['Hồng trà sữa trân châu', 1]], null, ['bep']);
+  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size to', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
+  mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Chọn size', choice: 'M', price: 0 }]]]);
   return db;
 }
 
@@ -515,7 +542,11 @@ function demoApi() {
   const need = role => { const e = me(); if (!e || (role && e.role !== role)) fail('FORBIDDEN'); return e; };
   const iso = () => new Date().toISOString();
   const move = (db, m) => { db.stock_movements.push(Object.assign({ id: db.seq.stock_movements++, created_at: iso() }, m)); const p = db.products.find(x => x.id === m.product_id); if (p) p.stock_qty = Math.round((Number(p.stock_qty) + Number(m.qty_change)) * 100) / 100; };
-  const ordersAhead = (db, o) => db.orders.filter(x => (x.status === 'cho_nhan' || x.status === 'dang_lam') && x.created_at < o.created_at).length;
+  const ordersAhead = (db, o) => {
+    const sts = new Set(db.order_stations.filter(x => x.order_id === o.id).map(x => x.station));
+    return new Set(db.order_stations.filter(x => sts.has(x.station) && (x.status === 'cho_nhan' || x.status === 'dang_lam')).map(x => x.order_id)
+      .filter(id => { const y = db.orders.find(z => z.id === id); return y && y.created_at < o.created_at; })).size;
+  };
 
   const api = {
     /* ---------- Khách ---------- */
@@ -546,11 +577,12 @@ function demoApi() {
           const opts = picked.map(c => ({ group: db.option_groups.find(g => g.id === c.group_id).title, choice: c.name, price: c.price_delta }));
           const unit = m.price + picked.reduce((s, c) => s + c.price_delta, 0);
           const qty = Math.max(1, Math.min(50, li.qty || 1));
-          lines.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: unit, options: opts, qty, note: li.note ? String(li.note).trim() : null });
+          lines.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: unit, options: opts, qty, note: li.note ? String(li.note).trim() : null, station: stationOf(db, m.id) });
           total += unit * qty;
         }
         const o = { id, access_token: uuid(), queue_number: queue, customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
         db.orders.push(o); lines.forEach(l => db.order_items.push(l));
+        [...new Set(lines.map(l => l.station))].forEach(st => db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null }));
         return { order_id: o.id, access_token: o.access_token, total };
       });
     },
@@ -560,7 +592,8 @@ function demoApi() {
         queue_number: o.queue_number, customer_name: o.customer_name, status: o.status, total: o.total, note: o.note,
         created_at: o.created_at, estimated_ready_at: o.estimated_ready_at, orders_ahead: ordersAhead(db, o),
         has_open_call: db.staff_calls.some(c => c.order_id === o.id && !c.resolved_at),
-        items: db.order_items.filter(i => i.order_id === o.id).map(i => ({ name: i.item_name, qty: i.qty, note: i.note, price: i.unit_price, options: i.options }))
+        stations: db.order_stations.filter(x => x.order_id === o.id).map(x => ({ station: x.station, status: x.status, estimated_ready_at: x.estimated_ready_at })).sort((a, b) => a.station < b.station ? -1 : 1),
+        items: db.order_items.filter(i => i.order_id === o.id).map(i => ({ name: i.item_name, qty: i.qty, note: i.note, price: i.unit_price, options: i.options, station: i.station }))
       };
     },
     async callStaff(token) {
@@ -584,29 +617,32 @@ function demoApi() {
       need(); const db = load();
       return db.orders.slice().sort((a, b) => a.created_at < b.created_at ? -1 : 1).map(o => Object.assign({}, o, {
         items: db.order_items.filter(i => i.order_id === o.id),
+        stations: db.order_stations.filter(x => x.order_id === o.id),
         calls: db.staff_calls.filter(c => c.order_id === o.id && !c.resolved_at)
       }));
     },
     onKitchenChange(cb) { const h = () => cb(); window.addEventListener('benoc-db', h); return () => window.removeEventListener('benoc-db', h); },
-    async suggestWait(id) {
-      const db = load();
-      const own = Math.max.apply(null, [0].concat(db.order_items.filter(i => i.order_id === id).map(i => { const m = db.menu_items.find(x => x.id === i.menu_item_id); return m ? m.prep_minutes : 0; }))) || 10;
-      const ahead = db.orders.filter(o => o.status === 'dang_lam').length;
-      const recent = db.sales.filter(s => s.cook_minutes != null && new Date(s.paid_at) > Date.now() - 14 * 864e5);
-      const avg = recent.length ? recent.reduce((s, x) => s + x.cook_minutes, 0) / recent.length : own;
-      return Math.ceil((own + Math.floor(ahead / db.shop_settings.kitchen_capacity) * avg) / 5) * 5;
+    async suggestWait(id, station) {
+      station = station || 'bep'; const db = load();
+      const own = Math.max.apply(null, [0].concat(db.order_items.filter(i => i.order_id === id && i.station === station).map(i => { const m = db.menu_items.find(x => x.id === i.menu_item_id); return m ? m.prep_minutes : 0; }))) || 10;
+      const ahead = db.order_stations.filter(x => x.station === station && x.status === 'dang_lam').length;
+      const recent = db.sales.filter(s => s.station_minutes && s.station_minutes[station] != null && new Date(s.paid_at) > Date.now() - 14 * 864e5);
+      const avg = recent.length ? recent.reduce((s, x) => s + x.station_minutes[station], 0) / recent.length : own;
+      const cap = station === 'pha_che' ? (db.shop_settings.bar_capacity || 2) : db.shop_settings.kitchen_capacity;
+      return Math.ceil((own + Math.floor(ahead / Math.max(1, cap)) * avg) / 5) * 5;
     },
-    async acceptOrder(id, minutes) { need(); tx(db => { const o = db.orders.find(x => x.id === id && x.status === 'cho_nhan'); if (o) { o.status = 'dang_lam'; o.accepted_at = iso(); o.estimated_ready_at = new Date(Date.now() + Math.max(1, minutes) * 60e3).toISOString(); } }); },
-    async extendWait(id, minutes) { need(); tx(db => { const o = db.orders.find(x => x.id === id && x.status === 'dang_lam'); if (o) o.estimated_ready_at = new Date(Math.max(Date.now(), new Date(o.estimated_ready_at || 0).getTime()) + minutes * 60e3).toISOString(); }); },
-    async markServed(id) { need(); tx(db => { const o = db.orders.find(x => x.id === id && x.status === 'dang_lam'); if (o) { o.status = 'da_ra_mon'; o.served_at = iso(); } }); },
-    async cancelOrder(id) { need(); tx(db => { db.orders = db.orders.filter(o => o.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id); }); },
+    async acceptOrder(id, minutes, station) { need(); tx(db => { const x = db.order_stations.find(r => r.order_id === id && r.station === (station || 'bep') && r.status === 'cho_nhan'); if (x) { x.status = 'dang_lam'; x.accepted_at = iso(); x.estimated_ready_at = new Date(Date.now() + Math.max(1, minutes) * 60e3).toISOString(); } refreshOrder(db, id); }); },
+    async extendWait(id, minutes, station) { need(); tx(db => { const x = db.order_stations.find(r => r.order_id === id && r.station === (station || 'bep') && r.status === 'dang_lam'); if (x) x.estimated_ready_at = new Date(Math.max(Date.now(), new Date(x.estimated_ready_at || 0).getTime()) + minutes * 60e3).toISOString(); refreshOrder(db, id); }); },
+    async markServed(id, station) { need(); tx(db => { const x = db.order_stations.find(r => r.order_id === id && r.station === (station || 'bep') && r.status === 'dang_lam'); if (x) { x.status = 'da_ra_mon'; x.served_at = iso(); } refreshOrder(db, id); }); },
+    async cancelOrder(id) { need(); tx(db => { db.orders = db.orders.filter(o => o.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id); }); },
     async completePayment(id, method) {
       const e = need();
       tx(db => {
         const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
-        const items = db.order_items.filter(i => i.order_id === id).map(i => ({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options }));
-        db.sales.push({ id: o.id, queue_number: o.queue_number, total: o.total, payment_method: method, items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: iso(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, cashier_id: e.id });
-        db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
+        const items = db.order_items.filter(i => i.order_id === id).map(i => ({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }));
+        const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
+        db.sales.push({ id: o.id, queue_number: o.queue_number, total: o.total, payment_method: method, items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: iso(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: e.id });
+        db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
       });
     },
     async resolveCall(id) { need(); tx(db => { const c = db.staff_calls.find(x => x.id === id); if (c) c.resolved_at = iso(); }); },
@@ -616,8 +652,8 @@ function demoApi() {
     async saveCategory(cat) {
       need('owner');
       return tx(db => {
-        if (cat.id) { Object.assign(db.menu_categories.find(c => c.id === cat.id), { name: cat.name, color: cat.color, sort_order: cat.sort_order || 0 }); return cat.id; }
-        const id = db.seq.menu_categories++; db.menu_categories.push({ id, name: cat.name, color: cat.color, sort_order: cat.sort_order || 99 }); return id;
+        if (cat.id) { Object.assign(db.menu_categories.find(c => c.id === cat.id), { name: cat.name, color: cat.color, station: cat.station || 'bep', sort_order: cat.sort_order || 0 }); return cat.id; }
+        const id = db.seq.menu_categories++; db.menu_categories.push({ id, name: cat.name, color: cat.color, station: cat.station || 'bep', sort_order: cat.sort_order || 99 }); return id;
       });
     },
     async deleteCategory(id) { need('owner'); tx(db => { db.menu_categories = db.menu_categories.filter(c => c.id !== id); db.menu_items.forEach(m => { if (m.category_id === id) m.category_id = null; }); }); },
@@ -740,14 +776,15 @@ function demoApi() {
     /* ---------- Doanh thu & cài đặt ---------- */
     async sales(f) { const a = new Date(f.from), b = new Date(f.to); return load().sales.filter(s => { const t = new Date(s.paid_at); return t >= a && t < b; }).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1); },
     async settings() { return Object.assign({}, load().shop_settings); },
-    async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity) })); },
+    async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {
       try { Object.keys(localStorage).filter(k => k.indexOf('benoc.') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
       cache = null;
     },
     demoSummary() {
       const db = load();
-      return { pending: db.orders.filter(o => o.status === 'cho_nhan').length, cooking: db.orders.filter(o => o.status === 'dang_lam').length, ready: db.orders.filter(o => o.status === 'da_ra_mon').length, calls: db.staff_calls.filter(c => !c.resolved_at).length };
+      const wait = st => db.order_stations.filter(x => x.station === st && x.status === 'cho_nhan').length;
+      return { bep: wait('bep'), pha_che: wait('pha_che'), calls: db.staff_calls.filter(c => !c.resolved_at).length };
     }
   };
   return api;
@@ -756,7 +793,7 @@ function demoApi() {
 const api = DEMO ? demoApi() : supabaseApi();
 
 window.BN = {
-  CONFIG, DEMO, PARAMS, PAGE, SLOT, api, ui, store, ERR, errText, fail,
+  CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
 
@@ -768,18 +805,20 @@ window.BN = {
 const ROLES = [
   { key: 'khach', label: 'Khách', href: 'index.html' },
   { key: 'bep', label: 'Bếp', href: 'bep.html?slot=bep&as=e-bep' },
+  { key: 'phache', label: 'Pha chế', href: 'phache.html?slot=bar&as=e-bar' },
   { key: 'chu', label: 'Chủ quán', href: 'quanly.html?slot=chu&as=e-chu' },
   { key: 'nv', label: 'Nhân viên', href: 'quanly.html?slot=nv&as=e-lan' }
 ];
-const currentRole = () => PAGE === 'khach' ? 'khach' : PAGE === 'bep' ? 'bep' : (SLOT === 'nv' ? 'nv' : 'chu');
+const currentRole = () => PAGE === 'khach' ? 'khach' : PAGE === 'bep' ? 'bep' : PAGE === 'phache' ? 'phache' : (SLOT === 'nv' ? 'nv' : 'chu');
 
 function testGuide() {
   ui.sheet(ui.head('Cách test trên một điện thoại', 'Bấm các nút trên thanh đen để đổi vai. Dữ liệu chỉ lưu trong trình duyệt này.') +
     '<div class="sh-body"><ol class="tg-steps">' +
-    '<li><b>Khách:</b> nhập số thẻ (ví dụ 12) và tên. Chọn vài món, thử món có size (Bạc xỉu) và món có topping (Cơm heo chua ngọt). Viết ghi chú cuối giỏ rồi gửi đơn.</li>' +
-    '<li><b>Bếp:</b> đơn mới nằm ở tab Chờ nhận. Bấm Nhận đơn, chỉnh số phút, bấm xác nhận. Đơn chuyển sang tab Đang làm.</li>' +
-    '<li><b>Khách:</b> thấy đếm ngược thời gian chờ. Bấm Gọi nhân viên.</li>' +
-    '<li><b>Bếp:</b> thấy dải đỏ "gọi nhân viên", bấm Đã tới. Ở tab Đang làm bấm Ra món. Sang tab Chờ thanh toán, bấm Thanh toán và chọn tiền khách đưa để xem tiền thối.</li>' +
+    '<li><b>Khách:</b> trang khách đang mở menu <b>Ăn vặt</b> (mã QR bếp). Nhập số thẻ (ví dụ 12) và tên, chọn Cơm heo chua ngọt thêm trứng, viết ghi chú rồi gửi đơn.</li>' +
+    '<li><b>Khách:</b> bấm "Gọi thêm món", kéo xuống cuối menu bấm <b>Xem menu Trà · Cà phê</b> (giống quét mã QR quầy pha chế). Chọn Bạc xỉu size L rồi gửi. Số thẻ và tên đã điền sẵn.</li>' +
+    '<li><b>Bếp:</b> chỉ thấy đơn cơm. <b>Pha chế:</b> chỉ thấy đơn Bạc xỉu. Mỗi nơi bấm Nhận đơn, chỉnh số phút.</li>' +
+    '<li><b>Khách:</b> thấy hai đơn, mỗi đơn đếm ngược riêng. Bấm Gọi nhân viên.</li>' +
+    '<li>Mỗi nơi bấm Ra món, rồi ở tab <b>Chờ thanh toán</b> của chính nơi đó bấm Thanh toán: bếp thu đơn cơm, quầy pha chế thu đơn Bạc xỉu.</li>' +
     '<li><b>Khách:</b> đơn chuyển sang Đã thanh toán.</li>' +
     '<li><b>Chủ quán:</b> Doanh thu, chọn Hôm nay để thấy đơn vừa thu. Vào Menu, gạt một món sang Hết món hoặc đổi ảnh món, rồi sang vai Khách kiểm tra.</li>' +
     '<li><b>Nhân viên:</b> Chấm công, chụp ảnh vào ca, lát sau chụp ảnh ra ca để xem lương được tính. Kho hàng, Nhập hàng, chụp mã vạch của một chai nước hay gói bánh bất kỳ để thử tạo hàng mới.</li>' +
@@ -804,7 +843,8 @@ function mountTestBar() {
   const paint = () => {
     let s; try { s = api.demoSummary(); } catch (e) { return; }
     const set = (role, n, title) => { const b = bar.querySelector('[data-role="' + role + '"] .tb-badge'); b.hidden = !n; b.textContent = n; b.title = title; };
-    set('bep', s.pending + s.calls, s.pending + ' đơn chờ nhận, ' + s.calls + ' lượt gọi nhân viên');
+    set('bep', s.bep + s.calls, s.bep + ' đơn chờ bếp nhận, ' + s.calls + ' lượt gọi nhân viên');
+    set('phache', s.pha_che, s.pha_che + ' đơn chờ quầy pha chế nhận');
   };
   paint(); window.addEventListener('benoc-db', paint); setInterval(paint, 3000);
 }
