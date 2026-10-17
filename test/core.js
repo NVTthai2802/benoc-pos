@@ -58,7 +58,6 @@ const ERR = {
   ALREADY_CHECKED_IN: 'Bạn đang có ca chưa kết thúc.',
   NOT_CHECKED_IN: 'Bạn chưa vào ca.',
   NOT_EMPLOYEE: 'Tài khoản này chưa được gắn với nhân viên nào.',
-  EMPTY_RECEIPT: 'Phiếu nhập chưa có hàng nào.',
   BAD_QTY: 'Số lượng phải lớn hơn 0.',
   BAD_TIME: 'Giờ ra phải sau giờ vào.',
   NOT_SIGNED_IN: 'Bạn chưa đăng nhập.'
@@ -286,39 +285,6 @@ function supabaseApi() {
     },
     async deleteGroup(id) { const c = await cl(); await q(c.from('option_groups').delete().eq('id', id)); },
 
-    /* ---------- Kho ---------- */
-    async inventory() {
-      const c = await cl();
-      const [cats, products] = await Promise.all([
-        q(c.from('product_categories').select('*').order('sort_order').order('id')),
-        q(c.from('products').select('*').order('name'))
-      ]);
-      return { categories: cats, products };
-    },
-    async saveProductCategory(pc) {
-      const c = await cl();
-      if (pc.id) { await q(c.from('product_categories').update({ name: pc.name }).eq('id', pc.id)); return pc.id; }
-      return (await q(c.from('product_categories').insert({ name: pc.name, sort_order: 99 }).select('id').single())).id;
-    },
-    async saveProduct(p) {
-      const c = await cl();
-      const row = { name: p.name, category_id: p.category_id, barcode: p.barcode || null, unit: p.unit || 'cái', min_qty: p.min_qty || 0, is_active: p.is_active !== false };
-      if (p.id) return await q(c.from('products').update(row).eq('id', p.id).select('*').single());
-      return await q(c.from('products').insert(row).select('*').single());
-    },
-    async findProductByBarcode(code) { const c = await cl(); return await q(c.from('products').select('*').eq('barcode', code).maybeSingle()); },
-    createReceipt: r => rpc('create_receipt', { p_supplier: r.supplier || '', p_note: r.note || '', p_lines: r.lines }),
-    async addMovement(m) {
-      const c = await cl(); const e = await myEmployee();
-      await q(c.from('stock_movements').insert({ product_id: m.product_id, reason: m.reason, qty_change: m.qty_change, note: m.note || null, created_by: e.id }));
-    },
-    async movements(productId, limit) {
-      const c = await cl();
-      let b = c.from('stock_movements').select('*, products(name, unit), employees(full_name), stock_receipts(supplier)').order('created_at', { ascending: false }).limit(limit || 30);
-      if (productId) b = b.eq('product_id', productId);
-      return (await q(b)).map(m => Object.assign({}, m, { product_name: m.products && m.products.name, unit: m.products && m.products.unit, by_name: m.employees && m.employees.full_name, supplier: m.stock_receipts && m.stock_receipts.supplier }));
-    },
-
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { const c = await cl(); return await q(c.from('employees').select('*').order('is_active', { ascending: false }).order('full_name')); },
     async saveEmployee(e) {
@@ -417,7 +383,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v3'; // v3: tách bếp / quầy pha chế (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v4'; // v4: bỏ kho hàng (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /phache\.html$/.test(location.pathname) ? 'phache' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
@@ -450,7 +416,6 @@ function demoSeed() {
     shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2, bar_capacity: 2 },
     menu_categories: S.menu_categories || [], menu_items: S.menu_items || [], option_groups: S.option_groups || [],
     option_choices: S.option_choices || [], menu_item_option_groups: S.menu_item_option_groups || [],
-    product_categories: S.product_categories || [],
     employees: [
       { id: 'e-chu', full_name: 'Chị Nốc', phone: '0900000001', role: 'owner', hourly_rate: 0, is_active: true },
       { id: 'e-lan', full_name: 'Lan', phone: '0900000002', role: 'staff', hourly_rate: 25000, is_active: true },
@@ -458,22 +423,9 @@ function demoSeed() {
       { id: 'e-bep', full_name: 'Máy bếp', phone: '0900000009', role: 'kitchen', hourly_rate: 0, is_active: true },
       { id: 'e-bar', full_name: 'Máy pha chế', phone: '0900000008', role: 'bar', hourly_rate: 0, is_active: true }
     ],
-    products: [], stock_receipts: [], stock_movements: [], shifts: [], orders: [], order_items: [], order_stations: [], staff_calls: [], sales: [],
-    seq: { option_groups: 100, option_choices: 100, menu_categories: 100, product_categories: 100, order_items: 1, staff_calls: 1, stock_movements: 1 }
+    shifts: [], orders: [], order_items: [], order_stations: [], staff_calls: [], sales: [],
+    seq: { option_groups: 100, option_choices: 100, menu_categories: 100, order_items: 1, staff_calls: 1 }
   };
-  // Hàng hoá mẫu (mã vạch mẫu, không phải mã thật)
-  const P = [
-    [1, 'Cốc nhựa 500ml', null, 'cây 50 cái', 3, 8], [1, 'Ống hút to', null, 'gói 100 cái', 2, 5], [1, 'Hộp giấy đựng cơm', null, 'cây 50 cái', 2, 3],
-    [2, 'Xúc xích Đức', '8930000000019', 'gói', 5, 14], [2, 'Cá viên', '8930000000026', 'gói 500g', 4, 6], [2, 'Nem chua rán', '8930000000033', 'hộp', 5, 3],
-    [2, 'Gà viên', '8930000000040', 'gói 500g', 4, 9], [3, 'Tương ớt', '8930000000057', 'chai', 3, 7], [3, 'Dầu ăn', '8930000000064', 'can 5L', 1, 2],
-    [3, 'Mayonnaise', '8930000000071', 'chai', 2, 1], [3, 'Tương cà', '8930000000088', 'chai', 2, 4]
-  ];
-  P.forEach((p, i) => {
-    const id = 'p-' + (i + 1);
-    db.products.push({ id, category_id: p[0], name: p[1], barcode: p[2], unit: p[3], min_qty: p[4], stock_qty: p[5], is_active: true, created_at: new Date(now - 20 * 864e5).toISOString() });
-    db.stock_movements.push({ id: db.seq.stock_movements++, product_id: id, receipt_id: 'r-1', reason: 'nhap', qty_change: p[5], unit_cost: 20000 + Math.round(R() * 60) * 1000, note: null, created_by: 'e-chu', created_at: new Date(now - 3 * 864e5).toISOString() });
-  });
-  db.stock_receipts.push({ id: 'r-1', received_at: new Date(now - 3 * 864e5).toISOString(), supplier: 'Đại lý mẫu', note: null, created_by: 'e-chu' });
   // Ca làm mẫu 10 ngày qua
   for (let d = 10; d >= 1; d--) {
     ['e-lan', 'e-minh'].forEach((eid, j) => {
@@ -542,7 +494,6 @@ function demoApi() {
   const me = () => { const id = store.get(SESSION_KEY, null); const e = id && load().employees.find(x => x.id === id && x.is_active); return e || null; };
   const need = role => { const e = me(); if (!e || (role && e.role !== role)) fail('FORBIDDEN'); return e; };
   const iso = () => new Date().toISOString();
-  const move = (db, m) => { db.stock_movements.push(Object.assign({ id: db.seq.stock_movements++, created_at: iso() }, m)); const p = db.products.find(x => x.id === m.product_id); if (p) p.stock_qty = Math.round((Number(p.stock_qty) + Number(m.qty_change)) * 100) / 100; };
   const ordersAhead = (db, o) => {
     const sts = new Set(db.order_stations.filter(x => x.order_id === o.id).map(x => x.station));
     return new Set(db.order_stations.filter(x => sts.has(x.station) && (x.status === 'cho_nhan' || x.status === 'dang_lam')).map(x => x.order_id)
@@ -689,38 +640,6 @@ function demoApi() {
     },
     async deleteGroup(id) { need('owner'); tx(db => { db.option_groups = db.option_groups.filter(g => g.id !== id); db.option_choices = db.option_choices.filter(c => c.group_id !== id); db.menu_item_option_groups = db.menu_item_option_groups.filter(l => l.group_id !== id); }); },
 
-    /* ---------- Kho ---------- */
-    async inventory() { const db = load(); return { categories: db.product_categories, products: db.products.slice().sort((a, b) => a.name.localeCompare(b.name, 'vi')) }; },
-    async saveProductCategory(pc) { need('owner'); return tx(db => { if (pc.id) { db.product_categories.find(c => c.id === pc.id).name = pc.name; return pc.id; } const id = db.seq.product_categories++; db.product_categories.push({ id, name: pc.name, sort_order: 99 }); return id; }); },
-    async saveProduct(p) {
-      const e = need();
-      if (p.id && e.role !== 'owner') fail('FORBIDDEN');
-      return tx(db => {
-        if (p.barcode && db.products.some(x => x.barcode === p.barcode && x.id !== p.id)) fail('Mã vạch này đã gắn với sản phẩm khác.');
-        const row = { name: p.name, category_id: p.category_id, barcode: p.barcode || null, unit: p.unit || 'cái', min_qty: Number(p.min_qty) || 0, is_active: p.is_active !== false };
-        if (p.id) { const x = db.products.find(y => y.id === p.id); Object.assign(x, row); return Object.assign({}, x); }
-        const x = Object.assign({ id: uuid(), stock_qty: 0, created_at: iso() }, row); db.products.push(x); return Object.assign({}, x);
-      });
-    },
-    async findProductByBarcode(code) { const p = load().products.find(x => x.barcode === code); return p ? Object.assign({}, p) : null; },
-    async createReceipt(r) {
-      const e = need();
-      if (!r.lines || !r.lines.length) fail('EMPTY_RECEIPT');
-      return tx(db => {
-        const id = uuid(); db.stock_receipts.push({ id, received_at: iso(), supplier: r.supplier || null, note: r.note || null, created_by: e.id });
-        r.lines.forEach(l => { if (!(Number(l.qty) > 0)) fail('BAD_QTY'); move(db, { product_id: l.product_id, receipt_id: id, reason: 'nhap', qty_change: Number(l.qty), unit_cost: l.unit_cost ? Number(l.unit_cost) : null, note: null, created_by: e.id }); });
-        return id;
-      });
-    },
-    async addMovement(m) { const e = need(); tx(db => move(db, { product_id: m.product_id, receipt_id: null, reason: m.reason, qty_change: Number(m.qty_change), unit_cost: null, note: m.note || null, created_by: e.id })); },
-    async movements(productId, limit) {
-      const db = load();
-      return db.stock_movements.filter(m => !productId || m.product_id === productId).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, limit || 30).map(m => {
-        const p = db.products.find(x => x.id === m.product_id) || {}; const e = db.employees.find(x => x.id === m.created_by) || {}; const r = db.stock_receipts.find(x => x.id === m.receipt_id) || {};
-        return Object.assign({}, m, { product_name: p.name, unit: p.unit, by_name: e.full_name, supplier: r.supplier });
-      });
-    },
-
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { return load().employees.slice().sort((a, b) => (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name, 'vi')); },
     async saveEmployee(e) {
@@ -822,10 +741,10 @@ function testGuide() {
     '<li>Mỗi nơi bấm Ra món, rồi ở tab <b>Chờ thanh toán</b> của chính nơi đó bấm Thanh toán: bếp thu đơn cơm, quầy pha chế thu đơn Bạc xỉu.</li>' +
     '<li><b>Khách:</b> đơn chuyển sang Đã thanh toán.</li>' +
     '<li><b>Chủ quán:</b> Doanh thu, chọn Hôm nay để thấy đơn vừa thu. Vào Menu, gạt một món sang Hết món hoặc đổi ảnh món, rồi sang vai Khách kiểm tra.</li>' +
-    '<li><b>Nhân viên:</b> Chấm công, chụp ảnh vào ca, lát sau chụp ảnh ra ca để xem lương được tính. Kho hàng, Nhập hàng, chụp mã vạch của một chai nước hay gói bánh bất kỳ để thử tạo hàng mới.</li>' +
+    '<li><b>Nhân viên:</b> Chấm công, chụp ảnh vào ca, lát sau chụp ảnh ra ca để xem lương được tính.</li>' +
     '</ol><p class="small muted" style="margin:0">Trên một máy sẽ không nghe chuông báo đơn mới vì lúc đó bạn đang ở trang khác. Khi dùng thật, màn hình bếp chạy riêng trên máy bếp nên sẽ kêu.</p>' +
     '<div class="inline-test-reset"><button class="btn btn-danger btn-sm" type="button" id="tgReset">Xoá dữ liệu test, làm lại từ đầu</button>' +
-    '<div class="msg" id="tgConfirm" hidden><p style="margin:0 0 8px">Xoá mọi đơn, ca làm, thay đổi menu và kho đã thử?</p><div class="row"><button class="btn btn-sm btn-danger" type="button" id="tgYes">Xoá</button><button class="btn btn-sm btn-line" type="button" id="tgNo">Thôi</button></div></div></div></div>',
+    '<div class="msg" id="tgConfirm" hidden><p style="margin:0 0 8px">Xoá mọi đơn, ca làm và thay đổi menu đã thử?</p><div class="row"><button class="btn btn-sm btn-danger" type="button" id="tgYes">Xoá</button><button class="btn btn-sm btn-line" type="button" id="tgNo">Thôi</button></div></div></div></div>',
     sh => {
       sh.querySelector('#tgReset').onclick = () => { sh.querySelector('#tgConfirm').hidden = false; };
       sh.querySelector('#tgNo').onclick = () => { sh.querySelector('#tgConfirm').hidden = true; };
