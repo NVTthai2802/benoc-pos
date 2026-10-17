@@ -103,7 +103,7 @@ const PAY_STEPS = [[1, 'Không làm tròn (giữ số lẻ)'], [100, 'Làm tròn
 /* Ca/cài đặt có làm tròn giờ công không (round_minutes = 1 hoặc trống nghĩa là tính đúng từng phút) */
 const isExact = r => !r.round_minutes || Number(r.round_minutes) === 1;
 function ruleText(r) {
-  return (isExact(r) ? 'tính đúng từng phút' : MODE[r.round_mode] + ' giờ công theo ' + r.round_minutes + ' phút') + ', ' +
+  return (isExact(r) ? 'tính đúng từng phút' : 'giờ công ' + MODE[r.round_mode] + ' theo ' + r.round_minutes + ' phút') + ', ' +
     (Number(r.pay_round) > 1 ? 'tiền làm tròn tới ' + vnd(r.pay_round) : 'tiền giữ số lẻ');
 }
 /* Diễn giải lương một ca đã kết thúc, ví dụ "3 giờ 52 phút × 25.000đ/giờ = 96.667đ → 97.000đ" */
