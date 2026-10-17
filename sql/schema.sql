@@ -66,71 +66,6 @@ create unique index one_open_shift_per_employee on shifts(employee_id) where che
 create index shifts_employee_time on shifts(employee_id, check_in_at desc);
 
 -- =====================================================================
--- 2. KHO / NHẬP HÀNG
--- =====================================================================
-create table product_categories (   -- chủ tự thêm loại mới (custom)
-  id         serial primary key,
-  name       text not null unique,
-  sort_order int  not null default 0
-);
-insert into product_categories (name, sort_order) values
-  ('Đồ dùng một lần (cốc, ống hút...)', 1),
-  ('Đồ đông lạnh', 2),
-  ('Gia vị', 3);
-
-create table products (
-  id          uuid primary key default gen_random_uuid(),
-  category_id int  not null references product_categories(id),
-  name        text not null,
-  barcode     text unique,            -- null nếu hàng không có mã vạch (chọn thủ công)
-  unit        text not null default 'cái',            -- gói, chai, thùng, kg...
-  stock_qty   numeric(12, 2) not null default 0,      -- tồn kho, do trigger tự cập nhật
-  min_qty     numeric(12, 2) not null default 0,      -- dưới mức này thì cảnh báo sắp hết
-  is_active   boolean not null default true,
-  created_at  timestamptz not null default now()
-);
-
-create table stock_receipts (        -- một lần hàng về
-  id          uuid primary key default gen_random_uuid(),
-  received_at timestamptz not null default now(),
-  supplier    text,
-  note        text,
-  created_by  uuid references employees(id)
-);
-
-create type stock_reason as enum ('nhap', 'su_dung', 'hong', 'kiem_kho');
-
-create table stock_movements (       -- mọi thay đổi tồn kho đều đi qua bảng này
-  id         bigserial primary key,
-  product_id uuid not null references products(id),
-  receipt_id uuid references stock_receipts(id) on delete cascade, -- có nếu reason = 'nhap'
-  reason     stock_reason not null,
-  qty_change numeric(12, 2) not null check (qty_change <> 0),      -- + nhập, - dùng/hỏng
-  unit_cost  int,                    -- giá nhập / đơn vị (VNĐ), chỉ khi nhập
-  note       text,
-  created_by uuid references employees(id),
-  created_at timestamptz not null default now()
-);
-create index stock_movements_product on stock_movements(product_id, created_at desc);
-
--- Tự cập nhật tồn kho. Không sửa dòng cũ: muốn sửa thì xoá rồi nhập lại.
--- security definer: nhân viên ghi xuất kho được nhưng không có quyền sửa trực tiếp bảng products
-create or replace function apply_stock_movement() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  if tg_op = 'INSERT' then
-    update products set stock_qty = stock_qty + new.qty_change where id = new.product_id;
-  elsif tg_op = 'DELETE' then
-    update products set stock_qty = stock_qty - old.qty_change where id = old.product_id;
-  end if;
-  return null;
-end $$;
-
-create trigger trg_stock_movement
-after insert or delete on stock_movements
-for each row execute function apply_stock_movement();
-
--- =====================================================================
 -- 3. MENU
 -- =====================================================================
 create table menu_categories (
@@ -658,29 +593,6 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from employees where role = 'owner')
 $$;
 
--- Nhập một lô hàng về: tạo phiếu + các dòng nhập trong cùng một giao dịch.
--- p_lines = [{"product_id": "...", "qty": 10, "unit_cost": 45000}]
-create or replace function create_receipt(p_supplier text, p_note text, p_lines jsonb) returns uuid
-language plpgsql security definer set search_path = public as $$
-declare
-  v_id  uuid;
-  v_emp uuid := my_employee_id();
-  ln    jsonb;
-begin
-  if my_role() is null then raise exception 'FORBIDDEN'; end if;
-  if p_lines is null or jsonb_array_length(p_lines) = 0 then raise exception 'EMPTY_RECEIPT'; end if;
-  insert into stock_receipts (supplier, note, created_by)
-  values (nullif(trim(p_supplier), ''), nullif(trim(p_note), ''), v_emp)
-  returning id into v_id;
-  for ln in select * from jsonb_array_elements(p_lines) loop
-    if coalesce((ln ->> 'qty')::numeric, 0) <= 0 then raise exception 'BAD_QTY'; end if;
-    insert into stock_movements (product_id, receipt_id, reason, qty_change, unit_cost, created_by)
-    values ((ln ->> 'product_id')::uuid, v_id, 'nhap', (ln ->> 'qty')::numeric,
-            nullif(ln ->> 'unit_cost', '')::int, v_emp);
-  end loop;
-  return v_id;
-end $$;
-
 -- Chủ sửa giờ vào/ra của một ca (nhân viên quên chấm, chấm nhầm). Lương tính lại tự động.
 create or replace function owner_update_shift(p_id uuid, p_in timestamptz, p_out timestamptz, p_note text)
 returns shifts
@@ -721,16 +633,12 @@ end $$;
 -- =====================================================================
 -- 10. PHÂN QUYỀN (Row Level Security)
 --   Khách (anon): chỉ đọc menu + gọi các hàm ở mục 8.
---   Nhân viên/bếp: đọc đơn, nhập hàng, xem ca của mình.
+--   Nhân viên/bếp: đọc đơn, xem ca của mình.
 --   Chủ: toàn quyền.
 -- =====================================================================
 alter table shop_settings      enable row level security;
 alter table employees          enable row level security;
 alter table shifts             enable row level security;
-alter table product_categories enable row level security;
-alter table products           enable row level security;
-alter table stock_receipts     enable row level security;
-alter table stock_movements    enable row level security;
 alter table menu_categories    enable row level security;
 alter table menu_items         enable row level security;
 alter table option_groups      enable row level security;
@@ -751,19 +659,6 @@ create policy emp_self  on employees for select using (auth_user_id = auth.uid()
 create policy emp_owner on employees for all using (my_role() = 'owner') with check (my_role() = 'owner');
 create policy shift_self  on shifts for select using (employee_id = my_employee_id());
 create policy shift_owner on shifts for all using (my_role() = 'owner') with check (my_role() = 'owner');
-
--- Kho: nhân viên xem + nhập hàng (kể cả tạo sản phẩm mới khi quét mã lần đầu); chủ sửa/xoá
-create policy pcat_read  on product_categories for select using (my_role() is not null);
-create policy pcat_owner on product_categories for all using (my_role() = 'owner') with check (my_role() = 'owner');
-create policy prod_read   on products for select using (my_role() is not null);
-create policy prod_insert on products for insert with check (my_role() is not null);
-create policy prod_owner  on products for all using (my_role() = 'owner') with check (my_role() = 'owner');
-create policy rcpt_read   on stock_receipts for select using (my_role() is not null);
-create policy rcpt_insert on stock_receipts for insert with check (my_role() is not null);
-create policy rcpt_owner  on stock_receipts for delete using (my_role() = 'owner');
-create policy mov_read    on stock_movements for select using (my_role() is not null);
-create policy mov_insert  on stock_movements for insert with check (my_role() is not null);
-create policy mov_owner   on stock_movements for delete using (my_role() = 'owner');
 
 -- Menu: ai cũng xem được, chỉ chủ sửa
 create policy mcat_read  on menu_categories for select using (true);

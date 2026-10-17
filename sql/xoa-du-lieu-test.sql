@@ -1,6 +1,6 @@
 -- =====================================================================
 -- XOÁ DỮ LIỆU TEST — chạy trong Supabase > SQL Editor khi thử xong.
--- PHẦN 1 (luôn chạy): xoá đơn, doanh thu, ca làm, kho hàng.
+-- PHẦN 1 (luôn chạy): xoá đơn, doanh thu, ca làm.
 --   GIỮ NGUYÊN: menu, ảnh món, tuỳ chọn, cài đặt quán, tài khoản đăng nhập.
 -- =====================================================================
 begin;
@@ -10,9 +10,6 @@ delete from order_items;
 delete from orders;
 delete from sales;
 delete from shifts;
-delete from stock_movements;
-delete from stock_receipts;
-delete from products;
 commit;
 
 -- =====================================================================

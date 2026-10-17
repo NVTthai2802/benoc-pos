@@ -7,7 +7,7 @@ Hệ thống gồm 4 trang web, chạy trên mọi điện thoại, máy tính b
 | `index.html` | Khách quét QR gọi món | Điện thoại của khách |
 | `bep.html` | Bếp nóng: nhận đơn cơm, mì, kimbap, đồ ăn vặt, nước uống (sữa đậu, trà quất...), báo thời gian chờ, ra món, thu tiền | Máy tính bảng / điện thoại ở bếp |
 | `phache.html` | Quầy pha chế: nhận đơn trà sữa, trà hoa quả, cà phê, matcha..., báo thời gian chờ, ra món, thu tiền | Máy tính bảng / điện thoại ở quầy pha chế |
-| `quanly.html` | Chủ quán: doanh thu, menu, kho, nhân viên, cài đặt. Nhân viên: chấm công, nhập hàng | Điện thoại |
+| `quanly.html` | Chủ quán: doanh thu, menu, nhân viên, chấm công, cài đặt. Nhân viên: chấm công | Điện thoại |
 
 Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**: dữ liệu lưu trong trình duyệt, chỉ để thử giao diện.
 
@@ -43,7 +43,7 @@ Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**
 
 Đang chạy trên GitHub Pages: https://nvtthai2802.github.io/benoc-pos/
 
-Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh chấm công và quét mã vạch.
+Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh chấm công.
 
 ## 3. Cài đặt lần đầu
 
@@ -60,7 +60,6 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
 - **Doanh thu** có bảng **Tiền theo quầy**: mỗi quầy thu bao nhiêu tiền mặt, bao nhiêu chuyển khoản, để cuối ngày đối chiếu két.
 - **Nhân viên**: mở `quanly.html` trên điện thoại mình → **Chấm công** → chụp ảnh vào ca, cuối ca chụp ảnh ra ca.
-- **Hàng về**: **Kho hàng → Nhập hàng** → chụp mã vạch. Hàng mới thì nhập tên một lần, lần sau chụp là ra.
 - **Hết món**: **Menu** → gạt công tắc **Đang bán** sang **Hết món**, khách sẽ không thấy món đó.
 - **Đổi ảnh món**: **Menu** → bấm món → **Chọn ảnh** → **Lưu**.
 
@@ -72,10 +71,13 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - Ảnh chấm công lưu riêng tư, chỉ chủ quán và chính nhân viên đó xem được.
 - Thời gian chờ gợi ý càng dùng càng sát: hệ thống lấy trung bình thời gian làm thực tế 14 ngày gần nhất của từng quầy.
 
-## Nâng cấp bản đã cài (trước 17/10/2026)
+## Nâng cấp bản đã cài
 
-Chạy file này một lần trong Supabase → **SQL Editor** → dán toàn bộ `sql/cap-nhat-2-quay-pha-che.sql` → **Run**. File không làm mất dữ liệu, chạy lại lần hai cũng không sao. Đơn đang mở lúc cập nhật được tính là của bếp.
+Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. Chạy ở Supabase **test** trước, ổn rồi mới chạy ở **product**. Chạy lại lần hai cũng không sao.
+
+- `sql/cap-nhat-2-quay-pha-che.sql`: tách bếp nóng / quầy pha chế (đã chạy ở cả hai bên). Đơn đang mở lúc cập nhật được tính là của bếp.
+- `sql/cap-nhat-3-bo-kho-hang.sql`: bỏ hẳn phần kho hàng (bảng hàng hoá, phiếu nhập, lịch sử kho). Nếu kho còn hàng thì file tự dừng, không xoá gì.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 
-`sql/xoa-du-lieu-test.sql`: phần 1 xoá đơn, doanh thu, ca làm, kho; giữ menu. Phần 2 (bỏ dấu `--` mới chạy) xoá luôn mọi tài khoản để tạo lại từ đầu.
+`sql/xoa-du-lieu-test.sql`: phần 1 xoá đơn, doanh thu, ca làm; giữ menu. Phần 2 (bỏ dấu `--` mới chạy) xoá luôn mọi tài khoản để tạo lại từ đầu.
