@@ -1,0 +1,559 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gọi món Bé Nốc</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600&family=Mali:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="theme.css">
+<style>
+/* Trang khách: một cột như tờ menu; mỗi danh mục là một ô khung màu; giỏ hàng dính đáy màn hình */
+.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-block: 16px 4px; }
+.hero-text { min-width: 0; }
+.hero-menu { display: block; font: 800 22px/1 var(--f-head); color: var(--ink); letter-spacing: .02em; }
+.hero-name { margin: 2px 0 0; font: 800 34px/1 var(--f-head); color: var(--red); letter-spacing: -.01em; }
+.hero-name::after { content: ""; display: block; height: 6px; width: 78%; margin-top: 4px; border-radius: 0 0 60% 60% / 0 0 100% 100%; border-bottom: 3px solid var(--red); opacity: .55; }
+.hero-tag { margin: 6px 0 0; font: 600 13px/1.4 var(--f-hand); color: var(--ink-2); }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 2px dashed var(--red); background: var(--card); border-radius: 12px; padding: 6px 12px; font-weight: 600; font-size: 14px; white-space: nowrap; color: var(--ink); flex: none; margin-top: 4px; }
+.chip b { font: 800 20px/1 var(--f-head); color: var(--red); }
+.chip--warn { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+
+.menubar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); border-bottom: 1.5px dashed var(--line); }
+/* Mỗi mã QR mở một menu (Ăn vặt của bếp / Trà · Cà phê của quầy pha chế); có đường dẫn nhỏ sang menu kia */
+.other-menu { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--red); color: var(--red); background: var(--card); font-weight: 600; font-size: 13px; text-decoration: none; }
+.other-menu-end { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 28px auto 0; max-width: 420px; padding: 14px 16px; border-radius: 18px; border: 2px dashed var(--red); background: var(--card); color: var(--red); text-decoration: none; text-align: center; }
+.other-menu-end b { font: 800 19px/1.2 var(--f-head); }
+.other-menu-end span { font-size: 13px; color: var(--ink-2); }
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs-in { display: flex; gap: 6px; padding-block: 8px; width: max-content; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+@media (min-width: 672px) { .tabs-in { padding-left: calc((100vw - 640px) / 2 + 16px); } }
+.tab { border: 1.5px solid transparent; background: transparent; color: var(--ink-2); padding: 5px 12px; border-radius: 999px; font: 600 14px/1.4 var(--f-body); white-space: nowrap; }
+.tab[aria-current="true"] { background: var(--ch); border-color: var(--cb); color: var(--ink); }
+
+/* Vé số thứ tự */
+.ticket { position: relative; display: grid; grid-template-columns: 96px 1fr; margin-block: 14px 4px; background: var(--card); border-radius: 16px; border: 2px solid var(--red); }
+.ticket::before, .ticket::after { content: ""; position: absolute; left: 87px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); border: 2px solid var(--red); }
+.ticket::before { top: -10px; clip-path: inset(50% 0 0 0); } .ticket::after { bottom: -10px; clip-path: inset(0 0 50% 0); }
+.tk-num { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 14px 8px; border-right: 2px dashed var(--line); text-align: center; }
+.tk-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); font-weight: 600; }
+.tk-num b { font: 800 46px/1 var(--f-head); color: var(--red); }
+.tk-num input { width: 72px; border: 0; border-bottom: 2px solid var(--red); background: transparent; text-align: center; font: 800 40px/1.1 var(--f-head); color: var(--red); padding: 0; border-radius: 0; }
+.tk-num input::placeholder { color: var(--line); }
+.tk-body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; min-width: 0; }
+.tk-title { margin: 0; font-weight: 600; }
+.tk-name { font: 700 22px/1.2 var(--f-hand); overflow-wrap: anywhere; }
+.tk-hint { font-size: 13px; color: var(--ink-2); }
+
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-block: 10px 0; padding: 12px 14px; border: 2px solid var(--red); border-radius: 14px; background: var(--red-soft); color: var(--ink); text-align: left; font-weight: 600; }
+.banner span:last-child { white-space: nowrap; color: var(--red); }
+
+/* Danh mục kiểu ô khung trên menu giấy */
+.cat { position: relative; margin-top: 30px; border: 2px solid var(--cb); border-radius: 20px; background: var(--paper); padding: 0 14px 4px; scroll-margin-top: 70px; }
+.cat-title { margin: -17px 0 2px; font: 800 20px/1.3 var(--f-head); text-transform: uppercase; letter-spacing: .01em; text-wrap: balance; }
+.cat-title span { display: inline-block; background: var(--ch); padding: 2px 14px; border-radius: 12px; border: 2px solid var(--cb); }
+.items { list-style: none; margin: 0; padding: 0; }
+.item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding-block: 12px; border-bottom: 1.5px dashed var(--line); }
+.item:last-child { border-bottom: 0; }
+.item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; border: 0; background: none; padding: 0; text-align: left; color: var(--ink); }
+.item-name { font: 600 16px/1.35 var(--f-hand); overflow-wrap: anywhere; }
+.item-desc { font-size: 13px; color: var(--ink-2); }
+.item-opts { font-size: 12px; color: var(--ink-2); }
+.item-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.item-price { font: 700 17px/1 var(--f-hand); color: var(--red); white-space: nowrap; }
+.add { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--red); background: var(--card); color: var(--red); display: grid; place-items: center; font: 800 16px/1 var(--f-head); padding: 0; }
+.add--on { background: var(--red); color: var(--red-ink); }
+.add svg { width: 18px; height: 18px; }
+.thumb-btn { border: 0; background: none; padding: 0; }
+.menu-end { text-align: center; color: var(--ink-2); font: 600 14px/1.5 var(--f-hand); padding-block: 28px 120px; }
+
+.cartbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-top: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: linear-gradient(to top, var(--bg) 70%, rgba(251, 241, 223, 0)); }
+.cartbar .btn { width: 100%; max-width: 608px; margin: 0 auto; display: flex; justify-content: space-between; box-shadow: var(--shadow); min-height: 54px; padding-inline: 18px; }
+.cartbar .btn b { font: 800 19px/1 var(--f-head); }
+
+/* Bảng chọn món */
+.sh-img { margin: -12px calc(-1 * max(18px, env(safe-area-inset-left, 0px))) 0; background: var(--paper); display: grid; place-items: center; max-height: 260px; overflow: hidden; }
+.sh-img img { width: 100%; max-height: 260px; object-fit: contain; display: block; }
+.og { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.og legend { padding: 0; margin-bottom: 6px; font-weight: 600; font-size: 16px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.og-rule { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.og-rule--req { color: var(--red); }
+.og-err { color: var(--warn); font-size: 13px; font-weight: 600; }
+.choice { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); cursor: pointer; background: var(--card); }
+.choice + .choice { margin-top: 6px; }
+.choice:has(input:checked) { border-color: var(--red); background: var(--red-soft); }
+.choice input { width: 20px; height: 20px; accent-color: var(--red); margin: 0; flex: none; }
+.choice-name { flex: 1; min-width: 0; }
+.choice-price { color: var(--ink-2); font-size: 14px; white-space: nowrap; }
+.og--bad .choice { border-color: var(--warn); }
+
+/* Giỏ hàng */
+.lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.line { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding-block: 12px; border-bottom: 1.5px dashed var(--line); }
+.line-name { font: 600 16px/1.35 var(--f-hand); min-width: 0; overflow-wrap: anywhere; }
+.line-sub { grid-column: 1; font-size: 13px; color: var(--ink-2); }
+.line-price { text-align: right; font-weight: 600; }
+.line .stepper { grid-column: 2; justify-self: end; }
+.sum { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; }
+.sum b { font: 800 26px/1 var(--f-head); color: var(--red); }
+.who { display: grid; grid-template-columns: 110px 1fr; gap: 12px; }
+.who .wide { grid-column: 1 / -1; }
+.dup { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-size: 14px; }
+.dup p { margin: 0; }
+
+/* Trạng thái đơn */
+.st-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 18px; }
+.st-head h1 { margin: 0; font: 800 26px/1.2 var(--f-head); }
+.oc { margin-block: 14px; background: var(--paper); border: 2px solid var(--red); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.oc-top { display: grid; grid-template-columns: 84px 1fr; gap: 14px; align-items: center; }
+.oc-state { min-width: 0; }
+.oc-state h2 { margin: 0; font: 700 21px/1.25 var(--f-head); text-wrap: balance; }
+.oc-state p { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; }
+.eta { color: var(--ink) !important; font-size: 15px !important; }
+.eta b { font: 800 30px/1 var(--f-head); color: var(--red); margin-right: 4px; }
+.oc--da_ra_mon .qbox { border-style: solid; background: var(--red-soft); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.steps li { position: relative; padding-top: 12px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.steps li::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px; border-radius: 6px; background: var(--line); }
+.steps li.done::before { background: var(--red); }
+.steps li.now { color: var(--red); }
+.steps li.now::before { background: linear-gradient(90deg, var(--red) 50%, var(--red-soft) 50%); background-size: 200% 100%; }
+@media (prefers-reduced-motion: no-preference) { .steps li.now::before { animation: slide 1.6s linear infinite; } }
+@keyframes slide { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.oc-items summary { cursor: pointer; font-weight: 600; }
+.oc-items ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.oc-items li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 14px; }
+.oc-items .line-sub { font-size: 12px; }
+.oc-note { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--card); font-size: 14px; }
+.parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.parts li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding: 8px 12px; border-radius: 10px; background: var(--card); font-size: 14px; }
+.parts b { font-weight: 600; }
+.parts .pst { font-weight: 600; text-align: right; }
+.pst-cho_nhan { color: var(--warn); } .pst-dang_lam { color: #1E5A8C; } .pst-da_ra_mon { color: var(--ok); }
+.oc--paid { flex-direction: row; align-items: center; gap: 14px; border-color: var(--ok); }
+.oc--paid .qbox { border-color: var(--ok); width: 84px; flex: none; }
+.oc--paid .qbox b { color: var(--ok); }
+.oc--paid h2 { margin: 0; font: 700 20px/1.2 var(--f-head); color: var(--ok); }
+.oc--paid p { margin: 2px 0 6px; color: var(--ink-2); font-size: 14px; }
+.st-foot { color: var(--ink-2); font-size: 13px; text-align: center; padding-block: 8px 40px; }
+</style>
+
+<div class="demo-note" id="demoNote" hidden><div class="wrap">Bản xem thử, chưa nối với quán. Mở <a href="bep.html" target="_blank">màn hình bếp</a> ở tab khác để nhận đơn, hoặc vào <a href="quanly.html" target="_blank">trang quản lý</a>.</div></div>
+
+<header class="wrap hero">
+  <div class="hero-text"><span class="hero-menu">MENU</span><h1 class="hero-name">BÉ NỐC ĂN VẶT</h1><p class="hero-tag" id="heroTag">Ăn ngon · Giá xinh · Ship nhanh</p><a class="other-menu" id="otherTop" hidden></a></div>
+  <button class="chip chip--warn" id="chip" type="button">Chưa có số</button>
+</header>
+
+<div class="menubar" id="tabs">
+  <nav class="tabs" aria-label="Danh mục món"><div class="tabs-in" id="tabsIn"></div></nav>
+</div>
+
+<main id="menuView">
+  <div class="wrap">
+    <section class="ticket" id="ticket" aria-label="Số thứ tự của bạn"></section>
+    <div id="banner"></div>
+    <div id="menuList"><p class="loading">Đang tải menu…</p></div>
+    <a class="other-menu-end" id="otherEnd" hidden></a>
+    <p class="menu-end">Cảm ơn bạn nhiều · Bé Nốc luôn bên bạn</p>
+  </div>
+</main>
+
+<main id="statusView" hidden><div class="wrap" id="statusIn"></div></main>
+
+<div class="cartbar" id="cartBar" hidden><button class="btn" id="cartBtn" type="button"></button></div>
+
+<script src="config.js"></script>
+<script src="seed.js"></script>
+<script src="core.js"></script>
+<script>
+(function () {
+'use strict';
+const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS } = BN;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const ICON = {
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  bowl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>',
+  cup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.5 13h-9z"/><path d="M5 8h14M12 8l2-6"/><circle cx="10" cy="17" r=".8"/><circle cx="13.5" cy="15" r=".8"/></svg>'
+};
+
+const state = {
+  menu: [], items: new Map(), itemCat: new Map(),
+  info: Object.assign({ queue: '', name: '', phone: '' }, store.get('info', {})),
+  cart: [], cartNote: '',
+  orders: store.get(DEMO ? 'demo.orders' : 'orders', []),
+  orderData: {}, editingInfo: false, view: 'menu',
+  // ?menu=tra (mã QR quầy pha chế) → menu Trà · Cà phê; còn lại (?menu=an hoặc không có) → menu Ăn vặt của bếp
+  kind: BN.PARAMS.get('menu') === 'tra' ? 'pha_che' : 'bep'
+};
+const MENU = {
+  bep: { hero: 'BÉ NỐC ĂN VẶT', tag: 'Ăn ngon · Giá xinh · Ship nhanh', query: '?menu=an', link: 'Ăn vặt', linkDesc: 'Cơm trộn · Mì trộn · Kimbap · Đồ ăn vặt' },
+  pha_che: { hero: 'BÉ NỐC TRÀ NGON', tag: 'Trà ngon · Vị thật · Giá yêu', query: '?menu=tra', link: 'Trà · Cà phê', linkDesc: 'Trà sữa · Trà hoa quả · Cà phê · Matcha' }
+};
+const OTHER_KIND = state.kind === 'bep' ? 'pha_che' : 'bep';
+state.cart = store.get('cart.' + state.kind, []);
+state.cartNote = store.get('cartNote.' + state.kind, '');
+const saveInfo = () => store.set('info', state.info);
+const saveCart = () => { store.set('cart.' + state.kind, state.cart); store.set('cartNote.' + state.kind, state.cartNote); };
+const saveOrders = () => store.set(DEMO ? 'demo.orders' : 'orders', state.orders);
+
+function showView(v) {
+  state.view = v;
+  $('#menuView').hidden = v !== 'menu'; $('#statusView').hidden = v !== 'status'; $('#tabs').hidden = v !== 'menu';
+  renderCartBar(); window.scrollTo(0, 0);
+  if (v === 'menu') { $$('.tab').forEach((t, i) => t.setAttribute('aria-current', i === 0 ? 'true' : 'false')); $('.tabs').scrollLeft = 0; }
+  if (v === 'status') renderStatus(); else renderBanner();
+}
+
+/* ---------- Ảnh món ---------- */
+function thumbHtml(it, size) {
+  const cat = state.itemCat.get(it.id);
+  const icon = cat && DRINK_CATS.test(cat.name) ? ICON.cup : ICON.bowl;
+  return '<span class="thumb"' + (size ? ' style="width:' + size + 'px;height:' + size + 'px"' : '') + '>' +
+    (it.image_path ? '<img src="' + esc(it.image_path) + '" alt="" loading="lazy">' : icon) + '</span>';
+}
+
+/* ---------- Vé số thứ tự ---------- */
+const queueNum = () => parseInt(state.info.queue, 10);
+const infoReady = () => queueNum() > 0 && state.info.name.trim() !== '';
+function renderChip() {
+  const c = $('#chip');
+  if (queueNum() > 0) { c.className = 'chip'; c.innerHTML = 'Số <b class="num">' + esc(queueNum()) + '</b>'; c.setAttribute('aria-label', 'Số thứ tự ' + queueNum() + ', bấm để sửa'); }
+  else { c.className = 'chip chip--warn'; c.textContent = 'Chưa có số'; c.setAttribute('aria-label', 'Chưa nhập số thứ tự, bấm để nhập'); }
+}
+function renderTicket() {
+  const el = $('#ticket'); renderChip();
+  if (infoReady() && !state.editingInfo) {
+    el.innerHTML = '<div class="tk-num"><span class="tk-label">Số của bạn</span><b class="num">' + esc(queueNum()) + '</b></div>' +
+      '<div class="tk-body"><span class="tk-name">' + esc(state.info.name) + '</span><span class="tk-hint">Nhân viên sẽ mang món tới chỗ có thẻ số này.</span>' +
+      '<div class="row"><button class="link" type="button" id="tkEdit">Sửa số hoặc tên</button></div></div>';
+    $('#tkEdit').onclick = () => { state.editingInfo = true; renderTicket(); $('#inQueue').focus(); };
+    return;
+  }
+  el.innerHTML = '<div class="tk-num"><label class="tk-label" for="inQueue">Số trên thẻ</label>' +
+    '<input id="inQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" autocomplete="off" value="' + esc(state.info.queue) + '"></div>' +
+    '<div class="tk-body"><p class="tk-title">Lấy thẻ số ở quầy bếp, nhập số trên thẻ và tên của bạn.</p>' +
+    '<label class="field" for="inName">Tên của bạn <input id="inName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
+    '<p class="msg" id="tkMsg" hidden></p>' +
+    '<div class="row"><button class="btn btn-sm" type="button" id="tkSave">Lưu</button>' + (state.editingInfo ? '' : '<span class="tk-hint">Bạn có thể xem menu trước.</span>') + '</div></div>';
+  const q = $('#inQueue'), n = $('#inName');
+  q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderChip(); };
+  n.oninput = () => { state.info.name = n.value; saveInfo(); };
+  $('#tkSave').onclick = () => {
+    const m = $('#tkMsg');
+    if (!(queueNum() > 0)) { m.textContent = ERR.MISSING_QUEUE_NUMBER; m.hidden = false; q.focus(); return; }
+    if (!state.info.name.trim()) { m.textContent = ERR.MISSING_NAME; m.hidden = false; n.focus(); return; }
+    state.editingInfo = false; renderTicket(); ui.toast('Đã lưu số ' + queueNum());
+  };
+}
+$('#chip').onclick = () => {
+  if (state.view !== 'menu') showView('menu');
+  state.editingInfo = true; renderTicket();
+  $('#ticket').scrollIntoView({ block: 'center' }); $('#inQueue').focus({ preventScroll: true });
+};
+
+/* ---------- Menu ---------- */
+const countInCart = id => state.cart.filter(l => l.itemId === id).reduce((s, l) => s + l.qty, 0);
+function optionHint(it) { const seen = []; it.option_groups.forEach(g => { if (seen.indexOf(g.title) < 0) seen.push(g.title); }); return seen.join(' · '); }
+function addBtnHtml(it) {
+  const n = countInCart(it.id);
+  return '<button class="add' + (n ? ' add--on' : '') + '" type="button" data-add="' + esc(it.id) + '" aria-label="Thêm ' + esc(it.name) + (n ? ', đang có ' + n + ' trong giỏ' : '') + '">' + (n ? '<span class="num">' + n + '</span>' : ICON.plus) + '</button>';
+}
+/* Danh mục của menu đang mở. Nếu menu này chưa có danh mục nào thì hiện toàn bộ. */
+function shownCats() {
+  const mineCats = state.menu.filter(c => (c.station || 'bep') === state.kind);
+  const hasOther = state.menu.some(c => (c.station || 'bep') === OTHER_KIND);
+  const o = MENU[OTHER_KIND];
+  [['#otherTop', 'Gọi ' + (OTHER_KIND === 'pha_che' ? 'đồ uống' : 'đồ ăn') + '? Xem menu ' + o.link + ' →'],
+   ['#otherEnd', '<b>Xem menu ' + o.link + ' →</b><span>' + o.linkDesc + '</span>']].forEach(([id, html]) => {
+    const a = $(id); a.hidden = !hasOther || !mineCats.length; a.href = 'index.html' + o.query; a.innerHTML = html;
+  });
+  return mineCats.length ? mineCats : state.menu;
+}
+function renderMenu() {
+  const cats = shownCats();
+  $('.hero-name').textContent = MENU[state.kind].hero; $('#heroTag').textContent = MENU[state.kind].tag;
+  $('#menuList').innerHTML = cats.map(c =>
+    '<section class="cat cc-' + esc(c.color || 'vang') + '" id="cat-' + esc(c.id) + '" data-cat="' + esc(c.id) + '">' +
+    '<h2 class="cat-title"><span>' + esc(c.name) + '</span></h2><ul class="items">' +
+    c.items.map(it => {
+      const hint = optionHint(it);
+      return '<li class="item" data-item="' + esc(it.id) + '">' +
+        '<button class="thumb-btn" type="button" data-open="' + esc(it.id) + '" aria-label="Xem ' + esc(it.name) + '">' + thumbHtml(it) + '</button>' +
+        '<button class="item-main" type="button" data-open="' + esc(it.id) + '">' +
+        '<span class="item-name">' + esc(it.name) + (it.tag ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
+        (it.description ? '<span class="item-desc">' + esc(it.description) + '</span>' : '') +
+        (hint ? '<span class="item-opts">' + esc(hint) + '</span>' : '') + '</button>' +
+        '<div class="item-side"><span class="item-price num">' + K(it.price) + '</span>' + addBtnHtml(it) + '</div></li>';
+    }).join('') + '</ul></section>').join('');
+  $('#tabsIn').innerHTML = cats.map((c, i) => '<button class="tab cc-' + esc(c.color || 'vang') + '" type="button" data-go="' + esc(c.id) + '"' + (i === 0 ? ' aria-current="true"' : '') + '>' + esc(c.name) + '</button>').join('');
+  watchSections();
+}
+function refreshAddButtons() {
+  $$('.item').forEach(li => { const it = state.items.get(li.dataset.item); if (it) li.querySelector('.add').outerHTML = addBtnHtml(it); });
+}
+$('#menuList').addEventListener('click', e => {
+  const open = e.target.closest('[data-open]'), add = e.target.closest('[data-add]');
+  if (open) openItem(open.dataset.open);
+  if (add) quickAdd(add.dataset.add);
+});
+$('#tabsIn').addEventListener('click', e => {
+  const b = e.target.closest('[data-go]'); if (!b) return;
+  const sec = document.getElementById('cat-' + b.dataset.go);
+  if (sec) sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+});
+let observer;
+function watchSections() {
+  if (observer) observer.disconnect();
+  if (!('IntersectionObserver' in window)) return;
+  observer = new IntersectionObserver(entries => entries.forEach(en => {
+    if (!en.isIntersecting) return;
+    $$('.tab').forEach(t => {
+      const on = t.dataset.go === en.target.dataset.cat;
+      t.setAttribute('aria-current', on ? 'true' : 'false');
+      if (on) { const bar = $('.tabs'); bar.scrollLeft = t.offsetLeft - bar.clientWidth / 2 + t.offsetWidth / 2; }
+    });
+  }), { rootMargin: '-70px 0px -65% 0px' });
+  $$('.cat').forEach(s => observer.observe(s));
+}
+
+/* ---------- Thêm vào giỏ ---------- */
+const lineKey = l => l.itemId + '|' + l.choices.map(c => c.id).sort((a, b) => a - b).join(',') + '|' + (l.note || '');
+const unitPrice = l => l.base + l.choices.reduce((s, c) => s + c.price, 0);
+function addLine(line) {
+  const ex = state.cart.find(l => lineKey(l) === lineKey(line));
+  if (ex) ex.qty = Math.min(50, ex.qty + line.qty); else state.cart.push(line);
+  saveCart(); refreshAddButtons(); renderCartBar();
+}
+function quickAdd(id) {
+  const it = state.items.get(id); if (!it) return;
+  const choices = []; let ok = true;
+  it.option_groups.forEach(g => {
+    const defs = g.choices.filter(c => c.default); if (defs.length < g.min) ok = false;
+    defs.forEach(c => choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }));
+  });
+  if (!ok) { openItem(id); return; }
+  addLine({ itemId: it.id, name: it.name, base: it.price, choices, qty: 1, note: '' });
+  ui.toast('Đã thêm ' + it.name + (choices.length ? ' (' + choices.map(c => c.name).join(', ') + ')' : ''));
+}
+function openItem(id) {
+  const it = state.items.get(id); if (!it) return;
+  const cat = state.itemCat.get(id);
+  const sel = new Map(); it.option_groups.forEach(g => sel.set(g.id, new Set(g.choices.filter(c => c.default).map(c => c.id))));
+  let qty = 1;
+  const total = () => { let x = 0; it.option_groups.forEach(g => g.choices.forEach(c => { if (sel.get(g.id).has(c.id)) x += c.price; })); return (it.price + x) * qty; };
+  const groupHtml = g => {
+    const single = g.max === 1, type = (g.min === 1 && g.max === 1) ? 'radio' : 'checkbox';
+    const rule = g.min > 0 ? '<span class="og-rule og-rule--req">Bắt buộc</span>' : (g.max > 1 ? '<span class="og-rule">Chọn tối đa ' + g.max + '</span>' : '<span class="og-rule">Không bắt buộc</span>');
+    return '<fieldset class="og" data-g="' + g.id + '"><legend>' + esc(g.title) + ' ' + rule + '</legend>' +
+      g.choices.map(c => '<label class="choice"><input type="' + type + '" name="g' + g.id + '" value="' + c.id + '"' + (sel.get(g.id).has(c.id) ? ' checked' : '') + (single ? ' data-single="1"' : '') + '>' +
+        '<span class="choice-name">' + esc(c.name) + '</span><span class="choice-price num">' + (c.price ? '+' + K(c.price) : '') + '</span></label>').join('') +
+      '<span class="og-err" hidden></span></fieldset>';
+  };
+  ui.sheet(
+    ui.head(esc(it.name), '<span class="num">' + vnd(it.price) + '</span>' + (it.description ? ' · ' + esc(it.description) : '')) +
+    '<div class="sh-body' + (cat ? ' cc-' + esc(cat.color) : '') + '">' +
+    (it.image_path ? '<div class="sh-img"><img src="' + esc(it.image_path) + '" alt="' + esc(it.name) + '"></div>' : '') +
+    it.option_groups.map(groupHtml).join('') +
+    '<label class="field" for="itNote">Ghi chú cho món này <textarea id="itNote" maxlength="120" placeholder="Ví dụ: ít cay, không hành, ít đá"></textarea></label></div>' +
+    '<div class="sh-foot"><div class="stepper" role="group" aria-label="Số lượng"><button type="button" data-q="-1" aria-label="Bớt 1">−</button><output id="itQty" class="num">1</output><button type="button" data-q="1" aria-label="Thêm 1">+</button></div>' +
+    '<button class="btn grow" type="button" id="itAdd"></button></div>',
+    sh => {
+      const paint = () => {
+        $('#itAdd', sh).innerHTML = 'Thêm vào giỏ · <span class="num">' + vnd(total()) + '</span>';
+        $('#itQty', sh).textContent = qty; $('[data-q="-1"]', sh).disabled = qty <= 1; $('[data-q="1"]', sh).disabled = qty >= 50;
+      };
+      paint();
+      sh.addEventListener('change', e => {
+        const inp = e.target, fs = inp.closest('.og'); if (!fs) return;
+        const g = it.option_groups.find(x => String(x.id) === fs.dataset.g);
+        if (inp.type === 'checkbox' && inp.checked && inp.dataset.single) $$('input', fs).forEach(o => { if (o !== inp) o.checked = false; });
+        let picked = $$('input:checked', fs);
+        if (picked.length > g.max) { inp.checked = false; picked = $$('input:checked', fs); ui.toast('Chọn tối đa ' + g.max + ' mục'); }
+        sel.set(g.id, new Set(picked.map(o => Number(o.value)))); fs.classList.remove('og--bad'); $('.og-err', fs).hidden = true; paint();
+      });
+      sh.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { qty = Math.max(1, Math.min(50, qty + Number(q.dataset.q))); paint(); } });
+      $('#itAdd', sh).onclick = () => {
+        const bad = it.option_groups.find(g => sel.get(g.id).size < g.min);
+        if (bad) { const fs = $('.og[data-g="' + bad.id + '"]', sh); fs.classList.add('og--bad'); const er = $('.og-err', fs); er.textContent = 'Vui lòng chọn: ' + bad.title.toLowerCase(); er.hidden = false; fs.scrollIntoView({ block: 'center' }); return; }
+        const choices = []; it.option_groups.forEach(g => g.choices.forEach(c => { if (sel.get(g.id).has(c.id)) choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }); }));
+        addLine({ itemId: it.id, name: it.name, base: it.price, choices, qty, note: $('#itNote', sh).value.trim() });
+        ui.close(); ui.toast('Đã thêm ' + qty + ' ' + it.name);
+      };
+    });
+}
+
+/* ---------- Giỏ hàng ---------- */
+const cartCount = () => state.cart.reduce((s, l) => s + l.qty, 0);
+const cartTotal = () => state.cart.reduce((s, l) => s + unitPrice(l) * l.qty, 0);
+function renderCartBar() {
+  const n = cartCount();
+  $('#cartBar').hidden = !(n > 0 && state.view === 'menu');
+  $('#cartBtn').innerHTML = '<span>Xem giỏ · <span class="num">' + n + '</span> món</span><b class="num">' + vnd(cartTotal()) + '</b>';
+}
+$('#cartBtn').onclick = () => openCart();
+const lineSub = l => l.choices.map(c => c.name + (c.price ? ' +' + K(c.price) : '')).concat(l.note ? ['Ghi chú: ' + l.note] : []).join(' · ');
+function openCart() {
+  const linesHtml = () => state.cart.length ? '<ul class="lines">' + state.cart.map((l, i) =>
+    '<li class="line"><span class="line-name">' + esc(l.name) + '</span><span class="line-price num">' + vnd(unitPrice(l) * l.qty) + '</span>' +
+    '<span class="line-sub">' + esc(lineSub(l)) + '</span>' +
+    '<div class="stepper stepper--sm" role="group" aria-label="Số lượng ' + esc(l.name) + '"><button type="button" data-line="' + i + '" data-d="-1" aria-label="Bớt 1">−</button><output class="num">' + l.qty + '</output><button type="button" data-line="' + i + '" data-d="1" aria-label="Thêm 1"' + (l.qty >= 50 ? ' disabled' : '') + '>+</button></div></li>').join('') + '</ul>'
+    : '<p class="empty">Giỏ đang trống.</p>';
+  ui.sheet(ui.head('Giỏ của bạn', 'Kiểm tra món, nhập số thứ tự rồi gửi cho quán.') +
+    '<div class="sh-body"><div id="cLines">' + linesHtml() + '</div>' +
+    '<div class="sum"><span>Tổng cộng</span><b class="num" id="cTotal">' + vnd(cartTotal()) + '</b></div>' +
+    '<div class="who">' +
+    '<label class="field" id="fQueue" for="cQueue">Số trên thẻ <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(state.info.queue) + '"></label>' +
+    '<label class="field" id="fName" for="cName">Tên của bạn <span class="req">*</span><input id="cName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
+    '<label class="field wide" for="cPhone">Số điện thoại (không bắt buộc)<input id="cPhone" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
+    '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300" placeholder="Ví dụ: mang đồ uống ra trước, thêm bát nhỏ, dị ứng đậu phộng…">' + esc(state.cartNote) + '</textarea></label>' +
+    '<p class="msg wide" id="cMsg" hidden></p><div class="dup wide" id="cDup" hidden></div></div></div>' +
+    '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho quán</button></div>',
+    sh => {
+      const repaint = () => { $('#cLines', sh).innerHTML = linesHtml(); $('#cTotal', sh).textContent = vnd(cartTotal()); $('#cSend', sh).disabled = !state.cart.length; };
+      repaint();
+      sh.addEventListener('click', e => {
+        const b = e.target.closest('[data-line]'); if (!b) return;
+        const i = Number(b.dataset.line), l = state.cart[i]; l.qty += Number(b.dataset.d);
+        if (l.qty <= 0) state.cart.splice(i, 1);
+        saveCart(); repaint(); refreshAddButtons(); renderCartBar();
+      });
+      const q = $('#cQueue', sh), n = $('#cName', sh), p = $('#cPhone', sh), nt = $('#cNote', sh);
+      q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderTicket(); $('#fQueue', sh).classList.remove('invalid'); $('#cDup', sh).hidden = true; };
+      n.oninput = () => { state.info.name = n.value; saveInfo(); renderTicket(); $('#fName', sh).classList.remove('invalid'); };
+      p.oninput = () => { state.info.phone = p.value; saveInfo(); };
+      nt.oninput = () => { state.cartNote = nt.value; saveCart(); };
+      $('#cSend', sh).onclick = () => sendOrder(sh, false);
+    });
+}
+async function sendOrder(sh, confirm) {
+  const msg = $('#cMsg', sh), dup = $('#cDup', sh), btn = $('#cSend', sh);
+  msg.hidden = true; dup.hidden = true;
+  if (!(queueNum() > 0)) { $('#fQueue', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_QUEUE_NUMBER; msg.hidden = false; $('#cQueue', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
+  if (!state.info.name.trim()) { $('#fName', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_NAME; msg.hidden = false; $('#cName', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
+  const mine = state.orders.some(o => !o.paid && o.queue === queueNum());
+  btn.disabled = true; btn.textContent = 'Đang gửi…';
+  try {
+    const res = await api.placeOrder({
+      queue: queueNum(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine,
+      items: state.cart.map(l => ({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }))
+    });
+    state.orders.unshift({ token: res.access_token, queue: queueNum(), paid: false }); saveOrders();
+    state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons();
+    state.editingInfo = false; renderTicket();
+    ui.close(); showView('status'); startPolling(); ui.toast('Đã gửi đơn cho quán');
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Gửi đơn cho quán';
+    if (e.code === 'DUPLICATE_QUEUE') {
+      dup.innerHTML = '<p><b>' + esc(e.hint || 'Số này đang có đơn chưa thanh toán') + '.</b> Nếu bạn ngồi cùng hoặc gọi thêm món, bấm “Vẫn gửi”. Nếu nhập nhầm, hãy sửa lại số.</p>' +
+        '<div class="row"><button class="btn btn-sm" type="button" id="dupYes">Vẫn gửi</button><button class="btn btn-sm btn-line" type="button" id="dupNo">Sửa số</button></div>';
+      dup.hidden = false; dup.scrollIntoView({ block: 'nearest' });
+      $('#dupYes', sh).onclick = () => sendOrder(sh, true);
+      $('#dupNo', sh).onclick = () => { dup.hidden = true; const q = $('#cQueue', sh); q.focus(); q.select(); };
+      return;
+    }
+    msg.textContent = errText(e); msg.hidden = false; msg.scrollIntoView({ block: 'nearest' });
+    if (e.code === 'ITEM_UNAVAILABLE') loadMenu();
+  }
+}
+
+/* ---------- Trạng thái đơn ---------- */
+const activeOrders = () => state.orders.filter(o => !o.paid);
+const PART = { bep: 'Bếp', pha_che: 'Quầy pha chế' };
+function partText(p) {
+  if (p.status === 'cho_nhan') return 'Chờ nhận';
+  if (p.status === 'da_ra_mon') return 'Đã xong';
+  const left = p.estimated_ready_at ? Math.ceil((new Date(p.estimated_ready_at) - Date.now()) / 60000) : null;
+  return left != null && left > 0 ? 'Đang làm · còn ' + left + "'" : 'Sắp xong';
+}
+/* Đơn có cả đồ ăn và đồ uống: hiện tiến độ riêng của bếp và quầy pha chế */
+function partsHtml(d) {
+  const ps = d.stations || []; if (ps.length < 2) return '';
+  return '<ul class="parts">' + ps.map(p => {
+    const n = (d.items || []).filter(i => (i.station || 'bep') === p.station).reduce((s, i) => s + i.qty, 0);
+    return '<li><span><b>' + PART[p.station] + '</b> · ' + n + ' món</span><span class="pst pst-' + esc(p.status) + '">' + partText(p) + '</span></li>';
+  }).join('') + '</ul>';
+}
+function statusText(d) {
+  const who = (d.stations || []).length === 1 && d.stations[0].station === 'pha_che' ? 'Quầy pha chế' : (d.stations || []).length > 1 ? 'Quán' : 'Bếp';
+  if (d.status === 'cho_nhan') return { title: 'Đang chờ ' + (who === 'Quán' ? 'quán' : who.toLowerCase()) + ' nhận đơn', sub: d.orders_ahead > 0 ? '<p class="eta"><b class="num">' + d.orders_ahead + '</b>đơn trước bạn</p>' : '<p>Đơn sẽ được nhận trong giây lát.</p>' };
+  if (d.status === 'dang_lam') {
+    const left = d.estimated_ready_at ? Math.ceil((new Date(d.estimated_ready_at) - Date.now()) / 60000) : null;
+    if (left !== null && left > 0) return { title: who + ' đang làm món', sub: '<p class="eta">Còn khoảng <b class="num">' + left + '</b>phút</p><p>Dự kiến xong lúc <span class="num">' + hhmm(d.estimated_ready_at) + '</span></p>' };
+    return { title: 'Sắp xong rồi', sub: '<p>Món đang được hoàn thiện, bạn đợi thêm chút nhé.</p>' };
+  }
+  return { title: 'Món đã ra', sub: '<p>Nhân viên đang mang tới chỗ có thẻ số ' + esc(d.queue_number) + '.</p>' };
+}
+function orderCard(o) {
+  if (o.paid) return '<article class="oc oc--paid"><div class="qbox"><span>Số</span><b class="num">' + esc(o.queue) + '</b></div><div><h2>Đã thanh toán</h2><p>Cảm ơn bạn, hẹn gặp lại ở Bé Nốc!</p><button class="link" type="button" data-dismiss="' + esc(o.token) + '">Ẩn đơn này</button></div></article>';
+  const d = state.orderData[o.token];
+  if (!d) return '<article class="oc"><p class="loading">Đang tải trạng thái đơn số ' + esc(o.queue) + '…</p></article>';
+  const step = { cho_nhan: 0, dang_lam: 1, da_ra_mon: 2 }[d.status], t = statusText(d), items = d.items || [];
+  const count = items.reduce((s, i) => s + i.qty, 0);
+  return '<article class="oc oc--' + esc(d.status) + '">' +
+    '<div class="oc-top"><div class="qbox"><span>Số</span><b class="num">' + esc(d.queue_number) + '</b></div><div class="oc-state" aria-live="polite"><h2>' + t.title + '</h2>' + t.sub + '</div></div>' +
+    '<ol class="steps">' + ['Chờ nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' + partsHtml(d) +
+    '<details class="oc-items"><summary>' + count + ' món · <span class="num">' + vnd(d.total) + '</span> · ' + esc(d.customer_name) + '</summary><ul>' +
+    items.map(i => '<li><span>' + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
+      ((i.options && i.options.length) || i.note ? '<span class="line-sub">' + esc((i.options || []).map(x => x.choice).concat(i.note ? ['Ghi chú: ' + i.note] : []).join(' · ')) + '</span>' : '') + '</li>').join('') +
+    '</ul></details>' +
+    (d.note ? '<p class="oc-note"><b>Ghi chú:</b> ' + esc(d.note) + '</p>' : '') +
+    '<button class="btn btn-soft btn-block" type="button" data-call="' + esc(o.token) + '"' + (d.has_open_call ? ' disabled' : '') + '>' + (d.has_open_call ? 'Đã gọi, nhân viên đang tới' : 'Gọi nhân viên') + '</button></article>';
+}
+function renderStatus() {
+  if (state.view !== 'status') return;
+  $('#statusIn').innerHTML = '<div class="st-head"><h1>Đơn của bạn</h1><button class="btn btn-sm" type="button" id="stMore">Gọi thêm món</button></div>' +
+    (state.orders.length ? state.orders.map(orderCard).join('') : '<p class="empty">Bạn chưa có đơn nào.</p>') +
+    '<p class="st-foot">Trang tự cập nhật. Tắt màn hình rồi mở lại vẫn thấy đơn.</p>';
+}
+$('#statusIn').addEventListener('click', async e => {
+  if (e.target.closest('#stMore')) { showView('menu'); return; }
+  const call = e.target.closest('[data-call]');
+  if (call) { call.disabled = true; call.textContent = 'Đang gọi…'; try { await api.callStaff(call.dataset.call); ui.toast('Đã gọi nhân viên'); } catch (err) { ui.toast(errText(err)); } poll(); return; }
+  const dis = e.target.closest('[data-dismiss]');
+  if (dis) { state.orders = state.orders.filter(o => o.token !== dis.dataset.dismiss); saveOrders(); renderStatus(); if (!state.orders.length) showView('menu'); }
+});
+function renderBanner() {
+  const act = activeOrders(), el = $('#banner');
+  if (!act.length || state.view !== 'menu') { el.innerHTML = ''; return; }
+  const d = state.orderData[act[0].token];
+  const label = !d ? 'Đơn số ' + act[0].queue : 'Số ' + d.queue_number + ' · ' + ({ cho_nhan: 'Chờ bếp nhận', dang_lam: 'Bếp đang làm', da_ra_mon: 'Món đã ra' }[d.status]);
+  el.innerHTML = '<button class="banner" type="button" id="toStatus"><span>' + esc(label) + (act.length > 1 ? ' (+' + (act.length - 1) + ' đơn)' : '') + '</span><span>Xem đơn →</span></button>';
+  $('#toStatus').onclick = () => showView('status');
+}
+let pollTimer = null, polling = false;
+async function poll() {
+  if (polling) return; polling = true;
+  try {
+    await Promise.all(activeOrders().map(async o => {
+      try { const d = await api.getMyOrder(o.token); if (d === null) { o.paid = true; delete state.orderData[o.token]; } else state.orderData[o.token] = d; }
+      catch (e) { /* mạng chập chờn: giữ trạng thái cũ */ }
+    }));
+    saveOrders();
+  } finally { polling = false; }
+  renderStatus(); renderBanner();
+  if (!activeOrders().length) clearInterval(pollTimer);
+}
+function startPolling() { clearInterval(pollTimer); poll(); pollTimer = setInterval(poll, (DEMO ? 2 : CONFIG.POLL_SECONDS) * 1000); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && activeOrders().length) startPolling(); });
+setInterval(() => { if (state.view === 'status') renderStatus(); }, 30000);
+
+/* ---------- Khởi động ---------- */
+async function loadMenu() {
+  try {
+    state.menu = await api.getMenu() || [];
+    state.items = new Map(); state.itemCat = new Map();
+    state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
+    const before = state.cart.length;
+    state.cart = state.cart.filter(l => state.items.has(l.itemId)); saveCart();
+    if (state.cart.length < before) ui.toast('Một số món trong giỏ đã hết và được bỏ ra');
+    renderMenu(); renderCartBar();
+  } catch (e) { $('#menuList').innerHTML = '<p class="msg">Không tải được menu. Kiểm tra mạng rồi tải lại trang.</p>'; }
+}
+$('#demoNote').hidden = !DEMO;
+ui.init(); renderTicket();
+loadMenu().then(() => { if (activeOrders().length) { showView('status'); startPolling(); } else showView('menu'); });
+})();
+</script>
