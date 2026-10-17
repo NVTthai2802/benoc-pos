@@ -1,6 +1,6 @@
 # Bé Nốc POS
 
-Gọi món qua QR, màn hình bếp nóng, màn hình quầy pha chế và quản lý quán (menu, kho, nhân viên, chấm công, doanh thu).
+Gọi món qua QR, màn hình bếp nóng, màn hình quầy pha chế và quản lý quán (menu, nhân viên, chấm công, doanh thu).
 
 - `index.html` — khách gọi món. `?menu=an` là menu Ăn vặt (mã QR bếp nóng), `?menu=tra` là menu Trà · Cà phê (mã QR quầy pha chế)
 - `bep.html` — màn hình bếp nóng (nhận đơn món ăn và nước uống của bếp, ra món, thu tiền đơn của bếp)
