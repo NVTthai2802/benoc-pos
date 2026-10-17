@@ -60,6 +60,11 @@
 .check { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; }
 .check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--red); flex: none; }
 .check small { display: block; color: var(--ink-2); }
+.og-head { display: flex; align-items: center; gap: 8px; font: 700 15px/1.2 var(--f-head); margin: 4px 0 2px; }
+.og-head .pill { font-size: 12px; }
+.og-more { border: 1.5px dashed var(--line); border-radius: 12px; padding: 8px 10px; }
+.og-more > summary { cursor: pointer; color: var(--ink-2); font-weight: 600; list-style-position: inside; }
+.og-more[open] > summary { margin-bottom: 8px; }
 .chrow { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto auto auto; gap: 8px; align-items: center; }
 .chrow input[type=text], .chrow input[type=number] { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 15px; width: 100%; min-width: 0; background: var(--card); }
 .chrow label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
@@ -95,6 +100,11 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const COLORS = [['vang', 'Vàng'], ['cam', 'Cam'], ['hong', 'Hồng'], ['xanhla', 'Xanh lá'], ['xanhduong', 'Xanh dương'], ['tim', 'Tím'], ['nau', 'Nâu']];
 const MODE = { up: 'làm tròn lên', down: 'làm tròn xuống', nearest: 'làm tròn gần nhất' };
+/* Loại nhóm tuỳ chọn: tuỳ chọn đồ uống (upsize, chọn kem) và tuỳ chọn đồ ăn (topping, thêm mì) */
+const OKIND = { do_uong: 'Đồ uống', do_an: 'Đồ ăn' };
+const gKind = g => (g.kind === 'do_uong' ? 'do_uong' : 'do_an');
+const isDrinkCat = c => !!c && (c.station === 'pha_che' || DRINK_CATS.test(c.name));
+const choiceText = g => g.choices.map(c => c.name + (c.price_delta ? ' +' + K(c.price_delta) : '')).join(', ');
 /* Hai mã QR gọi món: mỗi mã mở đúng một menu, đơn về đúng một quầy */
 const QRS = [
   { key: 'an', query: '?menu=an', color: 'vang', title: 'Mã QR bếp nóng · menu Ăn vặt', desc: 'Dán ở khu bếp. Khách quét thấy cơm, mì, kimbap, đồ ăn vặt và nước uống của bếp. Đơn về màn hình bếp, bếp thu tiền.', screen: 'bep.html', screenName: 'bếp' },
@@ -292,9 +302,12 @@ async function renderMenu(main) {
         '<span class="row"><button class="btn btn-sm btn-line" type="button" data-move="' + c.id + '" data-d="-1" aria-label="Lên"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="btn btn-sm btn-line" type="button" data-move="' + c.id + '" data-d="1" aria-label="Xuống"' + (i === m.categories.length - 1 ? ' disabled' : '') + '>↓</button></span></div></li>').join('') + '</ul></section>';
   } else {
     body = '<div class="toolbar"><span class="muted small" style="flex:1">Nhóm tuỳ chọn dùng chung cho nhiều món, ví dụ size, topping, chọn kem.</span><button class="btn" type="button" id="addGroup">+ Thêm nhóm</button></div>' +
-      '<section class="box"><ul class="list">' + m.groups.map(g => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-group="' + g.id + '"><span class="lmain"><span class="lname">' + esc(g.name) + ' <span class="muted small">· khách thấy “' + esc(g.title) + '”</span></span>' +
-        '<span class="lsub">' + esc(g.choices.map(c => c.name + (c.price_delta ? ' +' + K(c.price_delta) : '')).join(', ')) + '</span></span>' +
-        '<span class="lside"><span class="pill ' + (g.min_select ? 'pill-red' : 'pill-mute') + '">' + (g.min_select ? 'Bắt buộc' : g.max_select > 1 ? 'Chọn nhiều' : 'Không bắt buộc') + '</span><span class="small muted">' + g.used_by + ' món dùng</span></span></button></li>').join('') + '</ul></section>';
+      [['do_uong', 'cc-xanhduong'], ['do_an', 'cc-cam']].map(([k, cc]) => {
+        const gs = m.groups.filter(g => gKind(g) === k);
+        return '<section class="box ' + cc + '"><h2 class="box-title"><span>Tuỳ chọn ' + OKIND[k].toLowerCase() + '</span></h2>' + (gs.length ? '<ul class="list">' + gs.map(g => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-group="' + g.id + '"><span class="lmain"><span class="lname">' + esc(g.name) + ' <span class="muted small">· khách thấy “' + esc(g.title) + '”</span></span>' +
+          '<span class="lsub">' + esc(choiceText(g)) + '</span></span>' +
+          '<span class="lside"><span class="pill ' + (g.min_select ? 'pill-red' : 'pill-mute') + '">' + (g.min_select ? 'Bắt buộc' : g.max_select > 1 ? 'Chọn nhiều' : 'Không bắt buộc') + '</span><span class="small muted">' + g.used_by + ' món dùng</span></span></button></li>').join('') + '</ul>' : '<p class="empty">Chưa có nhóm nào.</p>') + '</section>';
+      }).join('');
   }
   main.innerHTML = '<div class="ptitle"><h1>Menu</h1><div class="chips">' + [['mon', 'Món'], ['danhmuc', 'Danh mục'], ['tuychon', 'Tuỳ chọn']].map(([k, t]) => '<button class="chipbtn" type="button" data-sub="' + k + '" aria-pressed="' + (sub === k) + '">' + t + '</button>').join('') + '</div></div>' + body;
   $$('[data-sub]', main).forEach(b => b.onclick = () => { state.menuSub = b.dataset.sub; rerender(); });
@@ -328,7 +341,17 @@ function editItem(it) {
   const m = state.menuData, isNew = !it;
   it = it || { name: '', category_id: (state.menuCat !== 'all' && state.menuCat) || (m.categories[0] && m.categories[0].id), price: 0, description: '', tag: '', prep_minutes: 5, is_available: true, image_path: null, group_ids: [] };
   let image = it.image_path;
-  const groupsSorted = it.group_ids.map(id => m.groups.find(g => g.id === id)).filter(Boolean).concat(m.groups.filter(g => it.group_ids.indexOf(g.id) < 0));
+  /* Danh sách tuỳ chọn: loại hợp với danh mục của món (đồ uống / đồ ăn) hiện trước,
+     loại còn lại thu gọn (tự mở nếu món đang dùng nhóm nào trong đó). */
+  const groupsHtml = (catId, checked) => {
+    const mine = isDrinkCat(m.categories.find(c => c.id === catId)) ? 'do_uong' : 'do_an', other = mine === 'do_uong' ? 'do_an' : 'do_uong';
+    const sorted = checked.map(id => m.groups.find(g => g.id === id)).filter(Boolean).concat(m.groups.filter(g => checked.indexOf(g.id) < 0));
+    const rows = k => sorted.filter(g => gKind(g) === k).map(g => '<label class="check"><input type="checkbox" name="grp" value="' + g.id + '"' + (checked.indexOf(g.id) >= 0 ? ' checked' : '') + '><span><b>' + esc(g.name) + '</b><small>' + esc(choiceText(g)) + '</small></span></label>').join('');
+    const nOther = sorted.filter(g => gKind(g) === other).length, otherOn = sorted.some(g => gKind(g) === other && checked.indexOf(g.id) >= 0);
+    return '<div class="og-head">Tuỳ chọn ' + OKIND[mine].toLowerCase() + ' <span class="pill pill-mute">hợp với món này</span></div>' +
+      (rows(mine) || '<p class="small muted" style="margin:0">Chưa có nhóm tuỳ chọn ' + OKIND[mine].toLowerCase() + '. Thêm ở Menu → Tuỳ chọn.</p>') +
+      (nOther ? '<details class="og-more"' + (otherOn ? ' open' : '') + '><summary>Tuỳ chọn ' + OKIND[other].toLowerCase() + ' (' + nOther + ')</summary><div class="checks">' + rows(other) + '</div></details>' : '');
+  };
   ui.sheet(ui.head(isNew ? 'Thêm món' : 'Sửa món', isNew ? '' : esc(it.name)) +
     '<form class="sh-body" id="itForm" novalidate>' +
     '<div class="imgpick"><span id="imgBox">' + thumb(Object.assign({}, it, { image_path: image }), m.categories) + '</span><div class="row">' +
@@ -340,8 +363,7 @@ function editItem(it) {
     '<label class="field" for="fDesc">Mô tả ngắn<input id="fDesc" maxlength="120" value="' + esc(it.description || '') + '" placeholder="Ví dụ: Topping hạt nổ + trân châu"></label>' +
     '<div class="grid2"><label class="field" for="fTag">Nhãn nổi bật<input id="fTag" maxlength="20" list="tagList" value="' + esc(it.tag || '') + '" placeholder="Để trống nếu không có"><datalist id="tagList"><option value="Best seller"><option value="Đặc biệt"><option value="Mới"></datalist></label>' +
     '<label class="field" for="fPrep">Thời gian làm (phút)<input id="fPrep" class="num" type="number" min="1" max="60" value="' + it.prep_minutes + '"></label></div>' +
-    '<fieldset class="checks" style="border:0;padding:0;margin:0"><legend class="field" style="margin-bottom:6px">Tuỳ chọn cho món này</legend>' +
-    groupsSorted.map(g => '<label class="check"><input type="checkbox" name="grp" value="' + g.id + '"' + (it.group_ids.indexOf(g.id) >= 0 ? ' checked' : '') + '><span><b>' + esc(g.name) + '</b><small>' + esc(g.choices.map(c => c.name + (c.price_delta ? ' +' + K(c.price_delta) : '')).join(', ')) + '</small></span></label>').join('') + '</fieldset>' +
+    '<fieldset class="checks" style="border:0;padding:0;margin:0"><legend class="field" style="margin-bottom:6px">Tuỳ chọn cho món này</legend><div class="checks" id="grpBox">' + groupsHtml(it.category_id, it.group_ids) + '</div></fieldset>' +
     '<label class="switch"><input type="checkbox" id="fAvail"' + (it.is_available ? ' checked' : '') + '><span class="track"></span>Đang bán</label>' +
     '<p class="msg" id="fMsg" hidden></p>' + (isNew ? '' : confirmBox('Xoá hẳn món “' + esc(it.name) + '” khỏi menu? Hoá đơn cũ vẫn giữ tên món.', 'Xoá món', 'delBox')) + '</form>' +
     '<div class="sh-foot">' + (isNew ? '' : '<button class="btn btn-danger" type="button" id="itDel">Xoá</button>') + '<button class="btn grow" type="button" id="itSave">' + (isNew ? 'Thêm món' : 'Lưu') + '</button></div>',
@@ -351,6 +373,8 @@ function editItem(it) {
         try { image = await api.uploadMenuImage(f); $('#imgBox', sh).innerHTML = thumb(Object.assign({}, it, { image_path: image }), m.categories); $('#imgDel', sh).hidden = false; msg.textContent = 'Đã tải ảnh. Bấm Lưu để áp dụng.'; }
         catch (err) { msg.textContent = errText(err); }
       };
+      // Đổi danh mục (ví dụ từ Cơm trộn sang Trà sữa) thì xếp lại tuỳ chọn, giữ các ô đã tích
+      $('#fCat', sh).onchange = e => { const on = $$('input[name=grp]:checked', sh).map(x => Number(x.value)); $('#grpBox', sh).innerHTML = groupsHtml(Number(e.target.value), on); };
       $('#imgDel', sh).onclick = () => { image = null; $('#imgBox', sh).innerHTML = thumb(Object.assign({}, it, { image_path: null }), m.categories); $('#imgDel', sh).hidden = true; };
       wireConfirm(sh, '#itDel', 'delBox', async () => { await api.deleteItem(it.id); ui.close(); ui.toast('Đã xoá món'); rerender(); });
       $('#itSave', sh).onclick = async () => {
@@ -386,14 +410,15 @@ function editCat(c) {
   });
 }
 function editGroup(g) {
-  const isNew = !g; g = g ? JSON.parse(JSON.stringify(g)) : { name: '', title: '', min_select: 0, max_select: 1, choices: [{ name: '', price_delta: 0 }], used_by: 0 };
+  const isNew = !g; g = g ? JSON.parse(JSON.stringify(g)) : { name: '', title: '', kind: 'do_uong', min_select: 0, max_select: 1, choices: [{ name: '', price_delta: 0 }], used_by: 0 };
   const kind = g.min_select >= 1 && g.max_select === 1 ? 'one' : g.max_select === 1 ? 'opt' : 'many';
   const chRow = (c, i) => '<div class="chrow" data-ch="' + i + '"><input type="text" placeholder="Tên lựa chọn" value="' + esc(c.name) + '" data-f="name" aria-label="Tên lựa chọn"><input type="number" step="1000" min="0" placeholder="+ giá" value="' + (c.price_delta || 0) + '" data-f="price" aria-label="Giá cộng thêm">' +
     '<label><input type="checkbox" data-f="def"' + (c.is_default ? ' checked' : '') + '>Mặc định</label><label><input type="checkbox" data-f="avail"' + (c.is_available !== false ? ' checked' : '') + '>Còn</label>' +
     '<button class="x" type="button" data-rm="' + i + '" aria-label="Bỏ lựa chọn này"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
   ui.sheet(ui.head(isNew ? 'Thêm nhóm tuỳ chọn' : 'Sửa nhóm tuỳ chọn', isNew ? '' : g.used_by + ' món đang dùng nhóm này') + '<div class="sh-body">' +
-    '<div class="grid2"><label class="field" for="gName">Tên để bạn quản lý<input id="gName" maxlength="40" value="' + esc(g.name) + '" placeholder="Ví dụ: Size M/L (+5k)"></label>' +
-    '<label class="field" for="gTitle">Tên khách thấy<input id="gTitle" maxlength="30" value="' + esc(g.title) + '" placeholder="Ví dụ: Chọn size"></label></div>' +
+    '<div class="grid2"><label class="field" for="gName">Tên để bạn quản lý<input id="gName" maxlength="40" value="' + esc(g.name) + '" placeholder="Ví dụ: Upsize (+5k)"></label>' +
+    '<label class="field" for="gTitle">Tên khách thấy<input id="gTitle" maxlength="30" value="' + esc(g.title) + '" placeholder="Ví dụ: Upsize"></label></div>' +
+    '<label class="field" for="gFor">Dùng cho<select id="gFor">' + Object.keys(OKIND).map(k => '<option value="' + k + '"' + (gKind(g) === k ? ' selected' : '') + '>' + OKIND[k] + (k === 'do_uong' ? ' (size, chọn kem…)' : ' (topping, thêm mì…)') + '</option>').join('') + '</select></label>' +
     '<div class="grid2"><label class="field" for="gKind">Cách chọn<select id="gKind"><option value="one"' + (kind === 'one' ? ' selected' : '') + '>Bắt buộc chọn 1</option><option value="opt"' + (kind === 'opt' ? ' selected' : '') + '>Chọn 1, không bắt buộc</option><option value="many"' + (kind === 'many' ? ' selected' : '') + '>Chọn nhiều</option></select></label>' +
     '<label class="field" for="gMax"' + (kind === 'many' ? '' : ' hidden') + '>Chọn tối đa<input id="gMax" type="number" min="2" max="20" value="' + Math.max(2, g.max_select) + '"></label></div>' +
     '<div class="field">Các lựa chọn</div><div class="checks" id="chList">' + g.choices.map(chRow).join('') + '</div><button class="btn btn-sm btn-line" type="button" id="chAdd">+ Thêm lựa chọn</button>' +
@@ -413,7 +438,7 @@ function editGroup(g) {
       if (!choices.length) { msg.textContent = 'Thêm ít nhất một lựa chọn.'; msg.hidden = false; return; }
       const min = k === 'one' ? 1 : 0, max = k === 'many' ? Math.max(2, Number($('#gMax', sh).value) || 2) : 1;
       if (k !== 'many' && choices.filter(c => c.is_default).length > 1) { msg.textContent = 'Nhóm chọn 1 chỉ được có một lựa chọn mặc định.'; msg.hidden = false; return; }
-      try { await api.saveGroup(Object.assign({}, g, { name, title, min_select: min, max_select: max, choices })); ui.close(); ui.toast('Đã lưu nhóm tuỳ chọn'); rerender(); }
+      try { await api.saveGroup(Object.assign({}, g, { name, title, kind: $('#gFor', sh).value, min_select: min, max_select: max, choices })); ui.close(); ui.toast('Đã lưu nhóm tuỳ chọn'); rerender(); }
       catch (err) { msg.textContent = errText(err); msg.hidden = false; }
     };
   }, { wide: true });
