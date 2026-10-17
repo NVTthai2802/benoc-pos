@@ -13,8 +13,8 @@
       STORE_PREFIX: 'benoc.'
     },
     test: {
-      SUPABASE_URL: '',      // Supabase dự án benoc-pos-test
-      SUPABASE_ANON_KEY: '', // Project Settings > API > anon public key
+      SUPABASE_URL: 'https://bsnpcinocphuruahpzwr.supabase.co', // Supabase dự án benoc-pos-test
+      SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzbnBjaW5vY3BodXJ1YWhwendyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjExMDIsImV4cCI6MjEwNzc5NzEwMn0.2h23kG6JMU5Y3xSYjwU4jlIcA5ig6PM7ivpoXXrCR78',
       STORE_PREFIX: 'benoc.test.'
     }
   };
