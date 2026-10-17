@@ -403,7 +403,7 @@ function openItem(id) {
     '<div class="sh-body' + (cat ? ' cc-' + esc(cat.color) : '') + '">' +
     (it.image_path ? '<div class="sh-img"><img src="' + esc(it.image_path) + '" alt="' + esc(it.name) + '"></div>' : '') +
     it.option_groups.map(groupHtml).join('') +
-    '<label class="field" for="itNote">Ghi chú cho món này <textarea id="itNote" maxlength="120" placeholder="Ví dụ: ít cay, không hành, ít đá"></textarea></label></div>' +
+    '<label class="field" for="itNote">Ghi chú cho món này <textarea id="itNote" maxlength="120"></textarea></label></div>' +
     '<div class="sh-foot"><div class="stepper" role="group" aria-label="Số lượng"><button type="button" data-q="-1" aria-label="Bớt 1">−</button><output id="itQty" class="num">1</output><button type="button" data-q="1" aria-label="Thêm 1">+</button></div>' +
     '<button class="btn grow" type="button" id="itAdd"></button></div>',
     sh => {
@@ -454,7 +454,7 @@ function openCart() {
     '<label class="field" id="fQueue" for="cQueue">Số trên thẻ <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(state.info.queue) + '"></label>' +
     '<label class="field" id="fName" for="cName">Tên của bạn <span class="req">*</span><input id="cName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
     '<label class="field wide" for="cPhone">Số điện thoại (không bắt buộc)<input id="cPhone" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
-    '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300" placeholder="Ví dụ: mang đồ uống ra trước, thêm bát nhỏ, dị ứng đậu phộng…">' + esc(state.cartNote) + '</textarea></label>' +
+    '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300">' + esc(state.cartNote) + '</textarea></label>' +
     '<p class="msg wide" id="cMsg" hidden></p><div class="dup wide" id="cDup" hidden></div></div></div>' +
     '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho quán</button></div>',
     sh => {
