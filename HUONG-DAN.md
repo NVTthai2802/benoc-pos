@@ -79,6 +79,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-2-quay-pha-che.sql`: tách bếp nóng / quầy pha chế (đã chạy ở cả hai bên). Đơn đang mở lúc cập nhật được tính là của bếp.
 - `sql/cap-nhat-3-bo-kho-hang.sql`: bỏ hẳn phần kho hàng (bảng hàng hoá, phiếu nhập, lịch sử kho). Nếu kho còn hàng thì file tự dừng, không xoá gì.
 - `sql/cap-nhat-4-tuy-chon-do-uong-do-an.sql`: chia nhóm tuỳ chọn thành **Đồ uống** / **Đồ ăn**; gộp size thành **Upsize (+5k)** và **Upsize (+10k)** (bỏ Size M/L, Size to). Giá các món không đổi.
+- `sql/cap-nhat-5-topping-duong-da.sql`: thêm nhóm **Topping đồ uống** (7 loại, mỗi loại +5.000đ), **Lượng đường** và **Lượng đá** (mặc định bình thường). Trang khách hiện đường, đá thành 3 ô có hình. Chỉ thêm, không xoá gì.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 
