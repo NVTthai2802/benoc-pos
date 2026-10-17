@@ -19,7 +19,13 @@
 .chip b { font: 800 20px/1 var(--f-head); color: var(--red); }
 .chip--warn { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
 
-.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); overflow-x: auto; scrollbar-width: none; border-bottom: 1.5px dashed var(--line); }
+.menubar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); border-bottom: 1.5px dashed var(--line); }
+/* Mỗi mã QR mở một menu (Ăn vặt của bếp / Trà · Cà phê của quầy pha chế); có đường dẫn nhỏ sang menu kia */
+.other-menu { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--red); color: var(--red); background: var(--card); font-weight: 600; font-size: 13px; text-decoration: none; }
+.other-menu-end { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 28px auto 0; max-width: 420px; padding: 14px 16px; border-radius: 18px; border: 2px dashed var(--red); background: var(--card); color: var(--red); text-decoration: none; text-align: center; }
+.other-menu-end b { font: 800 19px/1.2 var(--f-head); }
+.other-menu-end span { font-size: 13px; color: var(--ink-2); }
+.tabs { overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tabs-in { display: flex; gap: 6px; padding-block: 8px; width: max-content; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 @media (min-width: 672px) { .tabs-in { padding-left: calc((100vw - 640px) / 2 + 16px); } }
@@ -44,7 +50,7 @@
 .banner span:last-child { white-space: nowrap; color: var(--red); }
 
 /* Danh mục kiểu ô khung trên menu giấy */
-.cat { position: relative; margin-top: 30px; border: 2px solid var(--cb); border-radius: 20px; background: var(--paper); padding: 0 14px 4px; scroll-margin-top: 64px; }
+.cat { position: relative; margin-top: 30px; border: 2px solid var(--cb); border-radius: 20px; background: var(--paper); padding: 0 14px 4px; scroll-margin-top: 70px; }
 .cat-title { margin: -17px 0 2px; font: 800 20px/1.3 var(--f-head); text-transform: uppercase; letter-spacing: .01em; text-wrap: balance; }
 .cat-title span { display: inline-block; background: var(--ch); padding: 2px 14px; border-radius: 12px; border: 2px solid var(--cb); }
 .items { list-style: none; margin: 0; padding: 0; }
@@ -120,6 +126,11 @@
 .oc-items li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 14px; }
 .oc-items .line-sub { font-size: 12px; }
 .oc-note { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--card); font-size: 14px; }
+.parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.parts li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding: 8px 12px; border-radius: 10px; background: var(--card); font-size: 14px; }
+.parts b { font-weight: 600; }
+.parts .pst { font-weight: 600; text-align: right; }
+.pst-cho_nhan { color: var(--warn); } .pst-dang_lam { color: #1E5A8C; } .pst-da_ra_mon { color: var(--ok); }
 .oc--paid { flex-direction: row; align-items: center; gap: 14px; border-color: var(--ok); }
 .oc--paid .qbox { border-color: var(--ok); width: 84px; flex: none; }
 .oc--paid .qbox b { color: var(--ok); }
@@ -131,17 +142,20 @@
 <div class="demo-note" id="demoNote" hidden><div class="wrap">Bản xem thử, chưa nối với quán. Mở <a href="bep.html" target="_blank">màn hình bếp</a> ở tab khác để nhận đơn, hoặc vào <a href="quanly.html" target="_blank">trang quản lý</a>.</div></div>
 
 <header class="wrap hero">
-  <div class="hero-text"><span class="hero-menu">MENU</span><h1 class="hero-name">BÉ NỐC ĂN VẶT</h1><p class="hero-tag">Ăn ngon · Giá xinh · Trà ngon vị thật</p></div>
+  <div class="hero-text"><span class="hero-menu">MENU</span><h1 class="hero-name">BÉ NỐC ĂN VẶT</h1><p class="hero-tag" id="heroTag">Ăn ngon · Giá xinh · Ship nhanh</p><a class="other-menu" id="otherTop" hidden></a></div>
   <button class="chip chip--warn" id="chip" type="button">Chưa có số</button>
 </header>
 
-<nav class="tabs" id="tabs" aria-label="Danh mục món"><div class="tabs-in" id="tabsIn"></div></nav>
+<div class="menubar" id="tabs">
+  <nav class="tabs" aria-label="Danh mục món"><div class="tabs-in" id="tabsIn"></div></nav>
+</div>
 
 <main id="menuView">
   <div class="wrap">
     <section class="ticket" id="ticket" aria-label="Số thứ tự của bạn"></section>
     <div id="banner"></div>
     <div id="menuList"><p class="loading">Đang tải menu…</p></div>
+    <a class="other-menu-end" id="otherEnd" hidden></a>
     <p class="menu-end">Cảm ơn bạn nhiều · Bé Nốc luôn bên bạn</p>
   </div>
 </main>
@@ -168,20 +182,28 @@ const ICON = {
 const state = {
   menu: [], items: new Map(), itemCat: new Map(),
   info: Object.assign({ queue: '', name: '', phone: '' }, store.get('info', {})),
-  cart: store.get('cart', []),
-  cartNote: store.get('cartNote', ''),
+  cart: [], cartNote: '',
   orders: store.get(DEMO ? 'demo.orders' : 'orders', []),
-  orderData: {}, editingInfo: false, view: 'menu'
+  orderData: {}, editingInfo: false, view: 'menu',
+  // ?menu=tra (mã QR quầy pha chế) → menu Trà · Cà phê; còn lại (?menu=an hoặc không có) → menu Ăn vặt của bếp
+  kind: BN.PARAMS.get('menu') === 'tra' ? 'pha_che' : 'bep'
 };
+const MENU = {
+  bep: { hero: 'BÉ NỐC ĂN VẶT', tag: 'Ăn ngon · Giá xinh · Ship nhanh', query: '?menu=an', link: 'Ăn vặt', linkDesc: 'Cơm trộn · Mì trộn · Kimbap · Đồ ăn vặt' },
+  pha_che: { hero: 'BÉ NỐC TRÀ NGON', tag: 'Trà ngon · Vị thật · Giá yêu', query: '?menu=tra', link: 'Trà · Cà phê', linkDesc: 'Trà sữa · Trà hoa quả · Cà phê · Matcha' }
+};
+const OTHER_KIND = state.kind === 'bep' ? 'pha_che' : 'bep';
+state.cart = store.get('cart.' + state.kind, []);
+state.cartNote = store.get('cartNote.' + state.kind, '');
 const saveInfo = () => store.set('info', state.info);
-const saveCart = () => { store.set('cart', state.cart); store.set('cartNote', state.cartNote); };
+const saveCart = () => { store.set('cart.' + state.kind, state.cart); store.set('cartNote.' + state.kind, state.cartNote); };
 const saveOrders = () => store.set(DEMO ? 'demo.orders' : 'orders', state.orders);
 
 function showView(v) {
   state.view = v;
   $('#menuView').hidden = v !== 'menu'; $('#statusView').hidden = v !== 'status'; $('#tabs').hidden = v !== 'menu';
   renderCartBar(); window.scrollTo(0, 0);
-  if (v === 'menu') { $$('.tab').forEach((t, i) => t.setAttribute('aria-current', i === 0 ? 'true' : 'false')); $('#tabs').scrollLeft = 0; }
+  if (v === 'menu') { $$('.tab').forEach((t, i) => t.setAttribute('aria-current', i === 0 ? 'true' : 'false')); $('.tabs').scrollLeft = 0; }
   if (v === 'status') renderStatus(); else renderBanner();
 }
 
@@ -239,8 +261,21 @@ function addBtnHtml(it) {
   const n = countInCart(it.id);
   return '<button class="add' + (n ? ' add--on' : '') + '" type="button" data-add="' + esc(it.id) + '" aria-label="Thêm ' + esc(it.name) + (n ? ', đang có ' + n + ' trong giỏ' : '') + '">' + (n ? '<span class="num">' + n + '</span>' : ICON.plus) + '</button>';
 }
+/* Danh mục của menu đang mở. Nếu menu này chưa có danh mục nào thì hiện toàn bộ. */
+function shownCats() {
+  const mineCats = state.menu.filter(c => (c.station || 'bep') === state.kind);
+  const hasOther = state.menu.some(c => (c.station || 'bep') === OTHER_KIND);
+  const o = MENU[OTHER_KIND];
+  [['#otherTop', 'Gọi ' + (OTHER_KIND === 'pha_che' ? 'đồ uống' : 'đồ ăn') + '? Xem menu ' + o.link + ' →'],
+   ['#otherEnd', '<b>Xem menu ' + o.link + ' →</b><span>' + o.linkDesc + '</span>']].forEach(([id, html]) => {
+    const a = $(id); a.hidden = !hasOther || !mineCats.length; a.href = 'index.html' + o.query; a.innerHTML = html;
+  });
+  return mineCats.length ? mineCats : state.menu;
+}
 function renderMenu() {
-  $('#menuList').innerHTML = state.menu.map(c =>
+  const cats = shownCats();
+  $('.hero-name').textContent = MENU[state.kind].hero; $('#heroTag').textContent = MENU[state.kind].tag;
+  $('#menuList').innerHTML = cats.map(c =>
     '<section class="cat cc-' + esc(c.color || 'vang') + '" id="cat-' + esc(c.id) + '" data-cat="' + esc(c.id) + '">' +
     '<h2 class="cat-title"><span>' + esc(c.name) + '</span></h2><ul class="items">' +
     c.items.map(it => {
@@ -253,7 +288,7 @@ function renderMenu() {
         (hint ? '<span class="item-opts">' + esc(hint) + '</span>' : '') + '</button>' +
         '<div class="item-side"><span class="item-price num">' + K(it.price) + '</span>' + addBtnHtml(it) + '</div></li>';
     }).join('') + '</ul></section>').join('');
-  $('#tabsIn').innerHTML = state.menu.map((c, i) => '<button class="tab cc-' + esc(c.color || 'vang') + '" type="button" data-go="' + esc(c.id) + '"' + (i === 0 ? ' aria-current="true"' : '') + '>' + esc(c.name) + '</button>').join('');
+  $('#tabsIn').innerHTML = cats.map((c, i) => '<button class="tab cc-' + esc(c.color || 'vang') + '" type="button" data-go="' + esc(c.id) + '"' + (i === 0 ? ' aria-current="true"' : '') + '>' + esc(c.name) + '</button>').join('');
   watchSections();
 }
 function refreshAddButtons() {
@@ -278,7 +313,7 @@ function watchSections() {
     $$('.tab').forEach(t => {
       const on = t.dataset.go === en.target.dataset.cat;
       t.setAttribute('aria-current', on ? 'true' : 'false');
-      if (on) { const bar = $('#tabs'); bar.scrollLeft = t.offsetLeft - bar.clientWidth / 2 + t.offsetWidth / 2; }
+      if (on) { const bar = $('.tabs'); bar.scrollLeft = t.offsetLeft - bar.clientWidth / 2 + t.offsetWidth / 2; }
     });
   }), { rootMargin: '-70px 0px -65% 0px' });
   $$('.cat').forEach(s => observer.observe(s));
@@ -366,7 +401,7 @@ function openCart() {
     '<span class="line-sub">' + esc(lineSub(l)) + '</span>' +
     '<div class="stepper stepper--sm" role="group" aria-label="Số lượng ' + esc(l.name) + '"><button type="button" data-line="' + i + '" data-d="-1" aria-label="Bớt 1">−</button><output class="num">' + l.qty + '</output><button type="button" data-line="' + i + '" data-d="1" aria-label="Thêm 1"' + (l.qty >= 50 ? ' disabled' : '') + '>+</button></div></li>').join('') + '</ul>'
     : '<p class="empty">Giỏ đang trống.</p>';
-  ui.sheet(ui.head('Giỏ của bạn', 'Kiểm tra món, nhập số thứ tự rồi gửi cho bếp.') +
+  ui.sheet(ui.head('Giỏ của bạn', 'Kiểm tra món, nhập số thứ tự rồi gửi cho quán.') +
     '<div class="sh-body"><div id="cLines">' + linesHtml() + '</div>' +
     '<div class="sum"><span>Tổng cộng</span><b class="num" id="cTotal">' + vnd(cartTotal()) + '</b></div>' +
     '<div class="who">' +
@@ -375,7 +410,7 @@ function openCart() {
     '<label class="field wide" for="cPhone">Số điện thoại (không bắt buộc)<input id="cPhone" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
     '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300" placeholder="Ví dụ: mang đồ uống ra trước, thêm bát nhỏ, dị ứng đậu phộng…">' + esc(state.cartNote) + '</textarea></label>' +
     '<p class="msg wide" id="cMsg" hidden></p><div class="dup wide" id="cDup" hidden></div></div></div>' +
-    '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho bếp</button></div>',
+    '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho quán</button></div>',
     sh => {
       const repaint = () => { $('#cLines', sh).innerHTML = linesHtml(); $('#cTotal', sh).textContent = vnd(cartTotal()); $('#cSend', sh).disabled = !state.cart.length; };
       repaint();
@@ -408,9 +443,9 @@ async function sendOrder(sh, confirm) {
     state.orders.unshift({ token: res.access_token, queue: queueNum(), paid: false }); saveOrders();
     state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons();
     state.editingInfo = false; renderTicket();
-    ui.close(); showView('status'); startPolling(); ui.toast('Đã gửi đơn cho bếp');
+    ui.close(); showView('status'); startPolling(); ui.toast('Đã gửi đơn cho quán');
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Gửi đơn cho bếp';
+    btn.disabled = false; btn.textContent = 'Gửi đơn cho quán';
     if (e.code === 'DUPLICATE_QUEUE') {
       dup.innerHTML = '<p><b>' + esc(e.hint || 'Số này đang có đơn chưa thanh toán') + '.</b> Nếu bạn ngồi cùng hoặc gọi thêm món, bấm “Vẫn gửi”. Nếu nhập nhầm, hãy sửa lại số.</p>' +
         '<div class="row"><button class="btn btn-sm" type="button" id="dupYes">Vẫn gửi</button><button class="btn btn-sm btn-line" type="button" id="dupNo">Sửa số</button></div>';
@@ -426,12 +461,28 @@ async function sendOrder(sh, confirm) {
 
 /* ---------- Trạng thái đơn ---------- */
 const activeOrders = () => state.orders.filter(o => !o.paid);
+const PART = { bep: 'Bếp', pha_che: 'Quầy pha chế' };
+function partText(p) {
+  if (p.status === 'cho_nhan') return 'Chờ nhận';
+  if (p.status === 'da_ra_mon') return 'Đã xong';
+  const left = p.estimated_ready_at ? Math.ceil((new Date(p.estimated_ready_at) - Date.now()) / 60000) : null;
+  return left != null && left > 0 ? 'Đang làm · còn ' + left + "'" : 'Sắp xong';
+}
+/* Đơn có cả đồ ăn và đồ uống: hiện tiến độ riêng của bếp và quầy pha chế */
+function partsHtml(d) {
+  const ps = d.stations || []; if (ps.length < 2) return '';
+  return '<ul class="parts">' + ps.map(p => {
+    const n = (d.items || []).filter(i => (i.station || 'bep') === p.station).reduce((s, i) => s + i.qty, 0);
+    return '<li><span><b>' + PART[p.station] + '</b> · ' + n + ' món</span><span class="pst pst-' + esc(p.status) + '">' + partText(p) + '</span></li>';
+  }).join('') + '</ul>';
+}
 function statusText(d) {
-  if (d.status === 'cho_nhan') return { title: 'Đang chờ bếp nhận đơn', sub: d.orders_ahead > 0 ? '<p class="eta"><b class="num">' + d.orders_ahead + '</b>đơn trước bạn</p>' : '<p>Bếp sẽ nhận đơn trong giây lát.</p>' };
+  const who = (d.stations || []).length === 1 && d.stations[0].station === 'pha_che' ? 'Quầy pha chế' : (d.stations || []).length > 1 ? 'Quán' : 'Bếp';
+  if (d.status === 'cho_nhan') return { title: 'Đang chờ ' + (who === 'Quán' ? 'quán' : who.toLowerCase()) + ' nhận đơn', sub: d.orders_ahead > 0 ? '<p class="eta"><b class="num">' + d.orders_ahead + '</b>đơn trước bạn</p>' : '<p>Đơn sẽ được nhận trong giây lát.</p>' };
   if (d.status === 'dang_lam') {
     const left = d.estimated_ready_at ? Math.ceil((new Date(d.estimated_ready_at) - Date.now()) / 60000) : null;
-    if (left !== null && left > 0) return { title: 'Bếp đang làm món', sub: '<p class="eta">Còn khoảng <b class="num">' + left + '</b>phút</p><p>Dự kiến xong lúc <span class="num">' + hhmm(d.estimated_ready_at) + '</span></p>' };
-    return { title: 'Sắp xong rồi', sub: '<p>Bếp đang hoàn thiện món, bạn đợi thêm chút nhé.</p>' };
+    if (left !== null && left > 0) return { title: who + ' đang làm món', sub: '<p class="eta">Còn khoảng <b class="num">' + left + '</b>phút</p><p>Dự kiến xong lúc <span class="num">' + hhmm(d.estimated_ready_at) + '</span></p>' };
+    return { title: 'Sắp xong rồi', sub: '<p>Món đang được hoàn thiện, bạn đợi thêm chút nhé.</p>' };
   }
   return { title: 'Món đã ra', sub: '<p>Nhân viên đang mang tới chỗ có thẻ số ' + esc(d.queue_number) + '.</p>' };
 }
@@ -443,7 +494,7 @@ function orderCard(o) {
   const count = items.reduce((s, i) => s + i.qty, 0);
   return '<article class="oc oc--' + esc(d.status) + '">' +
     '<div class="oc-top"><div class="qbox"><span>Số</span><b class="num">' + esc(d.queue_number) + '</b></div><div class="oc-state" aria-live="polite"><h2>' + t.title + '</h2>' + t.sub + '</div></div>' +
-    '<ol class="steps">' + ['Chờ bếp nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' +
+    '<ol class="steps">' + ['Chờ nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' + partsHtml(d) +
     '<details class="oc-items"><summary>' + count + ' món · <span class="num">' + vnd(d.total) + '</span> · ' + esc(d.customer_name) + '</summary><ul>' +
     items.map(i => '<li><span>' + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
       ((i.options && i.options.length) || i.note ? '<span class="line-sub">' + esc((i.options || []).map(x => x.choice).concat(i.note ? ['Ghi chú: ' + i.note] : []).join(' · ')) + '</span>' : '') + '</li>').join('') +

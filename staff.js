@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const { api, ui, esc, errText, DEMO } = BN;
-const ROLE = { owner: 'Chủ quán', staff: 'Nhân viên', kitchen: 'Máy bếp' };
+const ROLE = { owner: 'Chủ quán', staff: 'Nhân viên', kitchen: 'Máy bếp', bar: 'Máy pha chế' };
 
 /* Hiện màn hình đăng nhập vào `root` nếu chưa đăng nhập; khi xong gọi onReady(session) */
 async function requireLogin(root, opts) {
