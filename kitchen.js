@@ -7,7 +7,7 @@
    ===================================================================== */
 (function () {
 'use strict';
-const { api, ui, esc, vnd, hhmm, ago, errText, DEMO, STATIONS } = BN;
+const { api, ui, esc, vnd, hhmm, ago, errText, DEMO, STATIONS , qboxHtml, orderLabel, isTakeaway } = BN;
 const $ = (s, r = document) => r.querySelector(s);
 const STATION = window.BENOC_STATION === 'pha_che' ? 'pha_che' : 'bep';
 const OTHER = STATION === 'bep' ? 'pha_che' : 'bep';
@@ -136,7 +136,7 @@ function panelHtml(o) {
       '<button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
   }
   if (p.kind === 'cancel') {
-    return '<div class="panel"><p class="panel-title">Huỷ đơn số ' + o.queue_number + '? Cả đơn (đồ ăn và đồ uống) sẽ bị xoá, không tính doanh thu.</p>' +
+    return '<div class="panel"><p class="panel-title">Huỷ đơn ' + orderLabel(o) + '? Cả đơn (đồ ăn và đồ uống) sẽ bị xoá, không tính doanh thu.</p>' +
       '<div class="row"><button class="btn btn-danger grow" type="button" data-act="cancel-ok" data-id="' + o.id + '">Huỷ đơn</button><button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Giữ lại</button></div></div>';
   }
   return '';
@@ -154,7 +154,7 @@ function cardHtml(o, col) {
   const count = items.reduce((s, i) => s + i.qty, 0);
   const other = col === 'thanh_toan' ? (() => { const p = part(o, OTHER); return p && p.status !== 'da_ra_mon' ? '<p class="kc-other"><b>' + STATIONS[OTHER] + ':</b> ' + partStatus(p) + '</p>' : ''; })() : otherHtml(o);
   return '<article class="kc" data-order="' + o.id + '">' +
-    '<div class="kc-top"><div class="qbox"><span>Số</span><b class="num">' + o.queue_number + '</b></div>' +
+    '<div class="kc-top">' + qboxHtml(o) +
     '<div class="kc-who"><b>' + esc(o.customer_name) + '</b><span>' + (o.customer_phone ? esc(o.customer_phone) + ' · ' : '') + 'đặt lúc ' + hhmm(o.created_at) + ' · ' + count + ' món</span></div>' + timerHtml(o, col) + '</div>' +
     itemsHtml(items, col === 'thanh_toan' && !(o.stations || []).every(x => x.station === STATION)) + other + (o.note ? '<p class="kc-note">Ghi chú: ' + esc(o.note) + '</p>' : '') +
     '<div class="kc-foot"><span class="kc-total num">' + (isMinePay(o) ? vnd(o.total) : '') + '</span>' + actionsHtml(o, col) + '</div>' + panelHtml(o) + '</article>';
@@ -175,7 +175,7 @@ function render() {
   });
   $('#seg').innerHTML = COLS.map(([k, t]) => '<button type="button" class="cc-' + k + '" data-seg="' + k + '" aria-pressed="' + (state.col === k) + '">' + t + '<span class="n num">' + by[k].length + '</span></button>').join('');
   const calls = []; state.orders.forEach(o => o.calls.forEach(c => calls.push({ c, o })));
-  $('#calls').innerHTML = calls.map(({ c, o }) => '<div class="call" role="alert"><b class="num">' + o.queue_number + '</b><span class="grow">' + esc(o.customer_name) + ' gọi nhân viên · ' + ago(c.created_at) + '</span><button class="btn btn-sm" type="button" data-call="' + c.id + '">Đã tới</button></div>').join('');
+  $('#calls').innerHTML = calls.map(({ c, o }) => '<div class="call" role="alert"><b class="num">' + (isTakeaway(o) ? 'Mang về' : o.queue_number) + '</b><span class="grow">' + esc(o.customer_name) + ' gọi nhân viên · ' + ago(c.created_at) + '</span><button class="btn btn-sm" type="button" data-call="' + c.id + '">Đã tới</button></div>').join('');
   document.title = (by.cho_nhan.length ? '(' + by.cho_nhan.length + ') ' : '') + SHORT[STATION] + ' Bé Nốc';
 }
 
@@ -197,14 +197,14 @@ async function onAction(e) {
       try { state.panels[id].minutes = await api.suggestWait(id, STATION); } catch (err) { state.panels[id].minutes = IS_BEP ? 15 : 5; }
       render(); break;
     case 'min': { const p = state.panels[id]; p.minutes = Math.max(5, Math.min(90, (p.minutes || 15) + Number(b.dataset.d))); render(); break; }
-    case 'accept-ok': { const m = state.panels[id].minutes; delete state.panels[id]; run(b, () => api.acceptOrder(id, m, STATION), 'Đã nhận đơn số ' + o.queue_number + ' · ' + m + ' phút', 'dang_lam'); break; }
+    case 'accept-ok': { const m = state.panels[id].minutes; delete state.panels[id]; run(b, () => api.acceptOrder(id, m, STATION), 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút', 'dang_lam'); break; }
     case 'extend': run(b, () => api.extendWait(id, 5, STATION), 'Đã báo khách thêm 5 phút'); break;
-    case 'served': run(b, () => api.markServed(id, STATION), 'Số ' + o.queue_number + ' đã ra món', isMinePay(o) ? 'thanh_toan' : null); break;
+    case 'served': run(b, () => api.markServed(id, STATION), 'Đơn ' + orderLabel(o) + ' đã ra món', isMinePay(o) ? 'thanh_toan' : null); break;
     case 'pay': state.panels[id] = { kind: 'pay', given: 0 }; render(); break;
     case 'given': state.panels[id].given = Number(b.dataset.v); render(); break;
     case 'pay-ok': { delete state.panels[id]; run(b, () => api.completePayment(id, b.dataset.m), 'Đã thu ' + vnd(o.total) + (b.dataset.m === 'tien_mat' ? ' tiền mặt' : ' chuyển khoản'), 'cho_nhan'); break; }
     case 'cancel': state.panels[id] = { kind: 'cancel' }; render(); break;
-    case 'cancel-ok': delete state.panels[id]; run(b, () => api.cancelOrder(id), 'Đã huỷ đơn số ' + o.queue_number); break;
+    case 'cancel-ok': delete state.panels[id]; run(b, () => api.cancelOrder(id), 'Đã huỷ đơn ' + orderLabel(o)); break;
     case 'close': delete state.panels[id]; render(); break;
   }
 }
