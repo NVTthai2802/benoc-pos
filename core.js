@@ -180,6 +180,12 @@ function supabaseApi() {
       p_dine_type: o.dine === 'mang_ve' ? 'mang_ve' : 'tai_quan'
     }),
     getMyOrder: token => rpc('get_my_order', { p_token: token }),
+    /* Nghe tín hiệu "đơn vừa đổi" trên kênh riêng của đơn (cơ sở dữ liệu gửi khi bếp/pha chế bấm). Trả về hàm huỷ nghe. */
+    async watchOrder(orderId, onChange) {
+      const c = await cl();
+      const ch = c.channel('don-' + orderId).on('broadcast', { event: 'changed' }, () => onChange()).subscribe();
+      return () => { try { c.removeChannel(ch); } catch (e) { /* bỏ qua */ } };
+    },
     callStaff: token => rpc('call_staff', { p_token: token }),
 
     /* ---------- Đăng nhập ---------- */
@@ -549,6 +555,7 @@ function demoApi() {
         return { order_id: o.id, access_token: o.access_token, total };
       });
     },
+    async watchOrder() { return () => {}; }, // bản xem thử tự hỏi lại 2 giây/lần
     async getMyOrder(token) {
       const db = load(); const o = db.orders.find(x => x.access_token === token); if (!o) return null;
       return {
