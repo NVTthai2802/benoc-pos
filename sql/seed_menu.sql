@@ -193,6 +193,54 @@ from (values
 join menu_items mi on mi.name = v.item
 join option_groups g on g.name = v.grp;
 
+-- ---------- Topping đồ uống, lượng đường, lượng đá (giống cap-nhat-5) ----------
+do $$
+declare v_id int;
+begin
+  if not exists (select 1 from option_groups where name = 'Lượng đường') then
+    insert into option_groups (name, title, min_select, max_select, sort_order, kind)
+    values ('Lượng đường', 'Đường', 1, 1, 3, 'do_uong') returning id into v_id;
+    insert into option_choices (group_id, name, price_delta, is_default, sort_order) values
+      (v_id, 'Không đường', 0, false, 1), (v_id, 'Ít đường', 0, false, 2), (v_id, 'Đường bình thường', 0, true, 3);
+  end if;
+  if not exists (select 1 from option_groups where name = 'Lượng đá') then
+    insert into option_groups (name, title, min_select, max_select, sort_order, kind)
+    values ('Lượng đá', 'Đá', 1, 1, 4, 'do_uong') returning id into v_id;
+    insert into option_choices (group_id, name, price_delta, is_default, sort_order) values
+      (v_id, 'Không đá', 0, false, 1), (v_id, 'Ít đá', 0, false, 2), (v_id, 'Đá bình thường', 0, true, 3);
+  end if;
+  if not exists (select 1 from option_groups where name = 'Topping đồ uống') then
+    insert into option_groups (name, title, min_select, max_select, sort_order, kind)
+    values ('Topping đồ uống', 'Topping thêm', 0, 7, 5, 'do_uong') returning id into v_id;
+    insert into option_choices (group_id, name, price_delta, is_default, sort_order) values
+      (v_id, 'Trân châu hoàng gia', 5000, false, 1),
+      (v_id, 'Sương sáo',           5000, false, 2),
+      (v_id, 'Thạch dừa',           5000, false, 3),
+      (v_id, 'Thạch trà',           5000, false, 4),
+      (v_id, 'Thạch pudding trứng', 5000, false, 5),
+      (v_id, 'Kem trứng',           5000, false, 6),
+      (v_id, 'Kem cheese',          5000, false, 7);
+  end if;
+end $$;
+
+-- Đường + đá: mọi đồ uống (quầy pha chế + Nước uống). Thứ tự: sau upsize / chọn kem.
+insert into menu_item_option_groups (menu_item_id, group_id, sort_order)
+select mi.id, g.id, case g.name when 'Lượng đường' then 5 else 6 end
+  from menu_items mi
+  join menu_categories c on c.id = mi.category_id
+  join option_groups g on g.name in ('Lượng đường', 'Lượng đá')
+ where c.station = 'pha_che' or c.name = 'Nước uống'
+on conflict (menu_item_id, group_id) do nothing;
+
+-- Topping: trà sữa, trà hoa quả, sốt khoai môn, matcha · cacao · khoai môn, món nên thử
+insert into menu_item_option_groups (menu_item_id, group_id, sort_order)
+select mi.id, g.id, 7
+  from menu_items mi
+  join menu_categories c on c.id = mi.category_id
+  join option_groups g on g.name = 'Topping đồ uống'
+ where c.name in ('Trà sữa', 'Trà hoa quả', 'Sốt khoai môn tươi', 'Matcha · Cacao · Khoai môn', 'Món nên thử')
+on conflict (menu_item_id, group_id) do nothing;
+
 -- ---------- Ảnh minh hoạ ban đầu (cắt từ ảnh menu của quán) ----------
 -- Ảnh nằm trong thư mục img/ của trang web. Chủ quán đổi ảnh trong trang Quản lý > Menu.
 update menu_items mi set image_path = 'img/' || v.file || '.jpg'
