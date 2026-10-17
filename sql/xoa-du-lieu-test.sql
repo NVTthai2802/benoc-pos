@@ -5,6 +5,7 @@
 -- =====================================================================
 begin;
 delete from staff_calls;
+delete from order_stations;
 delete from order_items;
 delete from orders;
 delete from sales;
