@@ -59,3 +59,34 @@
 .st-cho_nhan { background: #FFE7C2; color: #8A4B00; } .st-dang_lam { background: #D7EAFA; color: #1E5A8C; } .st-da_ra_mon { background: var(--ok-soft); color: var(--ok); }
 .kc-items .stn { display: inline-block; margin-left: 6px; font: 600 11px/1.6 var(--f-body); padding: 0 6px; border-radius: 6px; background: var(--line); color: var(--ink-2); vertical-align: 2px; }
 .brand .station-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--station); margin-right: 2px; }
+
+/* Đã thu tiền / thu thêm */
+.kc-total { display: flex; flex-direction: column; gap: 2px; }
+.paid { font: 600 12px/1.3 var(--f-body); border-radius: 8px; padding: 2px 6px; width: fit-content; }
+.paid-ok { color: var(--ok); background: var(--ok-soft); }
+.paid-warn { color: var(--warn); background: var(--warn-soft); }
+/* Đơn giao hàng */
+.kc-addr { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: #dff3ee; color: #1f4f45; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.kc-when { font-weight: 700; }
+.kc-who a { color: inherit; }
+/* Món thêm sau */
+.kc-items li.new { background: var(--warn-soft); border-radius: 8px; }
+.new-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--warn); color: #fff; font: 700 11px/1.6 var(--f-body); letter-spacing: .04em; }
+/* Sửa đơn */
+.ed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ed-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.ed-nm { display: flex; flex-direction: column; min-width: 0; }
+.ed-nm small { color: var(--ink-2); }
+.ed-nm .in { color: var(--warn); }
+.ed-q { display: flex; align-items: center; gap: 6px; flex: none; }
+.ed-q output { min-width: 22px; text-align: center; font-weight: 700; }
+/* Chọn món để thêm */
+.pk-cat h3 { margin: 12px 0 6px; font: 700 15px/1.2 var(--f-head); }
+.pk-item { display: flex; justify-content: space-between; width: 100%; padding: 10px 12px; margin-bottom: 6px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pk-item:hover { border-color: var(--red); }
+.pk-og { border: 0; padding: 0; margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.pk-og legend { font-weight: 700; margin-bottom: 6px; }
+.pk-ch { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer; }
+.pk-ch:has(input:checked) { border-color: var(--red); background: var(--red-soft); }
+.pk-ch input { accent-color: var(--red); }
+.pk-ch span:nth-child(2) { flex: 1; }
