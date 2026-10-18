@@ -98,12 +98,14 @@ function timerHtml(o, col) {
 }
 /* Món thêm sau khi nơi làm đã nhận đơn → nhãn MỚI để người làm không bỏ sót */
 function isNew(o, i) { const p = part(o, i.station); return !!(p && p.accepted_at && i.added_at && new Date(i.added_at) > new Date(p.accepted_at)); }
+const isTopping = x => /topping/i.test(x.group || '');
 function itemsHtml(items, tagStation, o) {
   return '<ul class="kc-items">' + items.map(i => { const sz = sizeOf(i.options), rest = (i.options || []).filter(x => !isSizeOpt(x)); return '<li' + (o && isNew(o, i) ? ' class="new"' : '') + '><span class="q num">' + i.qty + '×</span><span><span class="nm">' + esc(i.item_name) + '</span>' +
     (sz ? '<span class="sz sz-' + sz + '">SIZE ' + sz + '</span>' : '') +
     (o && isNew(o, i) ? '<span class="new-tag">MỚI</span>' : '') +
     (tagStation && i.station !== 'bep' ? '<span class="stn">' + SHORT[i.station] + '</span>' : '') +
-    (rest.length ? '<span class="op">' + esc(rest.map(x => x.choice).join(' · ')) + '</span>' : '') +
+    (rest.filter(x => !isTopping(x)).length ? '<span class="op">' + esc(rest.filter(x => !isTopping(x)).map(x => x.choice).join(' · ')) + '</span>' : '') +
+    (rest.some(isTopping) ? '<span class="tp">' + rest.filter(isTopping).map(x => '<b>+ ' + esc(x.choice) + '</b>').join('') + '</span>' : '') +
     (i.note ? '<span class="in">' + esc(i.note) + '</span>' : '') + '</span></li>'; }).join('') + '</ul>';
 }
 function partStatus(p) {
@@ -271,7 +273,7 @@ function detailItem(i) {
   const opts = i.options || [], base = i.unit_price - opts.reduce((t, x) => t + (x.price || 0), 0), sz = sizeOf(opts);
   return '<li class="dt-it"><div class="dt-row"><b><span class="num">' + i.qty + '×</span> ' + esc(i.item_name) + (sz ? ' <span class="sz sz-' + sz + '">SIZE ' + sz + '</span>' : '') + '</b><b class="num">' + vnd(i.unit_price * i.qty) + '</b></div>' +
     (opts.length ? '<div class="dt-row dt-sub"><span>' + (sz ? 'Giá size M' : 'Giá món') + '</span><span class="num">' + vnd(base) + '</span></div>' : '') +
-    opts.filter(x => !(sz === 'M' && isSizeOpt(x))).map(x => '<div class="dt-row dt-sub"><span>' + (isSizeOpt(x) ? 'Lên <b>size L</b>' : esc(x.group) + ': <b>' + esc(x.choice) + '</b>') + '</span><span class="num">' + (x.price ? '+' + vnd(x.price) : '0đ') + '</span></div>').join('') +
+    opts.filter(x => !(sz === 'M' && isSizeOpt(x))).map(x => '<div class="dt-row dt-sub' + (isTopping(x) ? ' dt-tp' : '') + '"><span>' + (isSizeOpt(x) ? 'Lên <b>size L</b>' : esc(x.group) + ': <b>' + esc(x.choice) + '</b>') + '</span><span class="num">' + (x.price ? '+' + vnd(x.price) : '0đ') + '</span></div>').join('') +
     (i.qty > 1 ? '<div class="dt-row dt-sub"><span>Mỗi phần</span><span class="num">' + vnd(i.unit_price) + ' × ' + i.qty + '</span></div>' : '') +
     (i.note ? '<p class="dt-note">Ghi chú món: ' + esc(i.note) + '</p>' : '') + '</li>';
 }
