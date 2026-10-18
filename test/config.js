@@ -1,7 +1,7 @@
 /* =====================================================================
    CẤU HÌNH BÉ NỐC POS — 2 môi trường
-   - PRODUCT: quán dùng thật       https://<tên>.pages.dev/          (Cloudflare Pages, nhánh main)
-   - TEST:    thử tính năng mới    https://<tên>.pages.dev/test/
+   - PRODUCT: quán dùng thật       https://benoc-pos.pages.dev/          (Cloudflare Pages, nhánh main)
+   - TEST:    thử tính năng mới    https://benoc-pos.pages.dev/test/
    (bản cũ trên GitHub Pages vẫn chạy: https://nvtthai2802.github.io/benoc-pos/ và /test/)
    Trang tự chọn môi trường theo địa chỉ: nằm trong thư mục /test/ là TEST.
    Để trống 2 dòng Supabase = chế độ xem thử (dữ liệu lưu trong trình duyệt).
