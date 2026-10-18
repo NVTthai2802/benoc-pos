@@ -202,7 +202,10 @@ create table sales (
   paid_at        timestamptz not null default now(),
   cook_minutes   int,                       -- từ lúc nhận đến lúc ra món cả đơn
   station_minutes jsonb,                    -- thời gian làm từng nơi, ví dụ {"bep": 9, "pha_che": 4} (để ước tính chờ)
-  cashier_id     uuid references employees(id)
+  cashier_id     uuid references employees(id),
+  customer_name  text,                      -- tên khách trên hoá đơn
+  customer_phone text,
+  address        text                       -- địa chỉ nếu là đơn đi ship
 );
 create index sales_paid_at on sales(paid_at desc);
 
@@ -372,7 +375,8 @@ begin
   select * into o from orders where id = p_order for update;
   if not found then return; end if;
   insert into sales (id, queue_number, dine_type, total, payment_method, items,
-                     ordered_at, accepted_at, served_at, paid_at, cook_minutes, station_minutes, cashier_id)
+                     ordered_at, accepted_at, served_at, paid_at, cook_minutes, station_minutes, cashier_id,
+                     customer_name, customer_phone, address)
   select o.id, o.queue_number, o.dine_type, o.total, coalesce(p_method, o.paid_method, 'tien_mat'),
          coalesce((select jsonb_agg(jsonb_build_object(
                      'menu_item_id', i.menu_item_id, 'name', i.item_name,
@@ -384,7 +388,8 @@ begin
          (select jsonb_object_agg(s.station, round(extract(epoch from (s.served_at - s.accepted_at)) / 60)::int)
             from order_stations s
            where s.order_id = o.id and s.accepted_at is not null and s.served_at is not null),
-         coalesce(o.paid_by, my_employee_id());
+         coalesce(o.paid_by, my_employee_id()),
+         o.customer_name, o.customer_phone, o.address;
   delete from orders where id = o.id;
 end $$;
 revoke all on all functions in schema private from public;
