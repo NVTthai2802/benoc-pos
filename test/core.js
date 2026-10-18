@@ -416,7 +416,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v7'; // v7: đơn mang về (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v8'; // v8: đồ uống chọn Size M / Size L (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 // Nhận cả /bep.html lẫn /bep (Cloudflare Pages tự bỏ đuôi .html)
@@ -480,8 +480,20 @@ function refreshOrder(db, id) {
   if (all && o.paid_amount != null && o.paid_amount === o.total) demoFinalize(db, id, null, null);
 }
 
+/* Giống sql/cap-nhat-9-size-m-l.sql: nhóm "Upsize" của đồ uống thành chọn Size M (chọn sẵn) / Size L */
+function demoSizeMigrate(S) {
+  const groups = S.option_groups || [], choices = S.option_choices || [];
+  let next = Math.max(0, ...choices.map(c => c.id)) + 1;
+  groups.filter(g => g.kind === 'do_uong').forEach(g => {
+    const up = choices.filter(c => c.group_id === g.id && /^upsize/i.test(c.name)); if (!up.length) return;
+    up.forEach(c => Object.assign(c, { name: 'Size L', is_default: false, sort_order: 2 }));
+    choices.push({ id: next++, group_id: g.id, name: 'Size M', price_delta: 0, is_default: true, is_available: true, sort_order: 1 });
+    Object.assign(g, { title: 'Size', min_select: 1, max_select: 1, name: g.name.replace(/^upsize/i, 'Size M/L') });
+  });
+  return S;
+}
 function demoSeed() {
-  const S = JSON.parse(JSON.stringify(window.BENOC_SEED || {}));
+  const S = demoSizeMigrate(JSON.parse(JSON.stringify(window.BENOC_SEED || {})));
   const now = Date.now(), R = rng(2802);
   const db = {
     shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2, bar_capacity: 2 },
@@ -543,7 +555,7 @@ function demoSeed() {
     refreshOrder(db, id);
   };
   mk(7, 'Minh', 6, [['Cơm heo chua ngọt', 1, [{ group: 'Topping thêm', choice: 'Trứng ốp la', price: 5000 }], 'ít cay'], ['Hồng trà sữa trân châu', 1]], null, ['bep']);
-  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Upsize', choice: 'Upsize', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
+  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size L', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
   mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Đường', choice: 'Ít đường', price: 0 }]]]);
   mk(null, 'Hà', 3, [['Cơm gà viên', 1], ['Trà quất', 1, [{ group: 'Đá', choice: 'Ít đá', price: 0 }]]]); // đơn mang về (không có số thẻ)
   return db;
@@ -794,7 +806,15 @@ function demoApi() {
 
 const api = DEMO ? demoApi() : supabaseApi();
 
+/* Size đồ uống: nhóm có 2 lựa chọn "Size M" và "Size L" */
+const SIZE_RE = /^size\s*([ml])$/i;
+const sizeGroup = it => (it.option_groups || []).find(g => g.choices.length >= 2 && g.choices.some(c => /^size m$/i.test(c.name)) && g.choices.some(c => /^size l$/i.test(c.name))) || null;
+/* Size của 1 dòng món đã đặt ('M' | 'L' | null). Đơn cũ ghi "Upsize" thì là L */
+const sizeOf = opts => { for (const o of opts || []) { const m = SIZE_RE.exec(o.choice || ''); if (m) return m[1].toUpperCase(); if (/^upsize/i.test(o.choice || '')) return 'L'; } return null; };
+const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
+
 window.BN = {
+  sizeGroup, sizeOf, isSizeOpt,
   CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
