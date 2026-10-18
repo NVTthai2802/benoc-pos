@@ -571,7 +571,7 @@ async function renderClock(main) {
    ===================================================================== */
 async function renderSettings(main) {
   const cfg = await api.settings();
-  const orderUrl = new URL('index.html', location.href).href.split('#')[0];
+  const orderUrl = new URL('./', location.href).href.split('#')[0].split('?')[0]; // ví dụ https://benoc-pos.pages.dev/ (mã QR ngắn hơn)
   main.innerHTML = '<div class="ptitle"><h1>Cài đặt</h1></div>' +
     '<section class="box cc-nau"><h2 class="box-title"><span>Quán</span></h2><div class="sh-body" style="padding:0">' +
     '<label class="field" for="sName">Tên quán<input id="sName" maxlength="40" value="' + esc(cfg.shop_name) + '"></label>' +
