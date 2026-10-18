@@ -7,7 +7,7 @@
    ===================================================================== */
 (function () {
 'use strict';
-const { api, ui, esc, vnd, K, hhmm, ago, errText, DEMO, STATIONS, qboxHtml, orderLabel, isTakeaway, isDelivery, sizeOf, isSizeOpt, sizeGroup } = BN;
+const { api, ui, esc, vnd, K, hhmm, ago, errText, DEMO, STATIONS, qboxHtml, orderLabel, isTakeaway, isDelivery, sizeOf, isSizeOpt, sizeGroup, sizeText, fold } = BN;
 const $ = (s, r = document) => r.querySelector(s);
 const STATION = window.BENOC_STATION === 'pha_che' ? 'pha_che' : 'bep';
 const OTHER = STATION === 'bep' ? 'pha_che' : 'bep';
@@ -101,7 +101,7 @@ function isNew(o, i) { const p = part(o, i.station); return !!(p && p.accepted_a
 const isTopping = x => /topping/i.test(x.group || '');
 function itemsHtml(items, tagStation, o) {
   return '<ul class="kc-items">' + items.map(i => { const sz = sizeOf(i.options), rest = (i.options || []).filter(x => !isSizeOpt(x)); return '<li' + (o && isNew(o, i) ? ' class="new"' : '') + '><span class="q num">' + i.qty + '×</span><span><span class="nm">' + esc(i.item_name) + '</span>' +
-    (sz ? '<span class="sz sz-' + sz + '">SIZE ' + sz + '</span>' : '') +
+    (sz ? '<span class="sz sz-' + sz + '">' + sizeText(sz) + '</span>' : '') +
     (o && isNew(o, i) ? '<span class="new-tag">MỚI</span>' : '') +
     (tagStation && i.station !== 'bep' ? '<span class="stn">' + SHORT[i.station] + '</span>' : '') +
     (rest.filter(x => !isTopping(x)).length ? '<span class="op">' + esc(rest.filter(x => !isTopping(x)).map(x => x.choice).join(' · ')) + '</span>' : '') +
@@ -271,9 +271,9 @@ async function onAction(e) {
 const DINE = { tai_quan: 'Ăn tại quán', mang_ve: 'Mang về', giao_hang: 'Giao hàng' };
 function detailItem(i) {
   const opts = i.options || [], base = i.unit_price - opts.reduce((t, x) => t + (x.price || 0), 0), sz = sizeOf(opts);
-  return '<li class="dt-it"><div class="dt-row"><b><span class="num">' + i.qty + '×</span> ' + esc(i.item_name) + (sz ? ' <span class="sz sz-' + sz + '">SIZE ' + sz + '</span>' : '') + '</b><b class="num">' + vnd(i.unit_price * i.qty) + '</b></div>' +
-    (opts.length ? '<div class="dt-row dt-sub"><span>' + (sz ? 'Giá size M' : 'Giá món') + '</span><span class="num">' + vnd(base) + '</span></div>' : '') +
-    opts.filter(x => !(sz === 'M' && isSizeOpt(x))).map(x => '<div class="dt-row dt-sub' + (isTopping(x) ? ' dt-tp' : '') + '"><span>' + (isSizeOpt(x) ? 'Lên <b>size L</b>' : esc(x.group) + ': <b>' + esc(x.choice) + '</b>') + '</span><span class="num">' + (x.price ? '+' + vnd(x.price) : '0đ') + '</span></div>').join('') +
+  return '<li class="dt-it"><div class="dt-row"><b><span class="num">' + i.qty + '×</span> ' + esc(i.item_name) + (sz ? ' <span class="sz sz-' + sz + '">' + sizeText(sz) + '</span>' : '') + '</b><b class="num">' + vnd(i.unit_price * i.qty) + '</b></div>' +
+    (opts.length ? '<div class="dt-row dt-sub"><span>' + (sz === 'M' || sz === 'L' ? 'Giá size M' : 'Giá món') + '</span><span class="num">' + vnd(base) + '</span></div>' : '') +
+    opts.filter(x => !(sz === 'M' && isSizeOpt(x))).map(x => '<div class="dt-row dt-sub' + (isTopping(x) ? ' dt-tp' : '') + '"><span>' + (isSizeOpt(x) ? (sz === 'UP' ? '<b>Upsize</b>' : 'Lên <b>size ' + sz + '</b>') : esc(x.group) + ': <b>' + esc(x.choice) + '</b>') + '</span><span class="num">' + (x.price ? '+' + vnd(x.price) : '0đ') + '</span></div>').join('') +
     (i.qty > 1 ? '<div class="dt-row dt-sub"><span>Mỗi phần</span><span class="num">' + vnd(i.unit_price) + ' × ' + i.qty + '</span></div>' : '') +
     (i.note ? '<p class="dt-note">Ghi chú món: ' + esc(i.note) + '</p>' : '') + '</li>';
 }
@@ -299,10 +299,10 @@ async function openPicker(o) {
   const cats = menu.filter(c => owner || (c.station || 'bep') === STATION);
   const listView = () => ui.head('Thêm món vào đơn', esc(orderLabel(o))) + '<div class="sh-body">' +
     '<input class="search" id="pkQ" type="search" placeholder="Tìm món…" aria-label="Tìm món">' +
-    '<div id="pkList">' + cats.map(c => '<section class="pk-cat"><h3>' + esc(c.name) + '</h3>' + c.items.map(it => '<button class="pk-item" type="button" data-pick="' + esc(it.id) + '" data-n="' + esc(it.name.toLowerCase()) + '"><span>' + esc(it.name) + '</span><b class="num">' + priceLabel(it) + '</b></button>').join('') + '</section>').join('') + '</div></div>';
+    '<div id="pkList">' + cats.map(c => '<section class="pk-cat"><h3>' + esc(c.name) + '</h3>' + c.items.map(it => '<button class="pk-item" type="button" data-pick="' + esc(it.id) + '" data-n="' + esc(fold(it.name)) + '"><span>' + esc(it.name) + '</span><b class="num">' + priceLabel(it) + '</b></button>').join('') + '</section>').join('') + '</div></div>';
   ui.sheet(listView(), sh => {
     const q = $('#pkQ', sh);
-    q.oninput = () => { const v = q.value.trim().toLowerCase(); sh.querySelectorAll('.pk-item').forEach(x => { x.hidden = !!v && x.dataset.n.indexOf(v) < 0; }); sh.querySelectorAll('.pk-cat').forEach(c => { c.hidden = ![...c.querySelectorAll('.pk-item')].some(x => !x.hidden); }); };
+    q.oninput = () => { const v = fold(q.value); sh.querySelectorAll('.pk-item').forEach(x => { x.hidden = !!v && x.dataset.n.indexOf(v) < 0; }); sh.querySelectorAll('.pk-cat').forEach(c => { c.hidden = ![...c.querySelectorAll('.pk-item')].some(x => !x.hidden); }); };
     sh.addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; const it = cats.flatMap(c => c.items).find(x => x.id === b.dataset.pick); if (it) pickOptions(o, it); });
   });
 }
