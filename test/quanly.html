@@ -131,7 +131,7 @@ const TABS = {
   owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
   staff: [['chamcong', 'Chấm công', 'cam']]
 };
-const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
+const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
 
 $('#demoNote').hidden = !DEMO;
 BN.staff.requireLogin($('#app'), { title: 'Quản lý quán', onReady: s => { state.session = s; boot(); } });
@@ -289,36 +289,51 @@ async function renderMenu(main) {
   const sub = state.menuSub;
   let body = '';
   if (sub === 'mon') {
-    const q = state.menuQuery.trim().toLowerCase();
+    // Tìm món: không phân biệt dấu, khớp tên / mô tả; chỉ trong danh mục đang chọn
+    const words = BN.fold(state.menuQuery).split(/\s+/).filter(Boolean);
+    const hit = i => words.every(w => BN.fold(i.name + ' ' + (i.description || '') + ' ' + (i.tag || '')).indexOf(w) >= 0);
+    const inCat = c => state.menuCat === 'all' || String(state.menuCat) === String(c.id);
     const cats = m.categories.concat(m.items.some(i => !i.category_id) ? [{ id: null, name: 'Chưa xếp danh mục', color: 'nau' }] : []);
     body = '<div class="toolbar"><input class="search" id="mq" type="search" placeholder="Tìm món…" value="' + esc(state.menuQuery) + '" aria-label="Tìm món"><button class="btn" type="button" id="addItem">+ Thêm món</button></div>' +
       '<div class="chips"><button class="chipbtn" type="button" data-mcat="all" aria-pressed="' + (state.menuCat === 'all') + '">Tất cả</button>' + m.categories.map(c => '<button class="chipbtn" type="button" data-mcat="' + c.id + '" aria-pressed="' + (String(state.menuCat) === String(c.id)) + '">' + esc(c.name) + '</button>').join('') + '</div>' +
-      cats.filter(c => state.menuCat === 'all' || String(state.menuCat) === String(c.id)).map(c => {
-        const its = m.items.filter(i => i.category_id === c.id && (!q || i.name.toLowerCase().includes(q)));
+      (cats.filter(inCat).map(c => {
+        const its = m.items.filter(i => i.category_id === c.id && hit(i));
         if (!its.length) return '';
         return '<section class="box cc-' + esc(c.color) + '"><h2 class="box-title"><span>' + esc(c.name) + '</span></h2><ul class="list">' + its.map(it =>
           '<li><div class="lrow"><button class="thumb-btn" style="border:0;background:none;padding:0" type="button" data-item="' + esc(it.id) + '" aria-label="Sửa ' + esc(it.name) + '">' + thumb(it, m.categories) + '</button>' +
           '<button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-item="' + esc(it.id) + '"><span class="lname">' + esc(it.name) + (it.tag ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
           '<span class="lsub num">' + vnd(it.price) + (it.group_ids.length ? ' · ' + esc(it.group_ids.map(g => (m.groups.find(x => x.id === g) || {}).name).filter(Boolean).join(', ')) : '') + '</span></button>' +
           '<label class="switch"><input type="checkbox" data-avail="' + esc(it.id) + '"' + (it.is_available ? ' checked' : '') + '><span class="track"></span><span class="sw-l">' + (it.is_available ? 'Đang bán' : 'Hết món') + '</span></label></div></li>').join('') + '</ul></section>';
-      }).join('') || '<p class="empty">Không có món nào khớp.</p>';
+      }).join('') || (() => {
+        const other = words.length ? m.items.filter(hit).length : 0;
+        return '<p class="empty">Không có món nào khớp' + (state.menuCat !== 'all' ? ' trong danh mục này' : '') + '.</p>' +
+          (state.menuCat !== 'all' && other ? '<p style="text-align:center"><button class="btn btn-line btn-sm" type="button" data-mcat="all">Có ' + other + ' món khớp ở danh mục khác · Xem tất cả</button></p>' : '');
+      })());
   } else if (sub === 'danhmuc') {
     body = '<div class="toolbar"><span class="muted small" style="flex:1">Thứ tự ở đây là thứ tự khách thấy trên menu.</span><button class="btn" type="button" id="addCat">+ Thêm danh mục</button></div>' +
       '<section class="box"><ul class="list">' + m.categories.map((c, i) => '<li class="cc-' + esc(c.color) + '"><div class="lrow"><span class="dot"></span><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-cat="' + c.id + '"><span class="lname">' + esc(c.name) + '</span><span class="lsub">' + m.items.filter(x => x.category_id === c.id).length + ' món · ' + ((c.station || 'bep') === 'pha_che' ? 'Quầy pha chế' : 'Bếp nóng') + '</span></button>' +
         '<span class="row"><button class="btn btn-sm btn-line" type="button" data-move="' + c.id + '" data-d="-1" aria-label="Lên"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="btn btn-sm btn-line" type="button" data-move="' + c.id + '" data-d="1" aria-label="Xuống"' + (i === m.categories.length - 1 ? ' disabled' : '') + '>↓</button></span></div></li>').join('') + '</ul></section>';
   } else {
-    body = '<div class="toolbar"><span class="muted small" style="flex:1">Nhóm tuỳ chọn dùng chung cho nhiều món, ví dụ size, topping, chọn kem.</span><button class="btn" type="button" id="addGroup">+ Thêm nhóm</button></div>' +
+    // Tìm nhóm tuỳ chọn theo tên nhóm, tên khách thấy, lựa chọn, hoặc tên món đang dùng nhóm đó
+    const gw = BN.fold(state.groupQuery).split(/\s+/).filter(Boolean);
+    const gHit = g => { const t = BN.fold(g.name + ' ' + g.title + ' ' + choiceText(g) + ' ' + m.items.filter(i => i.group_ids.indexOf(g.id) >= 0).map(i => i.name).join(' ')); return gw.every(w => t.indexOf(w) >= 0); };
+    body = '<div class="toolbar"><input class="search" id="gq" type="search" placeholder="Tìm tuỳ chọn hoặc tên món…" value="' + esc(state.groupQuery) + '" aria-label="Tìm nhóm tuỳ chọn"><button class="btn" type="button" id="addGroup">+ Thêm nhóm</button></div>' +
+      '<p class="muted small" style="margin:-4px 0 12px">Nhóm tuỳ chọn dùng chung cho nhiều món, ví dụ size, topping, chọn kem.</p>' +
       [['do_uong', 'cc-xanhduong'], ['do_an', 'cc-cam']].map(([k, cc]) => {
-        const gs = m.groups.filter(g => gKind(g) === k);
+        const gs = m.groups.filter(g => gKind(g) === k && gHit(g));
         return '<section class="box ' + cc + '"><h2 class="box-title"><span>Tuỳ chọn ' + OKIND[k].toLowerCase() + '</span></h2>' + (gs.length ? '<ul class="list">' + gs.map(g => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-group="' + g.id + '"><span class="lmain"><span class="lname">' + esc(g.name) + ' <span class="muted small">· khách thấy “' + esc(g.title) + '”</span></span>' +
           '<span class="lsub">' + esc(choiceText(g)) + '</span></span>' +
-          '<span class="lside"><span class="pill ' + (g.min_select ? 'pill-red' : 'pill-mute') + '">' + (g.min_select ? 'Bắt buộc' : g.max_select > 1 ? 'Chọn nhiều' : 'Không bắt buộc') + '</span><span class="small muted">' + g.used_by + ' món dùng</span></span></button></li>').join('') + '</ul>' : '<p class="empty">Chưa có nhóm nào.</p>') + '</section>';
+          '<span class="lside"><span class="pill ' + (g.min_select ? 'pill-red' : 'pill-mute') + '">' + (g.min_select ? 'Bắt buộc' : g.max_select > 1 ? 'Chọn nhiều' : 'Không bắt buộc') + '</span><span class="small muted">' + g.used_by + ' món dùng</span></span></button></li>').join('') + '</ul>' : '<p class="empty">' + (gw.length ? 'Không có nhóm nào khớp.' : 'Chưa có nhóm nào.') + '</p>') + '</section>';
       }).join('');
   }
   main.innerHTML = '<div class="ptitle"><h1>Menu</h1><div class="chips">' + [['mon', 'Món'], ['danhmuc', 'Danh mục'], ['tuychon', 'Tuỳ chọn']].map(([k, t]) => '<button class="chipbtn" type="button" data-sub="' + k + '" aria-pressed="' + (sub === k) + '">' + t + '</button>').join('') + '</div></div>' + body;
   $$('[data-sub]', main).forEach(b => b.onclick = () => { state.menuSub = b.dataset.sub; rerender(); });
   $$('[data-mcat]', main).forEach(b => b.onclick = () => { state.menuCat = b.dataset.mcat === 'all' ? 'all' : Number(b.dataset.mcat); rerender(); });
-  const mq = $('#mq', main); if (mq) mq.oninput = () => { state.menuQuery = mq.value; clearTimeout(mq._t); mq._t = setTimeout(async () => { const pos = mq.selectionStart; await renderMenu(main); const n = $('#mq', main); n.focus(); n.setSelectionRange(pos, pos); }, 250); };
+  // Mỗi danh sách có ô tìm riêng (món / tuỳ chọn), không dùng chung chữ tìm với nhau
+  [['#mq', 'menuQuery'], ['#gq', 'groupQuery']].forEach(([sel, key]) => {
+    const inp = $(sel, main); if (!inp) return;
+    inp.oninput = () => { state[key] = inp.value; clearTimeout(inp._t); inp._t = setTimeout(async () => { const pos = inp.selectionStart; await renderMenu(main); const n = $(sel, main); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 250); };
+  });
   main.onclick = menuClick;
   main.onchange = async e => {
     const a = e.target.closest('[data-avail]'); if (!a) return;
