@@ -105,6 +105,14 @@
 .sh-img img { width: 100%; max-height: 260px; object-fit: contain; display: block; }
 .og { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .og legend { padding: 0; margin-bottom: 6px; font-weight: 600; font-size: 16px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+/* Topping thêm: khung vàng nổi bật */
+.og--topping { padding: 12px 12px 10px; border-radius: 16px; background: #FFF4D6; border: 2px solid #F2B33D; }
+.og--topping legend { float: left; width: 100%; margin-bottom: 0; color: #8a4b00; font-size: 17px; font-weight: 800; }
+.og--topping .tp-sub { clear: both; margin: 0 0 8px; font-size: 13px; color: #8a4b00; }
+.og--topping .choice { background: #fff; }
+.og--topping .choice-price { color: var(--red); font-weight: 700; }
+.tp-star { color: #E39A12; }
+.tp-hint { font-weight: 700; color: #a85a06; background: #FFF0C7; border-radius: 6px; padding: 0 5px; white-space: nowrap; }
 .og-rule { font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .og-rule--req { color: var(--red); }
 .og-err { color: var(--warn); font-size: 13px; font-weight: 600; }
@@ -381,6 +389,8 @@ $('#chip').onclick = () => {
 /* ---------- Menu ---------- */
 const countInCart = id => state.cart.filter(l => l.itemId === id).reduce((s, l) => s + l.qty, 0);
 function optionHint(it) { const seen = []; it.option_groups.forEach(g => { if (seen.indexOf(g.title) < 0) seen.push(g.title); }); return seen.join(' · '); }
+/* Gợi ý tuỳ chọn dưới tên món: "Topping thêm" nổi bật */
+const optionHintHtml = it => { const h = optionHint(it); return h ? esc(h).replace(/(Topping[^·]*)/i, m => '<b class="tp-hint">+ ' + m.trim() + '</b>') : ''; };
 function addBtnHtml(it) {
   const n = countInCart(it.id);
   return '<button class="add' + (n ? ' add--on' : '') + '" type="button" data-add="' + esc(it.id) + '" aria-label="Thêm ' + esc(it.name) + (n ? ', đang có ' + n + ' trong giỏ' : '') + '">' + (n ? '<span class="num">' + n + '</span>' : ICON.plus) + '</button>';
@@ -406,7 +416,7 @@ function renderMenu() {
         '<button class="item-main" type="button" data-open="' + esc(it.id) + '">' +
         '<span class="item-name">' + esc(it.name) + (it.tag ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
         (it.description ? '<span class="item-desc">' + esc(it.description) + '</span>' : '') +
-        (hint ? '<span class="item-opts">' + esc(hint) + '</span>' : '') + '</button>' +
+        (hint ? '<span class="item-opts">' + optionHintHtml(it) + '</span>' : '') + '</button>' +
         '<div class="item-side">' + (priceL(it) ? '<span class="item-price item-price--ml num"><span><small>M</small> ' + K(it.price) + '</span><span><small>L</small> ' + K(priceL(it)) + '</span></span>' : '<span class="item-price num">' + K(it.price) + '</span>') + addBtnHtml(it) + '</div></li>';
     }).join('') + '</ul></section>').join('');
   $('#tabsIn').innerHTML = cats.map((c, i) => '<button class="tab cc-' + esc(c.color || 'vang') + '" type="button" data-go="' + esc(c.id) + '"' + (i === 0 ? ' aria-current="true"' : '') + '>' + esc(c.name) + '</button>').join('');
@@ -511,7 +521,8 @@ function openItem(id) {
     if (sizeGroup({ option_groups: [g] })) return '<fieldset class="og og--tiles og--size" data-g="' + g.id + '"><legend>Chọn size</legend><div class="tiles tiles--2">' +
       g.choices.map(c => { const L = /l$/i.test(c.name.trim()); return '<label class="choice choice--tile">' + input(c) + '<span class="lv-ico">' + cupIcon(L ? 'L' : 'M') + '</span><span class="choice-name">' + esc(c.name) + (L ? ' · ly lớn' : ' · ly nhỏ') + '</span><span class="choice-price num">' + K(it.price + c.price) + (c.price ? ' (+' + K(c.price) + ')' : '') + '</span></label>'; }).join('') +
       '</div><span class="og-err" hidden></span></fieldset>';
-    return '<fieldset class="og' + (tiles ? ' og--tiles' : '') + '" data-g="' + g.id + '"><legend>' + esc(g.title) + ' ' + rule + '</legend>' +
+    const tp = /topping/i.test(g.title);
+    return '<fieldset class="og' + (tiles ? ' og--tiles' : '') + (tp ? ' og--topping' : '') + '" data-g="' + g.id + '"><legend>' + (tp ? '<span class="tp-star" aria-hidden="true">★</span>' : '') + esc(g.title) + ' ' + rule + '</legend>' + (tp ? '<p class="tp-sub">Thêm topping cho ngon hơn</p>' : '') +
       (tiles
         ? '<div class="tiles">' + g.choices.map(c => '<label class="choice choice--tile">' + input(c) + '<span class="lv-ico">' + levelIcon(c.name) + '</span><span class="choice-name">' + esc(c.name) + '</span>' + (c.price ? price(c) : '') + '</label>').join('') + '</div>'
         : g.choices.map(c => '<label class="choice">' + input(c) + '<span class="choice-name">' + esc(c.name) + '</span>' + price(c) + '</label>').join('')) +
