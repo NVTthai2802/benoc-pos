@@ -15,7 +15,7 @@ Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**
 
 - **Mã QR bếp nóng** mở menu **Ăn vặt** (cơm trộn, mì trộn, kimbap, đồ ăn vặt, nước uống). Đơn về màn hình bếp, bếp thu tiền.
 - **Mã QR quầy pha chế** mở menu **Trà · Cà phê** (trà sữa, trà hoa quả, sốt khoai môn tươi, cà phê, matcha · cacao · khoai môn, món nên thử). Đơn về màn hình pha chế, quầy pha chế thu tiền.
-- Mỗi menu có nút nhỏ **Xem menu …** để khách sang menu kia. Giỏ hàng hai menu tách riêng, nên mỗi lần gửi là một đơn cho một quầy. Khách dùng chung một số thẻ cho cả hai đơn.
+- Quét mã nào chỉ xem được menu đó (quét món ăn chỉ thấy món ăn, không có nút sang menu kia). Khách muốn gọi cả đồ uống thì quét thêm mã QR quầy pha chế; hai đơn dùng chung một số thẻ.
 - Món nào thuộc menu nào là theo **danh mục**. Đổi trong **Quản lý → Menu → Danh mục → Thuộc menu nào**.
 
 ## Hai môi trường: Product và Test
