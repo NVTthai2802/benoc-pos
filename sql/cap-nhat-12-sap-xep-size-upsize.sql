@@ -2,8 +2,8 @@
 -- CẬP NHẬT 12: sắp xếp lại size / upsize của đồ uống
 --   Nước uống (menu Ăn vặt)                          → tuỳ chọn "Size XL" +5k (không bắt buộc)
 --   Trà sữa, Trà hoa quả, Sốt khoai môn tươi,
---   Món nên thử                                      → 1 size L, tuỳ chọn "Upsize" +10k
---   Cà phê, Matcha · Cacao · Khoai môn               → chọn Size M (giá gốc) / Size L +10k
+--   Món nên thử, Cà phê, Matcha · Cacao · Khoai môn  → size nhỏ nhất là L, tuỳ chọn "Upsize" +10k
+--   (không còn chọn Size M / Size L)
 --   Sốt cốm tươi                                     → tuỳ chọn "Upsize" +15k
 -- - Chỉ đổi nhóm tuỳ chọn size/upsize và việc gắn nhóm đó vào món.
 --   KHÔNG xoá món, KHÔNG đổi giá món, KHÔNG đụng đơn / hoá đơn (hoá đơn cũ đã lưu sẵn tên tuỳ chọn).
@@ -12,9 +12,8 @@
 -- =====================================================================
 begin;
 
--- 1. Bốn nhóm chuẩn (tạo nếu chưa có, sửa lại nếu đã có)
+-- 1. Ba nhóm chuẩn (tạo nếu chưa có, sửa lại nếu đã có)
 insert into option_groups (name, title, kind, min_select, max_select, sort_order) values
-  ('Size M/L (+10k)', 'Size',   'do_uong', 1, 1, 1),
   ('Upsize (+10k)',   'Upsize', 'do_uong', 0, 1, 1),
   ('Upsize (+15k)',   'Upsize', 'do_uong', 0, 1, 1),
   ('Size XL (+5k)',   'Size',   'do_uong', 0, 1, 1)
@@ -24,8 +23,6 @@ on conflict (name) do update set title = excluded.title, kind = 'do_uong',
 -- 2. Lựa chọn trong mỗi nhóm: xoá lựa chọn lạ, thêm / sửa đúng giá
 create temp table _want (grp text, choice text, price int, is_def boolean, ord int) on commit drop;
 insert into _want values
-  ('Size M/L (+10k)', 'Size M',  0,     true,  1),
-  ('Size M/L (+10k)', 'Size L',  10000, false, 2),
   ('Upsize (+10k)',   'Upsize',  10000, false, 1),
   ('Upsize (+15k)',   'Upsize',  15000, false, 1),
   ('Size XL (+5k)',   'Size XL', 5000,  false, 1);
@@ -55,17 +52,17 @@ from menu_items mi
 join menu_categories c on c.id = mi.category_id
 join option_groups g on g.name = case
     when c.name ilike 'nước uống%'                                         then 'Size XL (+5k)'
-    when c.name ilike 'cà phê%' or c.name ilike '%matcha%' or c.name ilike '%cacao%' then 'Size M/L (+10k)'
     when c.name ilike '%cốm%'                                              then 'Upsize (+15k)'
     when c.name ilike 'trà sữa%' or c.name ilike 'trà hoa quả%'
-      or c.name ilike 'sốt khoai môn%' or c.name ilike 'món nên thử%'     then 'Upsize (+10k)'
+      or c.name ilike 'sốt khoai môn%' or c.name ilike 'món nên thử%'
+      or c.name ilike 'cà phê%' or c.name ilike '%matcha%' or c.name ilike '%cacao%' then 'Upsize (+10k)'
   end
 on conflict do nothing;
 
 -- 5. Dọn các nhóm size / upsize cũ không còn món nào dùng
 delete from option_groups g
 where (g.title in ('Size', 'Upsize') or g.name ilike 'upsize%' or g.name ilike 'size%' or g.title ilike 'upsize%')
-  and g.name not in ('Size M/L (+10k)', 'Upsize (+10k)', 'Upsize (+15k)', 'Size XL (+5k)')
+  and g.name not in ('Upsize (+10k)', 'Upsize (+15k)', 'Size XL (+5k)')
   and not exists (select 1 from menu_item_option_groups l where l.group_id = g.id);
 
 commit;

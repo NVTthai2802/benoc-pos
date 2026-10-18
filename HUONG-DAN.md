@@ -96,7 +96,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-9-size-m-l.sql`: đồ uống có Upsize đổi thành chọn **Size M** (giá gốc, chọn sẵn) / **Size L** (+5k hoặc +10k như cũ). Menu khách hiện cả 2 giá "M 22K · L 32K", màn hình pha chế có nhãn **SIZE M / SIZE L** trên từng ly. Món không có Upsize giữ nguyên 1 giá. Giao diện mới chạy được cả trước và sau khi chạy file này.
 - `sql/cap-nhat-10-ten-khach-hoa-don.sql`: **Hoá đơn gần đây** hiện tên khách (kèm SĐT, địa chỉ nếu đi ship). Chỉ thêm cột, không đụng dữ liệu cũ; hoá đơn trước bản này hiện "—" vì lúc đó chưa lưu tên.
 - `sql/cap-nhat-11-size-chi-ca-phe-matcha.sql`: chỉ danh mục **Cà phê** và **Matcha · Cacao · Khoai môn** có chọn Size M / Size L; các đồ uống khác bỏ mục size, chỉ còn một giá. Chỉ gỡ liên kết món ↔ nhóm Size, không xoá món, không đổi giá.
-- `sql/cap-nhat-12-sap-xep-size-upsize.sql`: sắp xếp lại size đồ uống: **Nước uống** (menu Ăn vặt) có tuỳ chọn **Size XL +5k**; **Trà sữa, Trà hoa quả, Sốt khoai môn tươi, Món nên thử** 1 size L, tuỳ chọn **Upsize +10k**; **Cà phê, Matcha · Cacao · Khoai môn** chọn **Size M / Size L +10k**; **Sốt cốm tươi** tuỳ chọn **Upsize +15k**. Không xoá món, không đổi giá món, không đụng đơn/hoá đơn. (Thay cho cập nhật 9 và 11.)
+- `sql/cap-nhat-12-sap-xep-size-upsize.sql`: sắp xếp lại size đồ uống: **Nước uống** (menu Ăn vặt) có tuỳ chọn **Size XL +5k**; **Trà sữa, Trà hoa quả, Sốt khoai môn tươi, Món nên thử, Cà phê, Matcha · Cacao · Khoai môn** size nhỏ nhất là L, tuỳ chọn **Upsize +10k**; **Sốt cốm tươi** tuỳ chọn **Upsize +15k**. Không xoá món, không đổi giá món, không đụng đơn/hoá đơn. (Thay cho cập nhật 9 và 11.)
 
 ## Xoá dữ liệu thử trước khi dùng thật
 

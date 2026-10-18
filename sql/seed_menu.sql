@@ -124,8 +124,7 @@ join menu_categories c on c.name = v.cat;
 -- ---------- Nhóm tuỳ chọn ----------
 -- kind: 'do_uong' = tuỳ chọn đồ uống, 'do_an' = tuỳ chọn đồ ăn
 insert into option_groups (name, title, min_select, max_select, sort_order, kind) values
-  ('Size M/L (+10k)',     'Size',         1, 1, 1, 'do_uong'),  -- cà phê, matcha, cacao, khoai môn latte
-  ('Upsize (+10k)',       'Upsize',       0, 1, 1, 'do_uong'),  -- trà sữa, trà hoa quả, sốt khoai môn, món nên thử (1 size L)
+  ('Upsize (+10k)',       'Upsize',       0, 1, 1, 'do_uong'),  -- trà sữa, trà hoa quả, sốt khoai môn, món nên thử, cà phê, matcha · cacao (size nhỏ nhất là L)
   ('Upsize (+15k)',       'Upsize',       0, 1, 1, 'do_uong'),  -- các món cốm
   ('Size XL (+5k)',       'Size',         0, 1, 1, 'do_uong'),  -- nước uống của menu Ăn vặt
   ('Kem matcha',          'Chọn kem',     1, 1, 3, 'do_uong'),
@@ -137,8 +136,6 @@ insert into option_groups (name, title, min_select, max_select, sort_order, kind
 insert into option_choices (group_id, name, price_delta, is_default, sort_order)
 select g.id, v.name, v.price, v.is_default, v.ord
 from (values
-  ('Size M/L (+10k)', 'Size M',  0,     true,  1),
-  ('Size M/L (+10k)', 'Size L',  10000, false, 2),
   ('Upsize (+10k)',   'Upsize',  10000, false, 1),
   ('Upsize (+15k)',   'Upsize',  15000, false, 1),
   ('Size XL (+5k)',   'Size XL', 5000,  false, 1),
@@ -171,8 +168,8 @@ from (values
   ('Trà hoa quả',        'Upsize (+10k)',   0),
   ('Sốt khoai môn tươi', 'Upsize (+10k)',   0),
   ('Món nên thử',        'Upsize (+10k)',   0),
-  ('Cà phê',             'Size M/L (+10k)', 0),
-  ('Matcha · Cacao · Khoai môn', 'Size M/L (+10k)', 0)
+  ('Cà phê',             'Upsize (+10k)',   0),
+  ('Matcha · Cacao · Khoai môn', 'Upsize (+10k)', 0)
 ) as v(cat, grp, ord)
 join menu_categories c on c.name = v.cat
 join menu_items mi on mi.category_id = c.id
