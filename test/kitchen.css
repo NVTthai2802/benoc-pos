@@ -109,3 +109,9 @@
 .sz { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; font: 800 12px/1.5 var(--f-body); letter-spacing: .04em; vertical-align: 2px; }
 .sz-M { background: #e3eefc; color: #1f4f8a; }
 .sz-L { background: #2b2018; color: #fff; }
+
+/* Topping thêm: nổi bật để không làm sót */
+.kc-items .tp { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.kc-items .tp b { padding: 1px 7px; border-radius: 6px; background: #FFE7A8; color: #7a3e00; font: 700 13px/1.5 var(--f-body); }
+.dt-tp { background: #FFF0C7; border-radius: 6px; padding: 1px 6px; margin-left: -6px; margin-right: -6px; color: #7a3e00; }
+.dt-tp b { color: #7a3e00; }
