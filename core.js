@@ -462,7 +462,7 @@ function demoFinalize(db, id, method, cashierId) {
   const o = db.orders.find(x => x.id === id); if (!o) return;
   const items = db.order_items.filter(i => i.order_id === id).map(i => ({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }));
   const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
-  db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method || o.paid_method || 'tien_mat', items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: o.paid_at || new Date().toISOString(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: o.paid_by || cashierId || null });
+  db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method || o.paid_method || 'tien_mat', items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: o.paid_at || new Date().toISOString(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: o.paid_by || cashierId || null, customer_name: o.customer_name || null, customer_phone: o.customer_phone || null, address: o.address || null });
   db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
 }
 const demoTotal = (db, id) => db.order_items.filter(i => i.order_id === id).reduce((s, i) => s + i.unit_price * i.qty, 0);
@@ -492,6 +492,7 @@ function demoSizeMigrate(S) {
   });
   return S;
 }
+const DEMO_NAMES = ['Lan', 'Minh', 'Hà', 'Tuấn', 'Vy', 'Nam', 'Thảo', 'Huy', 'Linh', 'Quân', 'Trang', 'Đức'];
 function demoSeed() {
   const S = demoSizeMigrate(JSON.parse(JSON.stringify(window.BENOC_SEED || {})));
   const now = Date.now(), R = rng(2802);
@@ -536,7 +537,7 @@ function demoSeed() {
       const cook = 5 + Math.round(R() * 12), bar = 3 + Math.round(R() * 5);
       const sts = new Set(items.map(i => stationOf(db, i.menu_item_id)));
       const station_minutes = {}; if (sts.has('bep')) station_minutes.bep = cook; if (sts.has('pha_che')) station_minutes.pha_che = bar;
-      db.sales.push({ station_minutes, id: uuid(), queue_number: 1 + Math.floor(R() * 40), total, payment_method: R() < 0.6 ? 'chuyen_khoan' : 'tien_mat', items, ordered_at: new Date(paid - (cook + 18) * 60e3).toISOString(), accepted_at: new Date(paid - (cook + 15) * 60e3).toISOString(), served_at: new Date(paid - 15 * 60e3).toISOString(), paid_at: new Date(paid).toISOString(), cook_minutes: cook, cashier_id: 'e-lan' });
+      db.sales.push({ station_minutes, id: uuid(), queue_number: 1 + Math.floor(R() * 40), total, payment_method: R() < 0.6 ? 'chuyen_khoan' : 'tien_mat', items, ordered_at: new Date(paid - (cook + 18) * 60e3).toISOString(), accepted_at: new Date(paid - (cook + 15) * 60e3).toISOString(), served_at: new Date(paid - 15 * 60e3).toISOString(), paid_at: new Date(paid).toISOString(), cook_minutes: cook, cashier_id: 'e-lan', customer_name: DEMO_NAMES[(d * 7 + i) % DEMO_NAMES.length] });
     }
   }
   // Vài đơn đang mở để bếp và quầy pha chế có việc ngay
