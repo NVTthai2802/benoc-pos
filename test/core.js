@@ -416,7 +416,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v8'; // v8: đồ uống chọn Size M / Size L (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v9'; // v9: chỉ cà phê, matcha, cacao có Size M / Size L (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 // Nhận cả /bep.html lẫn /bep (Cloudflare Pages tự bỏ đuôi .html)
@@ -490,6 +490,10 @@ function demoSizeMigrate(S) {
     choices.push({ id: next++, group_id: g.id, name: 'Size M', price_delta: 0, is_default: true, is_available: true, sort_order: 1 });
     Object.assign(g, { title: 'Size', min_select: 1, max_select: 1, name: g.name.replace(/^upsize/i, 'Size M/L') });
   });
+  // Giống cap-nhat-11: chỉ Cà phê và Matcha · Cacao có chọn size
+  const sizeIds = new Set(groups.filter(g => g.title === 'Size').map(g => g.id));
+  const catName = new Map((S.menu_categories || []).map(c => [c.id, c.name])), itemCat = new Map((S.menu_items || []).map(m => [m.id, catName.get(m.category_id) || '']));
+  S.menu_item_option_groups = (S.menu_item_option_groups || []).filter(l => !sizeIds.has(l.group_id) || /cà phê|matcha|cacao/i.test(itemCat.get(l.menu_item_id)));
   return S;
 }
 const DEMO_NAMES = ['Lan', 'Minh', 'Hà', 'Tuấn', 'Vy', 'Nam', 'Thảo', 'Huy', 'Linh', 'Quân', 'Trang', 'Đức'];
