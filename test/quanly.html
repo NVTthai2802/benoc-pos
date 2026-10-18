@@ -245,10 +245,16 @@ async function renderRevenue(main) {
   }
   buckets.forEach(b => { b.tip = (b.label2 || b.label) + ': ' + vnd(b.value) + ', ' + b.count + ' đơn'; });
   const byPay = { tien_mat: 0, chuyen_khoan: 0 }; sales.forEach(x => { byPay[x.payment_method] = (byPay[x.payment_method] || 0) + x.total; });
-  const items = new Map();
-  sales.forEach(x => (x.items || []).forEach(i => { const m = items.get(i.name) || { name: i.name, qty: 0, rev: 0 }; m.qty += i.qty; m.rev += i.price * i.qty; items.set(i.name, m); }));
-  const top = [...items.values()].sort((a, b) => b.qty - a.qty || b.rev - a.rev).slice(0, 8);
-  const topMax = top.length ? top[0].qty : 1;
+  // Món bán chạy tách 2 bảng: món ăn và đồ uống (trà sữa, cà phê, nước…), theo danh mục của món.
+  // Món đã xoá khỏi menu thì dựa vào nơi làm ghi trên hoá đơn.
+  let catOf = new Map();
+  try { const m = state.menuData || await api.adminMenu(); const cs = new Map(m.categories.map(c => [c.id, c])); m.items.forEach(it => catOf.set(it.id, cs.get(it.category_id))); } catch (e) { /* không tải được menu */ }
+  const kindOf = i => { const c = catOf.get(i.menu_item_id); return c ? (isDrinkCat(c) ? 'pha_che' : 'bep') : (i.station === 'pha_che' ? 'pha_che' : 'bep'); };
+  const items = { bep: new Map(), pha_che: new Map() };
+  sales.forEach(x => (x.items || []).forEach(i => { const bag = items[kindOf(i)]; const m = bag.get(i.name) || { name: i.name, qty: 0, rev: 0 }; m.qty += i.qty; m.rev += i.price * i.qty; bag.set(i.name, m); }));
+  const topOf = st => [...items[st].values()].sort((a, b) => b.qty - a.qty || b.rev - a.rev).slice(0, 10);
+  const topBox = (st, title, cc) => { const top = topOf(st), max = top.length ? top[0].qty : 1, sum = [...items[st].values()].reduce((a, t) => ({ q: a.q + t.qty, r: a.r + t.rev }), { q: 0, r: 0 });
+    return '<section class="box ' + cc + '"><h2 class="box-title"><span>' + title + '</span></h2>' + (top.length ? '<p class="small muted" style="margin:0 0 8px">Tổng ' + sum.q + ' phần · ' + vnd(sum.r) + '</p>' + top.map((t, k) => '<div class="hbar"><span class="nm">' + (k + 1) + '. ' + esc(t.name) + '</span><span class="track"><span class="fill" style="width:' + (t.qty / max * 100) + '%;display:block"></span></span><span class="num small"><b>' + t.qty + '</b> phần · ' + short(t.rev) + '</span></div>').join('') : '<p class="empty">Chưa có món nào bán ra.</p>') + '</section>'; };
   const recent = sales.slice().reverse().slice(0, 20);
   main.innerHTML =
     '<div class="ptitle"><h1>Doanh thu</h1><div class="chips">' + [['today', 'Hôm nay'], ['7d', '7 ngày'], ['30d', '30 ngày'], ['month', 'Tháng này']].map(([k, t]) => '<button class="chipbtn" type="button" data-range="' + k + '" aria-pressed="' + (state.range === k) + '">' + t + '</button>').join('') + '</div></div>' +
@@ -261,10 +267,9 @@ async function renderRevenue(main) {
       [['bep', 'Bếp nóng'], ['pha_che', 'Quầy pha chế']].map(([k, t]) => { const c = byCounter[k]; return '<tr><td><b>' + t + '</b></td><td class="r num">' + c.n + '</td><td class="r num">' + vnd(c.tien_mat) + '</td><td class="r num">' + vnd(c.chuyen_khoan) + '</td><td class="r num"><b>' + vnd(c.tien_mat + c.chuyen_khoan) + '</b></td></tr>'; }).join('') +
       '</tbody></table></div><p class="small muted" style="margin:8px 0 0">Dùng cột Tiền mặt để đối chiếu tiền trong két của từng quầy cuối ca.</p></section>' +
     '<section class="box cc-hong"><h2 class="box-title"><span>' + (state.range === 'today' ? 'Theo giờ' : 'Theo ngày') + '</span></h2><div class="chart" id="chart">' + barChart(buckets) + '</div></section>' +
-    '<div class="two">' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Cách thanh toán</span></h2>' + (total ? '<div class="split">' + ['tien_mat', 'chuyen_khoan'].filter(k => byPay[k]).map(k => '<span style="width:' + (byPay[k] / total * 100) + '%;background:' + PAY_COLOR[k] + '" title="' + PAY[k] + '"></span>').join('') + '</div>' +
       '<div class="legend">' + ['tien_mat', 'chuyen_khoan'].map(k => '<span><i style="background:' + PAY_COLOR[k] + '"></i>' + PAY[k] + ': <b class="num">' + vnd(byPay[k]) + '</b> (' + Math.round(byPay[k] / total * 100) + '%)</span>').join('') + '</div>' : '<p class="empty">Chưa có đơn.</p>') + '</section>' +
-    '<section class="box cc-vang"><h2 class="box-title"><span>Món bán chạy</span></h2>' + (top.length ? top.map(t => '<div class="hbar"><span class="nm">' + esc(t.name) + '</span><span class="track"><span class="fill" style="width:' + (t.qty / topMax * 100) + '%;display:block"></span></span><span class="num small"><b>' + t.qty + '</b> phần · ' + short(t.rev) + '</span></div>').join('') : '<p class="empty">Chưa có đơn.</p>') + '</section></div>' +
+    '<div class="two">' + topBox('bep', 'Món ăn bán chạy', 'cc-vang') + topBox('pha_che', 'Trà sữa · đồ uống bán chạy', 'cc-hong') + '</div>' +
     '<section class="box cc-nau"><h2 class="box-title"><span>Hoá đơn gần đây</span></h2>' + (recent.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th>Số</th><th>Khách</th><th>Món</th><th class="r">Tổng</th><th>Trả bằng</th></tr></thead><tbody>' +
       recent.map(x => '<tr><td class="num">' + ddmm(x.paid_at) + ' ' + hhmm(x.paid_at) + '</td><td class="num">' + (x.dine_type === 'giao_hang' ? '<span class="pill pill-mute">Đi ship</span>' : x.dine_type === 'mang_ve' ? '<span class="pill pill-mute">Mang về</span>' : x.queue_number) + '</td><td class="who">' + (x.customer_name ? '<b>' + esc(x.customer_name) + '</b>' + (x.customer_phone ? '<br><span class="small muted">' + esc(x.customer_phone) + '</span>' : '') + (x.address ? '<br><span class="small muted">' + esc(x.address) + '</span>' : '') : '<span class="muted">—</span>') + '</td><td>' + esc((x.items || []).map(i => i.qty + '× ' + i.name).join(', ')) + '</td><td class="r num">' + vnd(x.total) + '</td><td><span class="pill" style="background:' + PAY_COLOR[x.payment_method] + '1F;color:var(--ink)">' + PAY[x.payment_method] + '</span></td></tr>').join('') +
       '</tbody></table></div>' : '<p class="empty">Chưa có hoá đơn trong khoảng này.</p>') + '</section>';
