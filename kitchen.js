@@ -7,7 +7,7 @@
    ===================================================================== */
 (function () {
 'use strict';
-const { api, ui, esc, vnd, hhmm, ago, errText, DEMO, STATIONS , qboxHtml, orderLabel, isTakeaway } = BN;
+const { api, ui, esc, vnd, K, hhmm, ago, errText, DEMO, STATIONS, qboxHtml, orderLabel, isTakeaway, isDelivery } = BN;
 const $ = (s, r = document) => r.querySelector(s);
 const STATION = window.BENOC_STATION === 'pha_che' ? 'pha_che' : 'bep';
 const OTHER = STATION === 'bep' ? 'pha_che' : 'bep';
@@ -27,6 +27,10 @@ const mine = o => part(o, STATION);
 /* Quầy thu tiền của đơn: đơn chỉ có đồ uống → quầy pha chế; còn lại → bếp */
 const payer = o => (o.stations || []).length && o.stations.every(x => x.station === 'pha_che') ? 'pha_che' : 'bep';
 const isMinePay = o => payer(o) === STATION;
+/* Đã thu tiền chưa: none = chưa thu, full = đã thu đủ, more = sửa đơn tăng tiền (thu thêm), refund = sửa đơn giảm tiền (trả lại) */
+const paidState = o => o.paid_amount == null ? 'none' : o.paid_amount === o.total ? 'full' : o.paid_amount < o.total ? 'more' : 'refund';
+const dueOf = o => o.total - (o.paid_amount || 0); // còn phải thu (âm = phải trả lại khách)
+const canEdit = () => true; // bếp, pha chế và chủ quán đều sửa được đơn của nơi mình
 /* Đơn nằm ở cột nào của màn hình này (null = không hiện) */
 function colOf(o) {
   const m = mine(o);
@@ -42,6 +46,7 @@ function start() {
     '<header class="topbar"><div class="topbar-in"><div class="brand"><b>' + SHORT[STATION] + '</b><span>Bé Nốc</span></div>' +
     '<span class="clock num" id="clock"></span>' +
     '<button class="btn btn-sm btn-line" type="button" id="soundBtn" aria-pressed="false">Bật chuông báo</button>' +
+    (role === 'owner' ? '<a class="btn btn-sm" href="index.html?dat=giao' + (DEMO ? '&slot=' + encodeURIComponent(BN.SLOT) : '') + '">+ Đơn giao hàng</a>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm btn-line" href="' + (IS_BEP ? 'phache.html' : 'bep.html') + '">' + (IS_BEP ? 'Pha chế' : 'Bếp') + '</a><a class="btn btn-sm btn-line" href="quanly.html">Quản lý</a>' : '') +
     BN.staff.whoChip(state.session) + '</div></header>' +
     '<div class="wrap" style="max-width:none"><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
@@ -91,8 +96,11 @@ function timerHtml(o, col) {
   const done = m && m.served_at ? m.served_at : null;
   return done ? '<div class="timer">Ra món<b class="num">' + hhmm(done) + '</b></div>' : '<div class="timer">Đặt lúc<b class="num">' + hhmm(o.created_at) + '</b></div>';
 }
-function itemsHtml(items, tagStation) {
-  return '<ul class="kc-items">' + items.map(i => '<li><span class="q num">' + i.qty + '×</span><span><span class="nm">' + esc(i.item_name) + '</span>' +
+/* Món thêm sau khi nơi làm đã nhận đơn → nhãn MỚI để người làm không bỏ sót */
+function isNew(o, i) { const p = part(o, i.station); return !!(p && p.accepted_at && i.added_at && new Date(i.added_at) > new Date(p.accepted_at)); }
+function itemsHtml(items, tagStation, o) {
+  return '<ul class="kc-items">' + items.map(i => '<li' + (o && isNew(o, i) ? ' class="new"' : '') + '><span class="q num">' + i.qty + '×</span><span><span class="nm">' + esc(i.item_name) + '</span>' +
+    (o && isNew(o, i) ? '<span class="new-tag">MỚI</span>' : '') +
     (tagStation && i.station !== 'bep' ? '<span class="stn">' + SHORT[i.station] + '</span>' : '') +
     ((i.options || []).length ? '<span class="op">' + esc(i.options.map(x => x.choice).join(' · ')) + '</span>' : '') +
     (i.note ? '<span class="in">' + esc(i.note) + '</span>' : '') + '</span></li>').join('') + '</ul>';
@@ -125,15 +133,29 @@ function panelHtml(o) {
       '<button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
   }
   if (p.kind === 'pay') {
-    const given = Number(p.given || 0), change = given - o.total;
-    const op = part(o, OTHER), pending = op && op.status !== 'da_ra_mon';
-    return '<div class="panel"><p class="panel-title">Thu ' + vnd(o.total) + '</p>' +
-      (pending ? '<p class="msg" style="margin:0">Phần ' + STATIONS[OTHER].toLowerCase() + ' của đơn này chưa xong.</p>' : '') +
-      '<div class="chips">' + [o.total, 50000, 100000, 200000, 500000].filter((v, i, a) => v >= o.total && a.indexOf(v) === i).map(v => '<button class="chipbtn" type="button" data-act="given" data-v="' + v + '" data-id="' + o.id + '" aria-pressed="' + (given === v) + '">' + (v === o.total ? 'Vừa đủ' : vnd(v)) + '</button>').join('') + '</div>' +
+    const due = dueOf(o);
+    if (due < 0) { // sửa đơn bớt món sau khi đã thu: trả lại khách
+      return '<div class="panel"><p class="panel-title">Trả lại khách ' + vnd(-due) + '</p><p class="small muted" style="margin:0">Đã thu ' + vnd(o.paid_amount) + ', đơn sau khi sửa còn ' + vnd(o.total) + '.</p>' +
+        '<div class="row"><button class="btn btn-ok grow" type="button" data-act="pay-ok" data-m="' + (o.paid_method || 'tien_mat') + '" data-id="' + o.id + '">Đã trả lại ' + vnd(-due) + '</button><button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
+    }
+    const given = Number(p.given || 0), change = given - due;
+    const st = o.status !== 'da_ra_mon';
+    return '<div class="panel"><p class="panel-title">' + (o.paid_amount != null ? 'Thu thêm ' : 'Thu ') + vnd(due) + '</p>' +
+      (o.paid_amount != null ? '<p class="small muted" style="margin:0">Đã thu ' + vnd(o.paid_amount) + ', đơn sau khi sửa là ' + vnd(o.total) + '.</p>' : '') +
+      (st && o.paid_amount == null ? '<p class="small muted" style="margin:0">Thu trước: đơn vẫn làm tiếp, ra món xong tự hoàn tất.</p>' : '') +
+      '<div class="chips">' + [due, 50000, 100000, 200000, 500000].filter((v, i, a) => v >= due && a.indexOf(v) === i).map(v => '<button class="chipbtn" type="button" data-act="given" data-v="' + v + '" data-id="' + o.id + '" aria-pressed="' + (given === v) + '">' + (v === due ? 'Vừa đủ' : vnd(v)) + '</button>').join('') + '</div>' +
       (given ? '<div class="change"><span>Tiền thối</span><b class="num">' + (change >= 0 ? vnd(change) : 'Thiếu ' + vnd(-change)) + '</b></div>' : '') +
       '<div class="row"><button class="btn btn-ok grow" type="button" data-act="pay-ok" data-m="tien_mat" data-id="' + o.id + '">Tiền mặt</button>' +
       '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Chuyển khoản</button>' +
       '<button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
+  }
+  if (p.kind === 'edit') {
+    const items = editableItems(o);
+    return '<div class="panel"><p class="panel-title">Sửa đơn ' + esc(orderLabel(o)) + '</p>' +
+      '<ul class="ed-list">' + items.map(i => '<li><span class="ed-nm"><b>' + esc(i.item_name) + '</b>' + ((i.options || []).length ? '<small>' + esc(i.options.map(x => x.choice).join(' · ')) + '</small>' : '') + (i.note ? '<small class="in">' + esc(i.note) + '</small>' : '') + '</span>' +
+        '<span class="ed-q"><button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="' + (i.qty - 1) + '" data-id="' + o.id + '" aria-label="Bớt 1 ' + esc(i.item_name) + '">' + (i.qty > 1 ? '−' : '×') + '</button>' +
+        '<output class="num">' + i.qty + '</output><button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="' + (i.qty + 1) + '" data-id="' + o.id + '" aria-label="Thêm 1 ' + esc(i.item_name) + '"' + (i.qty >= 50 ? ' disabled' : '') + '>+</button></span></li>').join('') + '</ul>' +
+      '<div class="row"><button class="btn grow" type="button" data-act="add-item" data-id="' + o.id + '">+ Thêm món</button><button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Xong</button></div></div>';
   }
   if (p.kind === 'cancel') {
     return '<div class="panel"><p class="panel-title">Huỷ đơn ' + orderLabel(o) + '? Cả đơn (đồ ăn và đồ uống) sẽ bị xoá, không tính doanh thu.</p>' +
@@ -141,12 +163,27 @@ function panelHtml(o) {
   }
   return '';
 }
+/* Món sửa được ở màn hình này: món của nơi này; chủ quán sửa được cả đơn */
+const editableItems = o => state.session.employee.role === 'owner' ? o.items : o.items.filter(i => i.station === STATION);
+function paidHtml(o) {
+  if (!isMinePay(o)) return '';
+  const ps = paidState(o);
+  if (ps === 'full') return '<span class="paid paid-ok">Đã thu ' + vnd(o.paid_amount) + '</span>';
+  if (ps === 'more') return '<span class="paid paid-warn">Đã thu ' + vnd(o.paid_amount) + ' · thu thêm ' + vnd(dueOf(o)) + '</span>';
+  if (ps === 'refund') return '<span class="paid paid-warn">Đã thu ' + vnd(o.paid_amount) + ' · trả lại ' + vnd(-dueOf(o)) + '</span>';
+  return '';
+}
 function actionsHtml(o, col) {
   if (state.panels[o.id]) return '';
-  const id = o.id, cancel = isMinePay(o) ? '<button class="btn btn-line btn-sm" type="button" data-act="cancel" data-id="' + id + '">Huỷ</button>' : '';
-  if (col === 'cho_nhan') return '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
-  if (col === 'dang_lam') return '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
-  return '<button class="btn" type="button" data-act="pay" data-id="' + id + '">Thanh toán</button>' + cancel;
+  const id = o.id, ps = paidState(o);
+  const cancel = isMinePay(o) ? '<button class="btn btn-line btn-sm" type="button" data-act="cancel" data-id="' + id + '">Huỷ</button>' : '';
+  const edit = canEdit() ? '<button class="btn btn-line btn-sm" type="button" data-act="edit" data-id="' + id + '">Sửa đơn</button>' : '';
+  // Thu tiền lúc nào cũng được (khách muốn trả trước); đã thu đủ thì thôi
+  const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
+  const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
+  if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
+  if (col === 'dang_lam') return edit + pay + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
+  return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + cancel;
 }
 function cardHtml(o, col) {
   // Cột làm món: chỉ món của nơi này. Cột thanh toán: cả đơn.
@@ -155,9 +192,10 @@ function cardHtml(o, col) {
   const other = col === 'thanh_toan' ? (() => { const p = part(o, OTHER); return p && p.status !== 'da_ra_mon' ? '<p class="kc-other"><b>' + STATIONS[OTHER] + ':</b> ' + partStatus(p) + '</p>' : ''; })() : otherHtml(o);
   return '<article class="kc" data-order="' + o.id + '">' +
     '<div class="kc-top">' + qboxHtml(o) +
-    '<div class="kc-who"><b>' + esc(o.customer_name) + '</b><span>' + (o.customer_phone ? esc(o.customer_phone) + ' · ' : '') + 'đặt lúc ' + hhmm(o.created_at) + ' · ' + count + ' món</span></div>' + timerHtml(o, col) + '</div>' +
-    itemsHtml(items, col === 'thanh_toan' && !(o.stations || []).every(x => x.station === STATION)) + other + (o.note ? '<p class="kc-note">Ghi chú: ' + esc(o.note) + '</p>' : '') +
-    '<div class="kc-foot"><span class="kc-total num">' + (isMinePay(o) ? vnd(o.total) : '') + '</span>' + actionsHtml(o, col) + '</div>' + panelHtml(o) + '</article>';
+    '<div class="kc-who"><b>' + esc(o.customer_name) + '</b><span>' + (o.customer_phone ? '<a href="tel:' + esc(o.customer_phone) + '">' + esc(o.customer_phone) + '</a> · ' : '') + 'đặt lúc ' + hhmm(o.created_at) + ' · ' + count + ' món</span></div>' + timerHtml(o, col) + '</div>' +
+    (isDelivery(o) ? '<p class="kc-addr"><b>Giao tới:</b> ' + esc(o.address || '') + (o.deliver_at ? '<span class="kc-when">Giao lúc ' + hhmm(o.deliver_at) + '</span>' : '') + '</p>' : '') +
+    itemsHtml(items, col === 'thanh_toan' && !(o.stations || []).every(x => x.station === STATION), o) + other + (o.note ? '<p class="kc-note">Ghi chú: ' + esc(o.note) + '</p>' : '') +
+    '<div class="kc-foot"><span class="kc-total num">' + (isMinePay(o) ? vnd(o.total) : '') + paidHtml(o) + '</span>' + actionsHtml(o, col) + '</div>' + panelHtml(o) + '</article>';
 }
 function grouped() {
   const by = {}; COLS.forEach(([k]) => { by[k] = []; });
@@ -202,11 +240,68 @@ async function onAction(e) {
     case 'served': run(b, () => api.markServed(id, STATION), 'Đơn ' + orderLabel(o) + ' đã ra món', isMinePay(o) ? 'thanh_toan' : null); break;
     case 'pay': state.panels[id] = { kind: 'pay', given: 0 }; render(); break;
     case 'given': state.panels[id].given = Number(b.dataset.v); render(); break;
-    case 'pay-ok': { delete state.panels[id]; run(b, () => api.completePayment(id, b.dataset.m), 'Đã thu ' + vnd(o.total) + (b.dataset.m === 'tien_mat' ? ' tiền mặt' : ' chuyển khoản'), 'cho_nhan'); break; }
+    case 'pay-ok': {
+      delete state.panels[id]; const due = dueOf(o);
+      const msg = due < 0 ? 'Đã trả lại khách ' + vnd(-due) : 'Đã thu ' + vnd(due) + (b.dataset.m === 'tien_mat' ? ' tiền mặt' : ' chuyển khoản') + (o.status !== 'da_ra_mon' ? ' · đơn vẫn làm tiếp' : '');
+      run(b, () => api.completePayment(id, b.dataset.m), msg, 'cho_nhan'); break;
+    }
+    case 'edit': state.panels[id] = { kind: 'edit' }; render(); break;
+    case 'qty': {
+      const q = Number(b.dataset.q), it = o.items.find(x => String(x.id) === b.dataset.item);
+      run(b, () => api.staffSetItemQty(Number(b.dataset.item), q), q <= 0 && it ? 'Đã bỏ ' + it.item_name : null); break;
+    }
+    case 'add-item': openPicker(o); break;
     case 'cancel': state.panels[id] = { kind: 'cancel' }; render(); break;
     case 'cancel-ok': delete state.panels[id]; run(b, () => api.cancelOrder(id), 'Đã huỷ đơn ' + orderLabel(o)); break;
     case 'close': delete state.panels[id]; render(); break;
   }
+}
+/* ---------- Thêm món vào đơn: chọn món, tuỳ chọn, số lượng ---------- */
+let menuCache = null;
+async function getMenu() { if (!menuCache) { menuCache = await api.getMenu(); setTimeout(() => { menuCache = null; }, 60e3); } return menuCache; }
+async function openPicker(o) {
+  let menu; try { menu = await getMenu(); } catch (e) { ui.toast(errText(e)); return; }
+  const owner = state.session.employee.role === 'owner';
+  const cats = menu.filter(c => owner || (c.station || 'bep') === STATION);
+  const listView = () => ui.head('Thêm món vào đơn', esc(orderLabel(o))) + '<div class="sh-body">' +
+    '<input class="search" id="pkQ" type="search" placeholder="Tìm món…" aria-label="Tìm món">' +
+    '<div id="pkList">' + cats.map(c => '<section class="pk-cat"><h3>' + esc(c.name) + '</h3>' + c.items.map(it => '<button class="pk-item" type="button" data-pick="' + esc(it.id) + '" data-n="' + esc(it.name.toLowerCase()) + '"><span>' + esc(it.name) + '</span><b class="num">' + K(it.price) + '</b></button>').join('') + '</section>').join('') + '</div></div>';
+  ui.sheet(listView(), sh => {
+    const q = $('#pkQ', sh);
+    q.oninput = () => { const v = q.value.trim().toLowerCase(); sh.querySelectorAll('.pk-item').forEach(x => { x.hidden = !!v && x.dataset.n.indexOf(v) < 0; }); sh.querySelectorAll('.pk-cat').forEach(c => { c.hidden = ![...c.querySelectorAll('.pk-item')].some(x => !x.hidden); }); };
+    sh.addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; const it = cats.flatMap(c => c.items).find(x => x.id === b.dataset.pick); if (it) pickOptions(o, it); });
+  });
+}
+function pickOptions(o, it) {
+  const sel = new Map(it.option_groups.map(g => [g.id, new Set(g.choices.filter(c => c.default).map(c => c.id))]));
+  let qty = 1;
+  const price = () => (it.price + it.option_groups.reduce((s, g) => s + g.choices.filter(c => sel.get(g.id).has(c.id)).reduce((t, c) => t + c.price, 0), 0)) * qty;
+  ui.sheet(ui.head(esc(it.name), 'Thêm vào đơn ' + esc(orderLabel(o))) + '<div class="sh-body">' +
+    it.option_groups.map(g => '<fieldset class="pk-og"><legend>' + esc(g.title) + (g.min > 0 ? ' <span class="small" style="color:var(--red)">bắt buộc</span>' : '') + '</legend>' +
+      g.choices.map(c => '<label class="pk-ch"><input type="' + (g.max === 1 ? 'radio' : 'checkbox') + '" name="g' + g.id + '" value="' + c.id + '"' + (sel.get(g.id).has(c.id) ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' + (c.price ? '<span class="small muted">+' + K(c.price) + '</span>' : '') + '</label>').join('') + '</fieldset>').join('') +
+    '<label class="field" for="pkNote">Ghi chú món<input id="pkNote" maxlength="120"></label>' +
+    '<div class="row" style="justify-content:space-between;align-items:center"><div class="mins"><button class="btn btn-line btn-sm" type="button" id="pkMinus" aria-label="Bớt 1">−</button><output class="num" id="pkQty">1</output><button class="btn btn-line btn-sm" type="button" id="pkPlus" aria-label="Thêm 1">+</button></div><b class="num" id="pkPrice">' + vnd(price()) + '</b></div>' +
+    '<p class="msg" id="pkMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="pkAdd">Thêm vào đơn</button></div>', sh => {
+    const paint = () => { $('#pkQty', sh).textContent = qty; $('#pkPrice', sh).textContent = vnd(price()); };
+    sh.addEventListener('change', e => {
+      const inp = e.target.closest('input[name^="g"]'); if (!inp) return;
+      const g = it.option_groups.find(x => 'g' + x.id === inp.name), set = sel.get(g.id), cid = Number(inp.value);
+      if (g.max === 1) { set.clear(); if (inp.checked) set.add(cid); }
+      else if (inp.checked) { if (set.size >= g.max) { inp.checked = false; ui.toast('Chọn tối đa ' + g.max); return; } set.add(cid); } else set.delete(cid);
+      paint();
+    });
+    $('#pkMinus', sh).onclick = () => { qty = Math.max(1, qty - 1); paint(); };
+    $('#pkPlus', sh).onclick = () => { qty = Math.min(50, qty + 1); paint(); };
+    $('#pkAdd', sh).onclick = async () => {
+      const bad = it.option_groups.find(g => sel.get(g.id).size < g.min);
+      if (bad) { const m = $('#pkMsg', sh); m.textContent = 'Chọn "' + bad.title + '"'; m.hidden = false; return; }
+      const btn = $('#pkAdd', sh); btn.disabled = true;
+      try {
+        await api.staffAddItems(o.id, [{ menu_item_id: it.id, qty, note: $('#pkNote', sh).value.trim() || null, choice_ids: [...sel.values()].flatMap(x => [...x]) }]);
+        ui.close(); ui.toast('Đã thêm ' + qty + '× ' + it.name + ' vào đơn ' + orderLabel(o)); state.panels[o.id] = { kind: 'edit' }; refresh();
+      } catch (err) { const m = $('#pkMsg', sh); m.textContent = errText(err); m.hidden = false; btn.disabled = false; }
+    };
+  });
 }
 function onCall(e) { const b = e.target.closest('[data-call]'); if (b) run(b, () => api.resolveCall(Number(b.dataset.call))); }
 
