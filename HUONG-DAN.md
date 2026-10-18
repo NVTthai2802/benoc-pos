@@ -63,11 +63,15 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Máy pha chế**: mở `phache.html`, đăng nhập tài khoản máy pha chế, cũng bấm **Bật chuông báo**.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ và tên; mang về thì chỉ cần tên. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
+- **Khách trả tiền trước**: bấm **Thu tiền** ngay trên thẻ đơn ở cột nào cũng được. Thẻ hiện **Đã thu …**, đơn vẫn làm tiếp; ra món xong đơn tự hoàn tất, không phải thu lại. Khách cũng thấy "Đã thanh toán trước" trên điện thoại.
+- **Xem chi tiết đơn**: bấm vào phần món trên thẻ đơn (hoặc dòng **Xem chi tiết đơn**) để xem toàn bộ đơn, gồm cả món của bếp và pha chế: size, đường, đá, topping, ghi chú và giá từng món.
+- **Sửa đơn sau khi đã nhận**: bấm **Sửa đơn** trên thẻ → **−/+** để đổi số lượng (bấm **×** để bỏ món), **+ Thêm món** để chọn món và tuỳ chọn. Bếp và pha chế sửa món của mình, chủ quán sửa được cả đơn. Món thêm sau có nhãn **MỚI**. Nếu đơn đã thu tiền mà sửa làm đổi tổng, thẻ hiện **thu thêm** hoặc **trả lại** bao nhiêu.
+- **Đơn giao hàng (khách nhắn Facebook)**: chủ quán bấm **+ Đơn giao hàng** (trang Quản lý hoặc màn hình bếp) → tích món như khách → **Xem giỏ** → nhập tên, địa chỉ, giờ giao, tích **Khách đã chuyển khoản** nếu đã nhận tiền → **Tạo đơn giao hàng**. Đơn hiện trên bếp và pha chế với ô **GIAO hh:mm** màu xanh ngọc và địa chỉ. Cần đăng nhập tài khoản chủ quán hoặc nhân viên.
 - **Doanh thu** có bảng **Tiền theo quầy**: mỗi quầy thu bao nhiêu tiền mặt, bao nhiêu chuyển khoản, để cuối ngày đối chiếu két.
 - **Nhân viên**: mở `quanly.html` trên điện thoại mình → **Chấm công** → chụp ảnh vào ca, cuối ca chụp ảnh ra ca.
-- **Hết món**: **Menu** → gạt công tắc **Đang bán** sang **Hết món**, khách sẽ không thấy món đó.
+- **Hết món**: **Menu** → gạt công tắc **Đang bán** sang **Hết món**. Món biến mất khỏi menu khách trong vài giây (không cần tải lại trang); khách nào đã bỏ món đó vào giỏ sẽ được báo và món tự bỏ khỏi giỏ.
 - **Đổi ảnh món**: **Menu** → bấm món → **Chọn ảnh** → **Lưu**.
-- **Tuỳ chọn món** (upsize, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
+- **Tuỳ chọn món** (size M/L, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
 
 ## Lưu ý
 
@@ -87,6 +91,8 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-5-topping-duong-da.sql`: thêm nhóm **Topping đồ uống** (7 loại, mỗi loại +5.000đ), **Lượng đường** và **Lượng đá** (mặc định bình thường). Trang khách hiện đường, đá thành 3 ô có hình. Chỉ thêm, không xoá gì.
 - `sql/cap-nhat-6-mang-ve.sql`: thêm **đơn mang về**. Khách chọn Ăn tại quán (nhập số thẻ như cũ) hoặc Mang về (chỉ cần tên). Chạy file này **trước** khi đưa giao diện mới lên.
 - `sql/cap-nhat-7-trang-thai-tuc-thi.sql`: khách thấy trạng thái đơn **ngay** khi bếp/pha chế bấm (trước đây trễ tới 15 giây). Chỉ thêm hàm và trigger.
+- `sql/cap-nhat-8-giao-hang-thu-truoc-sua-don.sql`: **đơn giao hàng** do chủ quán tạo, **thu tiền trước**, **sửa đơn** sau khi đã nhận, và báo **hết món** tức thì cho khách. Chạy file này **trước** khi đưa giao diện mới lên.
+- `sql/cap-nhat-9-size-m-l.sql`: đồ uống có Upsize đổi thành chọn **Size M** (giá gốc, chọn sẵn) / **Size L** (+5k hoặc +10k như cũ). Menu khách hiện cả 2 giá "M 22K · L 32K", màn hình pha chế có nhãn **SIZE M / SIZE L** trên từng ly. Món không có Upsize giữ nguyên 1 giá. Giao diện mới chạy được cả trước và sau khi chạy file này.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 
