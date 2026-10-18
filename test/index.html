@@ -58,6 +58,12 @@
 .dp-btn:hover, .dp-btn:focus-visible { border-color: var(--red); background: var(--red-soft); }
 .dp-btn svg { width: 44px; height: 44px; color: var(--red); }
 .dp-btn[data-dine="mang_ve"] svg { color: var(--warn); }
+.dp-btn[aria-pressed="true"] { border-color: var(--red); background: var(--red-soft); box-shadow: inset 0 0 0 1px var(--red); }
+.dp-btn[data-gk="lay"] svg { color: var(--warn); }
+.dp-btn[data-gk="ship"] svg { color: #2a7f6f; }
+.seg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 12px; background: var(--line); }
+.seg2 button { padding: 10px 6px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font: 700 15px/1.2 var(--f-body); cursor: pointer; }
+.seg2 button[aria-pressed="true"] { background: var(--card, #fff); color: var(--red); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .dp-btn b { font: 700 17px/1.2 var(--f-head); }
 .dp-btn span { font-size: 13px; color: var(--ink-2); }
 .dine-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -207,7 +213,7 @@
 <script>
 (function () {
 'use strict';
-const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, qboxHtml, orderLabel, sizeGroup } = BN;
+const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, ICON_SCOOTER, qboxHtml, orderLabel, sizeGroup } = BN;
 /* Giá size L của món có chọn size (null nếu món chỉ có 1 giá) */
 const priceL = it => { const g = sizeGroup(it), L = g && g.choices.find(c => /^size l$/i.test(c.name)); return L ? it.price + L.price : null; };
 /* Hình ly: M nhỏ, L to, chữ ở giữa */
@@ -235,7 +241,7 @@ const state = {
   // ?menu=tra (mã QR quầy pha chế) → menu Trà · Cà phê; còn lại (?menu=an hoặc không có) → menu Ăn vặt của bếp
   // ?dat=giao → chủ quán / nhân viên tạo đơn giao hàng (khách nhắn Facebook, gọi điện): đủ cả đồ ăn và đồ uống
   kind: BN.PARAMS.get('dat') === 'giao' ? 'giao' : BN.PARAMS.get('menu') === 'tra' ? 'pha_che' : 'bep',
-  staff: null, giao: { name: '', phone: '', address: '', time: '', paid: false }
+  staff: null, giao: { name: '', phone: '', address: '', time: '', paid: false, kind: BN.store.get('giaoKind', 'ship') === 'lay' ? 'lay' : 'ship' }
 };
 const GIAO = state.kind === 'giao';
 if (GIAO) state.orders = []; // trang tạo đơn không theo dõi đơn như khách
@@ -271,7 +277,10 @@ function thumbHtml(it, size) {
 const queueNum = () => parseInt(state.info.queue, 10);
 /* Ăn tại quán / mang về. Hỏi lại nếu lần chọn trước đã quá 4 giờ (khách quay lại hôm khác). */
 const DINE_TTL = 4 * 3600e3;
-const dineMode = () => GIAO ? 'giao_hang' : (state.info.dine && Date.now() - (state.info.dineAt || 0) < DINE_TTL) ? state.info.dine : '';
+/* Trang tạo đơn: 'lay' = khách qua lấy (đơn mang về, không cần giờ), 'ship' = đơn đi ship */
+const isLay = () => GIAO && state.giao.kind === 'lay';
+function setGiaoKind(k) { state.giao.kind = k === 'lay' ? 'lay' : 'ship'; store.set('giaoKind', state.giao.kind); renderTicket(); }
+const dineMode = () => GIAO ? (isLay() ? 'mang_ve' : 'giao_hang') : (state.info.dine && Date.now() - (state.info.dineAt || 0) < DINE_TTL) ? state.info.dine : '';
 const isTake = () => dineMode() === 'mang_ve';
 function setDine(d) { state.info.dine = d; state.info.dineAt = Date.now(); saveInfo(); }
 const infoReady = () => !!dineMode() && state.info.name.trim() !== '' && (isTake() || queueNum() > 0);
@@ -287,7 +296,7 @@ function needDine(then) {
 }
 function renderChip() {
   const c = $('#chip');
-  if (GIAO) { c.className = 'chip'; c.textContent = 'Giao hàng'; c.removeAttribute('aria-label'); return; }
+  if (GIAO) { c.className = 'chip'; c.textContent = isLay() ? 'Qua lấy' : 'Đi ship'; c.removeAttribute('aria-label'); return; }
   if (!dineMode()) { c.className = 'chip chip--warn'; c.textContent = 'Ăn ở đây hay mang về?'; c.setAttribute('aria-label', 'Chưa chọn ăn tại quán hay mang về, bấm để chọn'); }
   else if (isTake()) { c.className = 'chip'; c.innerHTML = 'Mang về'; c.setAttribute('aria-label', 'Đơn mang về, bấm để sửa'); }
   else if (queueNum() > 0) { c.className = 'chip'; c.innerHTML = 'Số <b class="num">' + esc(queueNum()) + '</b>'; c.setAttribute('aria-label', 'Số thứ tự ' + queueNum() + ', bấm để sửa'); }
@@ -297,10 +306,14 @@ function renderTicket() {
   const el = $('#ticket'); renderChip();
   el.className = 'ticket';
   if (GIAO) {
-    el.className = 'ticket ticket--pick'; el.onclick = null; el.setAttribute('aria-label', 'Tạo đơn giao hàng');
+    el.className = 'ticket ticket--pick'; el.setAttribute('aria-label', 'Tạo đơn giao hàng');
+    el.onclick = e => { const b = e.target.closest('[data-gk]'); if (b) setGiaoKind(b.dataset.gk); };
     el.innerHTML = state.staff === false
       ? '<p class="dp-title">Cần đăng nhập trước</p><p style="margin:0 0 10px;text-align:center">Trang này để chủ quán / nhân viên tạo đơn giao hàng. Đăng nhập ở trang Quản lý rồi quay lại.</p><a class="btn btn-block" href="quanly.html">Mở trang Quản lý để đăng nhập</a>'
-      : '<p class="dp-title">Đơn giao hàng</p><p style="margin:0;text-align:center" class="muted">Tích các món khách nhắn (đồ ăn và đồ uống chung một đơn), rồi bấm <b>Xem giỏ</b> để nhập tên, địa chỉ, giờ giao.' + (state.staff ? '<br><span class="small">Đang đăng nhập: ' + esc(state.staff.full_name) + ' · <a href="quanly.html">về trang Quản lý</a></span>' : '') + '</p>';
+      : '<p class="dp-title">Đơn giao hàng</p><div class="dp-btns">' +
+        '<button class="dp-btn" type="button" data-gk="lay" aria-pressed="' + isLay() + '">' + ICON_BAG + '<b>Qua lấy</b><span>Khách tới quán lấy, không cần giờ</span></button>' +
+        '<button class="dp-btn" type="button" data-gk="ship" aria-pressed="' + !isLay() + '">' + ICON_SCOOTER + '<b>Đơn đi ship</b><span>Cần địa chỉ và giờ giao</span></button></div>' +
+        '<p style="margin:10px 0 0;text-align:center" class="muted small">Tích các món khách nhắn (đồ ăn và đồ uống chung một đơn), rồi bấm <b>Xem giỏ</b> để nhập ' + (isLay() ? 'tên khách' : 'tên, địa chỉ, giờ giao') + '.' + (state.staff ? '<br>Đang đăng nhập: ' + esc(state.staff.full_name) + ' · <a href="quanly.html">về trang Quản lý</a>' : '') + '</p>';
     return;
   }
   if (!dineMode()) {
@@ -602,21 +615,24 @@ function deliverIso(hhmm) {
 function openGiaoCart(linesHtml) {
   const g = state.giao; if (!g.time) g.time = defaultDeliverTime();
   ui.sheet(ui.head('Đơn giao hàng', 'Kiểm tra món, nhập thông tin khách rồi gửi cho bếp và quầy pha chế.') +
-    '<div class="sh-body"><div id="cLines">' + linesHtml() + '</div>' +
+    '<div class="sh-body"><div class="seg2" role="group" aria-label="Loại đơn"><button type="button" data-gk="lay" aria-pressed="' + isLay() + '">Qua lấy</button><button type="button" data-gk="ship" aria-pressed="' + !isLay() + '">Đơn đi ship</button></div>' +
+    '<div id="cLines">' + linesHtml() + '</div>' +
     '<div class="sum"><span>Tổng cộng</span><b class="num" id="cTotal">' + vnd(cartTotal()) + '</b></div>' +
     '<div class="who">' +
     '<label class="field" id="fName" for="gName">Tên khách <span class="req">*</span><input id="gName" maxlength="40" value="' + esc(g.name) + '"></label>' +
     '<label class="field" for="gPhone">Số điện thoại<input id="gPhone" inputmode="tel" maxlength="15" value="' + esc(g.phone) + '"></label>' +
-    '<label class="field wide" id="fAddr" for="gAddr">Địa chỉ giao <span class="req">*</span><textarea id="gAddr" maxlength="300" rows="2">' + esc(g.address) + '</textarea></label>' +
-    '<label class="field" id="fTime" for="gTime">Giờ giao<input id="gTime" type="time" value="' + esc(g.time) + '"></label>' +
+    '<label class="field wide" id="fAddr" for="gAddr"' + (isLay() ? ' hidden' : '') + '>Địa chỉ giao <span class="req">*</span><textarea id="gAddr" maxlength="300" rows="2">' + esc(g.address) + '</textarea></label>' +
+    '<label class="field" id="fTime" for="gTime"' + (isLay() ? ' hidden' : '') + '>Giờ giao<input id="gTime" type="time" value="' + esc(g.time) + '"></label>' +
     '<label class="field" style="justify-content:flex-end"><span class="row" style="gap:8px;align-items:center"><input type="checkbox" id="gPaid"' + (g.paid ? ' checked' : '') + ' style="width:20px;height:20px;accent-color:var(--red)"> Khách đã chuyển khoản</span></label>' +
     '<label class="field wide" for="cNote">Ghi chú<textarea id="cNote" maxlength="300">' + esc(state.cartNote) + '</textarea></label>' +
     '<p class="msg wide" id="cMsg" hidden></p></div></div>' +
-    '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Tạo đơn giao hàng</button></div>',
+    '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">' + (isLay() ? 'Tạo đơn qua lấy' : 'Tạo đơn đi ship') + '</button></div>',
     sh => {
       const repaint = () => { $('#cLines', sh).innerHTML = linesHtml(); $('#cTotal', sh).textContent = vnd(cartTotal()); $('#cSend', sh).disabled = !state.cart.length; };
       repaint();
       sh.addEventListener('click', e => {
+        const k = e.target.closest('[data-gk]');
+        if (k) { setGiaoKind(k.dataset.gk); $$('.seg2 [data-gk]', sh).forEach(x => x.setAttribute('aria-pressed', x === k)); $('#fAddr', sh).hidden = $('#fTime', sh).hidden = isLay(); $('#cSend', sh).textContent = isLay() ? 'Tạo đơn qua lấy' : 'Tạo đơn đi ship'; $('#cMsg', sh).hidden = true; return; }
         const b = e.target.closest('[data-line]'); if (!b) return;
         const i = Number(b.dataset.line), l = state.cart[i]; l.qty += Number(b.dataset.d);
         if (l.qty <= 0) state.cart.splice(i, 1);
@@ -634,21 +650,22 @@ function openGiaoCart(linesHtml) {
 async function sendGiao(sh) {
   const g = state.giao, msg = $('#cMsg', sh), btn = $('#cSend', sh); msg.hidden = true;
   if (!g.name.trim()) { $('#fName', sh).classList.add('invalid'); msg.textContent = 'Nhập tên khách.'; msg.hidden = false; $('#gName', sh).focus(); return; }
-  if (!g.address.trim()) { $('#fAddr', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_ADDRESS; msg.hidden = false; $('#gAddr', sh).focus(); return; }
+  const lay = isLay();
+  if (!lay && !g.address.trim()) { $('#fAddr', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_ADDRESS; msg.hidden = false; $('#gAddr', sh).focus(); return; }
   btn.disabled = true; btn.textContent = 'Đang tạo…';
   try {
     const res = await api.placeOrder({
-      queue: null, dine: 'giao_hang', name: g.name.trim(), phone: g.phone.trim(), address: g.address.trim(), deliverAt: deliverIso(g.time), note: state.cartNote.trim(),
+      queue: null, dine: lay ? 'mang_ve' : 'giao_hang', name: g.name.trim(), phone: g.phone.trim(), address: lay ? null : g.address.trim(), deliverAt: lay ? null : deliverIso(g.time), note: state.cartNote.trim(),
       items: state.cart.map(l => ({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }))
     });
     let paidMsg = '';
     if (g.paid) { try { await api.completePayment(res.order_id, 'chuyen_khoan'); paidMsg = ', đã ghi nhận chuyển khoản'; } catch (e) { paidMsg = '. Chưa ghi nhận được tiền, thu ở màn hình bếp'; } }
     const who = g.name.trim();
     state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons(); renderCartBar();
-    state.giao = { name: '', phone: '', address: '', time: '', paid: false };
-    ui.close(); ui.toast('Đã tạo đơn giao hàng cho ' + who + ' · ' + vnd(res.total) + paidMsg);
+    state.giao = { name: '', phone: '', address: '', time: '', paid: false, kind: state.giao.kind };
+    ui.close(); ui.toast((lay ? 'Đã tạo đơn qua lấy cho ' : 'Đã tạo đơn đi ship cho ') + who + ' · ' + vnd(res.total) + paidMsg);
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Tạo đơn giao hàng';
+    btn.disabled = false; btn.textContent = lay ? 'Tạo đơn qua lấy' : 'Tạo đơn đi ship';
     msg.textContent = errText(e); msg.hidden = false; msg.scrollIntoView({ block: 'nearest' });
     if (e.code === 'ITEM_UNAVAILABLE' || e.code === 'OPTION_INVALID') loadMenu().then(() => { const l = $('#cLines', sh); if (l) { l.innerHTML = '<p class="small muted">Giỏ đã được cập nhật theo menu mới.</p>'; } });
   }
