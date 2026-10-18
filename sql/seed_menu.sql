@@ -162,10 +162,8 @@ from (values
   ('Cơm trộn',           'Topping cơm/mì', 2),
   ('Mì trộn',            'Thêm mì',        1),
   ('Mì trộn',            'Topping cơm/mì', 2),
-  ('Kimbap',             'Combo kimbap',   1),
-  ('Trà hoa quả',        'Size M/L (+10k)',  1),
-  ('Sốt khoai môn tươi', 'Size M/L (+10k)',  1),
-  ('Nước uống',          'Size M/L (+5k)',   1)
+  ('Kimbap',             'Combo kimbap',   1)
+  -- Size M/L chỉ có ở Cà phê và Matcha · Cacao · Khoai môn (gắn theo từng món bên dưới)
 ) as v(cat, grp, ord)
 join menu_categories c on c.name = v.cat
 join menu_items mi on mi.category_id = c.id
