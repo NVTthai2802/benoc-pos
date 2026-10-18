@@ -22,7 +22,7 @@ Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**
 
 | | Product (quán dùng thật) | Test (thử tính năng mới) |
 |---|---|---|
-| Trang | https://nvtthai2802.github.io/benoc-pos/ | https://nvtthai2802.github.io/benoc-pos/test/ |
+| Trang | https://benoc-pos.pages.dev/ | https://benoc-pos.pages.dev/test/ |
 | Cơ sở dữ liệu | Supabase **benoc-pos** | Supabase **benoc-pos-test** |
 | Tài khoản, đơn, doanh thu | thật | riêng, thử thoải mái |
 
@@ -41,7 +41,11 @@ Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**
 
 ## 2. Đưa trang lên mạng (miễn phí)
 
-Đang chạy trên GitHub Pages: https://nvtthai2802.github.io/benoc-pos/
+Đang chạy trên **Cloudflare Pages** (miễn phí, được dùng cho kinh doanh): https://benoc-pos.pages.dev/
+
+- Cloudflare tự lấy code từ nhánh `main` trên GitHub mỗi khi có thay đổi, khoảng 1 phút là cập nhật.
+- Các link phụ Cloudflare tự tạo (dạng `xxxx.benoc-pos.pages.dev`) luôn dùng Supabase **test**, không đụng dữ liệu quán.
+- Bản cũ trên GitHub Pages (`nvtthai2802.github.io/benoc-pos`) vẫn chạy song song; tắt trong GitHub → Settings → Pages khi không cần nữa.
 
 Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh chấm công.
 
