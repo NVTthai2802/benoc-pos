@@ -576,7 +576,7 @@ function openCart() {
     '<label><input type="radio" name="cDine" value="mang_ve"' + (isTake() ? ' checked' : '') + '>' + ICON_BAG + 'Mang về</label></div>' +
     '<label class="field" id="fQueue" for="cQueue"' + (isTake() ? ' hidden' : '') + '>Số trên thẻ <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(state.info.queue) + '"></label>' +
     '<label class="field" id="fName" for="cName">Tên của bạn <span class="req">*</span><input id="cName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
-    '<label class="field wide" for="cPhone">Số điện thoại (không bắt buộc)<input id="cPhone" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
+    '<label class="field wide" id="fPhone" for="cPhone">Số điện thoại <span class="req">*</span><input id="cPhone" type="tel" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
     '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300">' + esc(state.cartNote) + '</textarea></label>' +
     '<p class="msg wide" id="cMsg" hidden></p><div class="dup wide" id="cDup" hidden></div></div></div>' +
     '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho quán</button></div>',
@@ -592,7 +592,7 @@ function openCart() {
       const q = $('#cQueue', sh), n = $('#cName', sh), p = $('#cPhone', sh), nt = $('#cNote', sh);
       q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderTicket(); $('#fQueue', sh).classList.remove('invalid'); $('#cDup', sh).hidden = true; };
       n.oninput = () => { state.info.name = n.value; saveInfo(); renderTicket(); $('#fName', sh).classList.remove('invalid'); };
-      p.oninput = () => { state.info.phone = p.value; saveInfo(); };
+      p.oninput = () => { state.info.phone = p.value; saveInfo(); $('#fPhone', sh).classList.remove('invalid'); };
       $$('input[name=cDine]', sh).forEach(r => r.onchange = () => { setDine(r.value); $('#fQueue', sh).hidden = isTake(); $('#fDine', sh).classList.remove('invalid'); $('#cMsg', sh).hidden = true; $('#cDup', sh).hidden = true; renderTicket(); });
       nt.oninput = () => { state.cartNote = nt.value; saveCart(); };
       $('#cSend', sh).onclick = () => sendOrder(sh, false);
@@ -665,12 +665,15 @@ async function sendGiao(sh) {
     if (e.code === 'ITEM_UNAVAILABLE' || e.code === 'OPTION_INVALID') loadMenu().then(() => { const l = $('#cLines', sh); if (l) { l.innerHTML = '<p class="small muted">Giỏ đã được cập nhật theo menu mới.</p>'; } });
   }
 }
+/* Số điện thoại Việt Nam: 10 số bắt đầu bằng 0 (chấp nhận +84, dấu cách, chấm, gạch) */
+const phoneOk = v => /^0\d{9}$/.test(String(v || '').replace(/[\s.\-()]/g, '').replace(/^\+?84/, '0'));
 async function sendOrder(sh, confirm) {
   const msg = $('#cMsg', sh), dup = $('#cDup', sh), btn = $('#cSend', sh);
   msg.hidden = true; dup.hidden = true;
   if (!dineMode()) { $('#fDine', sh).classList.add('invalid'); msg.textContent = 'Bạn ăn tại quán hay mang về? Chọn một ô ở trên nhé.'; msg.hidden = false; msg.scrollIntoView({ block: 'nearest' }); return; }
   if (!isTake() && !(queueNum() > 0)) { $('#fQueue', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_QUEUE_NUMBER; msg.hidden = false; $('#cQueue', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
   if (!state.info.name.trim()) { $('#fName', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_NAME; msg.hidden = false; $('#cName', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
+  if (!phoneOk(state.info.phone)) { $('#fPhone', sh).classList.add('invalid'); msg.textContent = state.info.phone.trim() ? 'Số điện thoại chưa đúng. Nhập 10 số, ví dụ 09xx xxx xxx.' : 'Bạn chưa nhập số điện thoại. Quán cần số để liên hệ khi có việc.'; msg.hidden = false; $('#cPhone', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
   const mine = !isTake() && state.orders.some(o => !o.paid && o.dine !== 'mang_ve' && o.queue === queueNum());
   btn.disabled = true; btn.textContent = 'Đang gửi…';
   try {
