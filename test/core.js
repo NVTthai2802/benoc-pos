@@ -416,7 +416,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v10'; // v10: size / upsize theo cập nhật 12 (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v11'; // v10: size / upsize theo cập nhật 12 (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 // Nhận cả /bep.html lẫn /bep (Cloudflare Pages tự bỏ đuôi .html)
@@ -482,7 +482,7 @@ function refreshOrder(db, id) {
 
 /* Giống sql/cap-nhat-9-size-m-l.sql: nhóm "Upsize" của đồ uống thành chọn Size M (chọn sẵn) / Size L */
 /* Giống sql/cap-nhat-12-sap-xep-size-upsize.sql: nước uống Size XL +5k; trà sữa, trà hoa quả, sốt khoai môn,
-   món nên thử Upsize +10k; cà phê, matcha · cacao · khoai môn Size M / Size L +10k; món cốm Upsize +15k */
+   món nên thử, cà phê, matcha · cacao · khoai môn Upsize +10k (size nhỏ nhất là L); món cốm Upsize +15k */
 function demoSizeMigrate(S) {
   const isSz = g => /^(size|upsize)/i.test(g.title) || /^(size|upsize)/i.test(g.name);
   const old = new Set((S.option_groups || []).filter(isSz).map(g => g.id));
@@ -491,14 +491,13 @@ function demoSizeMigrate(S) {
   S.menu_item_option_groups = (S.menu_item_option_groups || []).filter(l => !old.has(l.group_id));
   let gid = Math.max(0, ...S.option_groups.map(g => g.id)) + 1, cid = Math.max(0, ...S.option_choices.map(c => c.id)) + 1;
   const mk = (name, title, min, ch) => { const id = gid++; S.option_groups.push({ id, name, title, kind: 'do_uong', min_select: min, max_select: 1, sort_order: 1 }); ch.forEach(([n, p, d], k) => S.option_choices.push({ id: cid++, group_id: id, name: n, price_delta: p, is_default: d, is_available: true, sort_order: k + 1 })); return id; };
-  const ML = mk('Size M/L (+10k)', 'Size', 1, [['Size M', 0, true], ['Size L', 10000, false]]);
   const UP10 = mk('Upsize (+10k)', 'Upsize', 0, [['Upsize', 10000, false]]);
   const UP15 = mk('Upsize (+15k)', 'Upsize', 0, [['Upsize', 15000, false]]);
   const XL = mk('Size XL (+5k)', 'Size', 0, [['Size XL', 5000, false]]);
   const catOf = new Map((S.menu_categories || []).map(c => [c.id, c.name]));
   (S.menu_items || []).forEach(m => {
     const n = catOf.get(m.category_id) || '';
-    const g = /^nước uống/i.test(n) ? XL : /^cà phê|matcha|cacao/i.test(n) ? ML : /cốm/i.test(n) ? UP15 : /^(trà sữa|trà hoa quả|sốt khoai môn|món nên thử)/i.test(n) ? UP10 : null;
+    const g = /^nước uống/i.test(n) ? XL : /cốm/i.test(n) ? UP15 : /^(trà sữa|trà hoa quả|sốt khoai môn|món nên thử|cà phê)|matcha|cacao/i.test(n) ? UP10 : null;
     if (g) S.menu_item_option_groups.push({ menu_item_id: m.id, group_id: g, sort_order: 0 });
   });
   return S;
