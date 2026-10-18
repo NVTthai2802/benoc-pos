@@ -124,8 +124,8 @@ join menu_categories c on c.name = v.cat;
 -- ---------- Nhóm tuỳ chọn ----------
 -- kind: 'do_uong' = tuỳ chọn đồ uống, 'do_an' = tuỳ chọn đồ ăn
 insert into option_groups (name, title, min_select, max_select, sort_order, kind) values
-  ('Upsize (+5k)',        'Upsize',       0, 1, 1, 'do_uong'),
-  ('Upsize (+10k)',       'Upsize',       0, 1, 2, 'do_uong'),
+  ('Size M/L (+5k)',      'Size',         1, 1, 1, 'do_uong'),
+  ('Size M/L (+10k)',     'Size',         1, 1, 2, 'do_uong'),
   ('Kem matcha',          'Chọn kem',     1, 1, 3, 'do_uong'),
   ('Kem khoai môn',       'Chọn kem',     1, 1, 3, 'do_uong'),
   ('Thêm mì',             'Thêm mì',      0, 1, 4, 'do_an'),
@@ -135,8 +135,10 @@ insert into option_groups (name, title, min_select, max_select, sort_order, kind
 insert into option_choices (group_id, name, price_delta, is_default, sort_order)
 select g.id, v.name, v.price, v.is_default, v.ord
 from (values
-  ('Upsize (+5k)',    'Upsize', 5000,  false, 1),
-  ('Upsize (+10k)',   'Upsize', 10000, false, 1),
+  ('Size M/L (+5k)',  'Size M', 0,     true,  1),
+  ('Size M/L (+5k)',  'Size L', 5000,  false, 2),
+  ('Size M/L (+10k)', 'Size M', 0,     true,  1),
+  ('Size M/L (+10k)', 'Size L', 10000, false, 2),
   ('Kem matcha',      'Kem muối',  0, false, 1),
   ('Kem matcha',      'Kem cheese',0, false, 2),
   ('Kem khoai môn',   'Kem trứng', 0, false, 1),
@@ -161,9 +163,9 @@ from (values
   ('Mì trộn',            'Thêm mì',        1),
   ('Mì trộn',            'Topping cơm/mì', 2),
   ('Kimbap',             'Combo kimbap',   1),
-  ('Trà hoa quả',        'Upsize (+10k)',  1),
-  ('Sốt khoai môn tươi', 'Upsize (+10k)',  1),
-  ('Nước uống',          'Upsize (+5k)',   1)
+  ('Trà hoa quả',        'Size M/L (+10k)',  1),
+  ('Sốt khoai môn tươi', 'Size M/L (+10k)',  1),
+  ('Nước uống',          'Size M/L (+5k)',   1)
 ) as v(cat, grp, ord)
 join menu_categories c on c.name = v.cat
 join menu_items mi on mi.category_id = c.id
@@ -173,21 +175,21 @@ join option_groups g on g.name = v.grp;
 insert into menu_item_option_groups (menu_item_id, group_id, sort_order)
 select mi.id, g.id, v.ord
 from (values
-  ('Cà phê đen',                'Upsize (+5k)',    1),
-  ('Cà phê sữa',                'Upsize (+5k)',    1),
-  ('Bạc xỉu',                   'Upsize (+10k)',   1),
-  ('Cà phê muối',               'Upsize (+5k)',    1),
-  ('Cà phê kem dẻo Buôn Mê',    'Upsize (+10k)',   1),
-  ('Sữa tươi sương sáo cà phê', 'Upsize (+10k)',   1),
-  ('Matcha latte',              'Upsize (+5k)',    1),
-  ('Matcha latte dâu',          'Upsize (+5k)',    1),
-  ('Matcha latte xoài',         'Upsize (+5k)',    1),
-  ('Matcha latte kem',          'Upsize (+5k)',    1),
+  ('Cà phê đen',                'Size M/L (+5k)',    1),
+  ('Cà phê sữa',                'Size M/L (+5k)',    1),
+  ('Bạc xỉu',                   'Size M/L (+10k)',   1),
+  ('Cà phê muối',               'Size M/L (+5k)',    1),
+  ('Cà phê kem dẻo Buôn Mê',    'Size M/L (+10k)',   1),
+  ('Sữa tươi sương sáo cà phê', 'Size M/L (+10k)',   1),
+  ('Matcha latte',              'Size M/L (+5k)',    1),
+  ('Matcha latte dâu',          'Size M/L (+5k)',    1),
+  ('Matcha latte xoài',         'Size M/L (+5k)',    1),
+  ('Matcha latte kem',          'Size M/L (+5k)',    1),
   ('Matcha latte kem',          'Kem matcha',      2),
-  ('Cacao latte',               'Upsize (+5k)',    1),
-  ('Cacao mint',                'Upsize (+5k)',    1),
-  ('Khoai môn latte',           'Upsize (+5k)',    1),
-  ('Khoai môn latte kem',       'Upsize (+5k)',    1),
+  ('Cacao latte',               'Size M/L (+5k)',    1),
+  ('Cacao mint',                'Size M/L (+5k)',    1),
+  ('Khoai môn latte',           'Size M/L (+5k)',    1),
+  ('Khoai môn latte kem',       'Size M/L (+5k)',    1),
   ('Khoai môn latte kem',       'Kem khoai môn',   2)
 ) as v(item, grp, ord)
 join menu_items mi on mi.name = v.item

@@ -36,12 +36,16 @@ const phoneToEmail = p => String(p).replace(/\D/g, '') + '@' + CONFIG.LOGIN_DOMA
 const DRINK_CATS = /trà|cà phê|matcha|nước|món nên thử|khoai môn tươi|sữa/i;
 /* Đơn mang về: không có số thẻ, hiện ô "MANG VỀ" có hình túi thay cho số */
 const ICON_BAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 12.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>';
-const isTakeaway = o => !!o && (o.dine_type === 'mang_ve' || o.dine === 'mang_ve');
-const qboxHtml = (o, extra) => isTakeaway(o)
+const ICON_SCOOTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7M15 17l-2-7h-3M13 10h3l2.5 7M4 12h5"/></svg>';
+const isDelivery = o => !!o && (o.dine_type === 'giao_hang' || o.dine === 'giao_hang');
+const isTakeaway = o => !!o && (o.dine_type === 'mang_ve' || o.dine === 'mang_ve' || isDelivery(o)); // đơn không có số thẻ
+const qboxHtml = (o, extra) => isDelivery(o)
+  ? '<div class="qbox qbox--mv qbox--giao' + (extra ? ' ' + extra : '') + '">' + ICON_SCOOTER + '<span>' + (o.deliver_at ? 'Giao ' + hhmm(o.deliver_at) : 'Giao hàng') + '</span></div>'
+  : isTakeaway(o)
   ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>Mang về</span></div>'
   : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Số</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
 /* "số 12" hoặc "mang về của Lan" — dùng trong thông báo */
-const orderLabel = o => isTakeaway(o) ? 'mang về của ' + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
+const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isTakeaway(o) ? 'mang về của ' + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(SP + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -56,6 +60,9 @@ const ERR = {
   MISSING_NAME: 'Bạn chưa nhập tên. Quán cần tên để gọi bạn khi có việc.',
   EMPTY_ORDER: 'Giỏ đang trống. Chọn ít nhất một món nhé.',
   ITEM_UNAVAILABLE: 'Có món vừa hết. Menu đã được cập nhật, bạn xem lại giỏ nhé.',
+  MISSING_ADDRESS: 'Chưa nhập địa chỉ giao hàng.',
+  ORDER_WOULD_BE_EMPTY: 'Đơn chỉ còn món này. Muốn bỏ hết thì huỷ đơn.',
+  ITEM_NOT_FOUND: 'Món này không còn trong đơn. Tải lại màn hình.',
   ORDER_NOT_FOUND: 'Không tìm thấy đơn. Có thể đơn đã được thanh toán.',
   FORBIDDEN: 'Tài khoản này không có quyền làm việc này.',
   LOGIN_FAILED: 'Sai số điện thoại hoặc mật khẩu.',
@@ -177,8 +184,17 @@ function supabaseApi() {
     placeOrder: o => rpc('place_order', {
       p_queue_number: o.dine === 'mang_ve' ? null : o.queue, p_customer_name: o.name, p_items: o.items,
       p_customer_phone: o.phone || null, p_confirm_duplicate: !!o.confirm, p_note: o.note || null,
-      p_dine_type: o.dine === 'mang_ve' ? 'mang_ve' : 'tai_quan'
+      p_dine_type: o.dine === 'mang_ve' || o.dine === 'giao_hang' ? o.dine : 'tai_quan',
+      p_address: o.address || null, p_deliver_at: o.deliverAt || null
     }),
+    /* Nghe tín hiệu "menu vừa đổi" (chủ gạt hết món, đổi giá…). Trả về hàm huỷ nghe. */
+    async watchMenu(onChange) {
+      const c = await cl();
+      const ch = c.channel('menu').on('broadcast', { event: 'changed' }, () => onChange()).subscribe();
+      return () => { try { c.removeChannel(ch); } catch (e) { /* bỏ qua */ } };
+    },
+    /* Có đang đăng nhập bằng tài khoản nhân viên / chủ không (trang tạo đơn giao hàng cần) */
+    async staffSession() { try { const s = await api.session(); return s && s.employee ? s.employee : null; } catch (e) { return null; } },
     getMyOrder: token => rpc('get_my_order', { p_token: token }),
     /* Nghe tín hiệu "đơn vừa đổi" trên kênh riêng của đơn (cơ sở dữ liệu gửi khi bếp/pha chế bấm). Trả về hàm huỷ nghe. */
     async watchOrder(orderId, onChange) {
@@ -244,6 +260,8 @@ function supabaseApi() {
     markServed: (id, station) => rpc('mark_served', { p_order_id: id, p_station: station || 'bep' }),
     cancelOrder: id => rpc('cancel_order', { p_order_id: id }),
     completePayment: (id, method) => rpc('complete_payment', { p_order_id: id, p_method: method }),
+    staffAddItems: (id, items) => rpc('staff_add_items', { p_order_id: id, p_items: items }),
+    staffSetItemQty: (itemId, qty) => rpc('staff_set_item_qty', { p_item_id: itemId, p_qty: qty }),
     async resolveCall(id) { const c = await cl(); await q(c.from('staff_calls').update({ resolved_at: new Date().toISOString() }).eq('id', id)); },
 
     /* ---------- Menu (quản lý) ---------- */
@@ -398,7 +416,7 @@ function buildPublicMenu(db) {
    CHẾ ĐỘ XEM THỬ — cơ sở dữ liệu giả lập trong localStorage
    Mô phỏng đúng các quy tắc của các hàm SQL để giao diện cư xử giống bản thật.
    ===================================================================== */
-const DEMO_KEY = 'demo.db.v7'; // v7: đơn mang về (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
+const DEMO_KEY = 'demo.db.v8'; // v8: đồ uống chọn Size M / Size L (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
 // Nhận cả /bep.html lẫn /bep (Cloudflare Pages tự bỏ đuôi .html)
@@ -413,6 +431,41 @@ function stationOf(db, menuItemId) {
   const m = db.menu_items.find(x => x.id === menuItemId); const c = m && db.menu_categories.find(x => x.id === m.category_id);
   return (c && c.station) || 'bep';
 }
+/* Bản xem thử: kiểm tra và dựng các dòng món — giống private.add_items trong SQL */
+function demoLines(db, orderId, items) {
+  if (!items || !items.length) fail('EMPTY_ORDER');
+  const lines = []; let total = 0;
+        for (const li of items) {
+          const m = db.menu_items.find(x => x.id === li.menu_item_id && x.is_available); if (!m) fail('ITEM_UNAVAILABLE');
+          const ids = new Set(li.choice_ids || []);
+          const links = db.menu_item_option_groups.filter(l => l.menu_item_id === m.id).map(l => l.group_id);
+          for (const cid of ids) {
+            const ch = db.option_choices.find(c => c.id === cid);
+            if (!ch || !ch.is_available || links.indexOf(ch.group_id) < 0) fail('OPTION_INVALID', m.name);
+          }
+          for (const gid of links) {
+            const g = db.option_groups.find(x => x.id === gid);
+            const n = db.option_choices.filter(c => c.group_id === gid && ids.has(c.id)).length;
+            if (n < g.min_select || n > g.max_select) fail('OPTION_REQUIRED', m.name + ': kiểm tra lại mục "' + g.title + '"');
+          }
+          const picked = db.option_choices.filter(c => ids.has(c.id));
+          const opts = picked.map(c => ({ group: db.option_groups.find(g => g.id === c.group_id).title, choice: c.name, price: c.price_delta }));
+          const unit = m.price + picked.reduce((s, c) => s + c.price_delta, 0);
+          const qty = Math.max(1, Math.min(50, li.qty || 1));
+          lines.push({ added_at: new Date().toISOString(), id: db.seq.order_items++, order_id: orderId, menu_item_id: m.id, item_name: m.name, unit_price: unit, options: opts, qty, note: li.note ? String(li.note).trim() : null, station: stationOf(db, m.id) });
+          total += unit * qty;
+        }
+  return { lines, total };
+}
+/* Bản xem thử: chép đơn sang doanh thu rồi xoá — giống private.finalize_order */
+function demoFinalize(db, id, method, cashierId) {
+  const o = db.orders.find(x => x.id === id); if (!o) return;
+  const items = db.order_items.filter(i => i.order_id === id).map(i => ({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }));
+  const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
+  db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method || o.paid_method || 'tien_mat', items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: o.paid_at || new Date().toISOString(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: o.paid_by || cashierId || null });
+  db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
+}
+const demoTotal = (db, id) => db.order_items.filter(i => i.order_id === id).reduce((s, i) => s + i.unit_price * i.qty, 0);
 /* Trạng thái chung của đơn tính từ các nơi — giống hàm refresh_order_status trong SQL */
 function refreshOrder(db, id) {
   const o = db.orders.find(x => x.id === id); const ss = db.order_stations.filter(x => x.order_id === id); if (!o || !ss.length) return;
@@ -423,10 +476,24 @@ function refreshOrder(db, id) {
   const etas = ss.map(x => x.estimated_ready_at).filter(Boolean).sort();
   o.estimated_ready_at = open.length ? open[open.length - 1] : (etas.length ? etas[etas.length - 1] : null);
   o.served_at = all ? ss.map(x => x.served_at).filter(Boolean).sort().pop() || null : null;
+  // Đã thu đủ trước và mọi nơi đã ra món: đơn xong
+  if (all && o.paid_amount != null && o.paid_amount === o.total) demoFinalize(db, id, null, null);
 }
 
+/* Giống sql/cap-nhat-9-size-m-l.sql: nhóm "Upsize" của đồ uống thành chọn Size M (chọn sẵn) / Size L */
+function demoSizeMigrate(S) {
+  const groups = S.option_groups || [], choices = S.option_choices || [];
+  let next = Math.max(0, ...choices.map(c => c.id)) + 1;
+  groups.filter(g => g.kind === 'do_uong').forEach(g => {
+    const up = choices.filter(c => c.group_id === g.id && /^upsize/i.test(c.name)); if (!up.length) return;
+    up.forEach(c => Object.assign(c, { name: 'Size L', is_default: false, sort_order: 2 }));
+    choices.push({ id: next++, group_id: g.id, name: 'Size M', price_delta: 0, is_default: true, is_available: true, sort_order: 1 });
+    Object.assign(g, { title: 'Size', min_select: 1, max_select: 1, name: g.name.replace(/^upsize/i, 'Size M/L') });
+  });
+  return S;
+}
 function demoSeed() {
-  const S = JSON.parse(JSON.stringify(window.BENOC_SEED || {}));
+  const S = demoSizeMigrate(JSON.parse(JSON.stringify(window.BENOC_SEED || {})));
   const now = Date.now(), R = rng(2802);
   const db = {
     shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2, bar_capacity: 2 },
@@ -488,7 +555,7 @@ function demoSeed() {
     refreshOrder(db, id);
   };
   mk(7, 'Minh', 6, [['Cơm heo chua ngọt', 1, [{ group: 'Topping thêm', choice: 'Trứng ốp la', price: 5000 }], 'ít cay'], ['Hồng trà sữa trân châu', 1]], null, ['bep']);
-  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Upsize', choice: 'Upsize', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
+  mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size L', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
   mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Đường', choice: 'Ít đường', price: 0 }]]]);
   mk(null, 'Hà', 3, [['Cơm gà viên', 1], ['Trà quất', 1, [{ group: 'Đá', choice: 'Ít đá', price: 0 }]]]); // đơn mang về (không có số thẻ)
   return db;
@@ -520,47 +587,30 @@ function demoApi() {
   const api = {
     /* ---------- Khách ---------- */
     async getMenu() { await wait(120); return buildPublicMenu(load()); },
-    async placeOrder({ queue, name, phone, items, confirm, note, dine }) {
+    async placeOrder({ queue, name, phone, items, confirm, note, dine, address, deliverAt }) {
       await wait(350);
-      const takeaway = dine === 'mang_ve'; if (takeaway) queue = null;
+      if (dine === 'giao_hang') { need(); if (!String(address || '').trim()) fail('MISSING_ADDRESS'); }
+      const takeaway = dine === 'mang_ve' || dine === 'giao_hang'; if (takeaway) queue = null;
       if (!takeaway && !(queue > 0)) fail('MISSING_QUEUE_NUMBER');
       if (!String(name || '').trim()) fail('MISSING_NAME');
       if (!items || !items.length) fail('EMPTY_ORDER');
       return tx(db => {
         const dup = !takeaway && db.orders.find(o => o.queue_number === queue);
         if (dup && !confirm) fail('DUPLICATE_QUEUE', 'Số ' + queue + ' đang có đơn của ' + dup.customer_name + ' chưa thanh toán');
-        const id = uuid(), lines = []; let total = 0;
-        for (const li of items) {
-          const m = db.menu_items.find(x => x.id === li.menu_item_id && x.is_available); if (!m) fail('ITEM_UNAVAILABLE');
-          const ids = new Set(li.choice_ids || []);
-          const links = db.menu_item_option_groups.filter(l => l.menu_item_id === m.id).map(l => l.group_id);
-          for (const cid of ids) {
-            const ch = db.option_choices.find(c => c.id === cid);
-            if (!ch || !ch.is_available || links.indexOf(ch.group_id) < 0) fail('OPTION_INVALID', m.name);
-          }
-          for (const gid of links) {
-            const g = db.option_groups.find(x => x.id === gid);
-            const n = db.option_choices.filter(c => c.group_id === gid && ids.has(c.id)).length;
-            if (n < g.min_select || n > g.max_select) fail('OPTION_REQUIRED', m.name + ': kiểm tra lại mục "' + g.title + '"');
-          }
-          const picked = db.option_choices.filter(c => ids.has(c.id));
-          const opts = picked.map(c => ({ group: db.option_groups.find(g => g.id === c.group_id).title, choice: c.name, price: c.price_delta }));
-          const unit = m.price + picked.reduce((s, c) => s + c.price_delta, 0);
-          const qty = Math.max(1, Math.min(50, li.qty || 1));
-          lines.push({ id: db.seq.order_items++, order_id: id, menu_item_id: m.id, item_name: m.name, unit_price: unit, options: opts, qty, note: li.note ? String(li.note).trim() : null, station: stationOf(db, m.id) });
-          total += unit * qty;
-        }
-        const o = { id, access_token: uuid(), queue_number: queue, dine_type: takeaway ? 'mang_ve' : 'tai_quan', customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
+        const id = uuid(); const { lines, total } = demoLines(db, id, items);
+        const o = { id, access_token: uuid(), queue_number: queue, dine_type: dine === 'giao_hang' ? 'giao_hang' : takeaway ? 'mang_ve' : 'tai_quan', address: dine === 'giao_hang' ? String(address).trim() : null, deliver_at: dine === 'giao_hang' ? (deliverAt || null) : null, paid_amount: null, paid_method: null, customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
         db.orders.push(o); lines.forEach(l => db.order_items.push(l));
         [...new Set(lines.map(l => l.station))].forEach(st => db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null }));
         return { order_id: o.id, access_token: o.access_token, total };
       });
     },
     async watchOrder() { return () => {}; }, // bản xem thử tự hỏi lại 2 giây/lần
+    async watchMenu(onChange) { const h = () => onChange(); window.addEventListener('benoc-db', h); return () => window.removeEventListener('benoc-db', h); },
+    async staffSession() { return me(); },
     async getMyOrder(token) {
       const db = load(); const o = db.orders.find(x => x.access_token === token); if (!o) return null;
       return {
-        queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', customer_name: o.customer_name, status: o.status, total: o.total, note: o.note,
+        queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', address: o.address || null, deliver_at: o.deliver_at || null, paid_amount: o.paid_amount == null ? null : o.paid_amount, customer_name: o.customer_name, status: o.status, total: o.total, note: o.note,
         created_at: o.created_at, estimated_ready_at: o.estimated_ready_at, orders_ahead: ordersAhead(db, o),
         has_open_call: db.staff_calls.some(c => c.order_id === o.id && !c.resolved_at),
         stations: db.order_stations.filter(x => x.order_id === o.id).map(x => ({ station: x.station, status: x.status, estimated_ready_at: x.estimated_ready_at })).sort((a, b) => a.station < b.station ? -1 : 1),
@@ -610,10 +660,35 @@ function demoApi() {
       const e = need();
       tx(db => {
         const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
-        const items = db.order_items.filter(i => i.order_id === id).map(i => ({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }));
-        const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
-        db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method, items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: iso(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: e.id });
-        db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
+        Object.assign(o, { paid_amount: o.total, paid_method: method, paid_at: iso(), paid_by: e.id });
+        if (o.status === 'da_ra_mon') demoFinalize(db, id, method, e.id); // đã ra món: thu xong là đóng đơn; chưa ra món: ghi đã thu trước
+      });
+    },
+    async staffAddItems(id, items) {
+      need();
+      return tx(db => {
+        const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
+        const { lines } = demoLines(db, id, items); lines.forEach(l => db.order_items.push(l));
+        [...new Set(lines.map(l => l.station))].forEach(st => {
+          const x = db.order_stations.find(r => r.order_id === id && r.station === st);
+          if (!x) db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
+          else if (x.status === 'da_ra_mon') Object.assign(x, { status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
+        });
+        o.total = demoTotal(db, id); refreshOrder(db, id); return o.total;
+      });
+    },
+    async staffSetItemQty(itemId, qty) {
+      need();
+      return tx(db => {
+        const it = db.order_items.find(i => i.id === itemId); if (!it) fail('ITEM_NOT_FOUND');
+        const id = it.order_id;
+        if (!(qty > 0)) {
+          if (db.order_items.filter(i => i.order_id === id).length <= 1) fail('ORDER_WOULD_BE_EMPTY', 'Đơn chỉ còn món này. Muốn bỏ hết thì huỷ đơn.');
+          db.order_items = db.order_items.filter(i => i.id !== itemId);
+          if (!db.order_items.some(i => i.order_id === id && i.station === it.station)) db.order_stations = db.order_stations.filter(x => !(x.order_id === id && x.station === it.station));
+        } else it.qty = Math.min(50, qty);
+        const o = db.orders.find(x => x.id === id); o.total = demoTotal(db, id); refreshOrder(db, id);
+        return db.orders.some(x => x.id === id) ? o.total : null;
       });
     },
     async resolveCall(id) { need(); tx(db => { const c = db.staff_calls.find(x => x.id === id); if (c) c.resolved_at = iso(); }); },
@@ -731,9 +806,17 @@ function demoApi() {
 
 const api = DEMO ? demoApi() : supabaseApi();
 
+/* Size đồ uống: nhóm có 2 lựa chọn "Size M" và "Size L" */
+const SIZE_RE = /^size\s*([ml])$/i;
+const sizeGroup = it => (it.option_groups || []).find(g => g.choices.length >= 2 && g.choices.some(c => /^size m$/i.test(c.name)) && g.choices.some(c => /^size l$/i.test(c.name))) || null;
+/* Size của 1 dòng món đã đặt ('M' | 'L' | null). Đơn cũ ghi "Upsize" thì là L */
+const sizeOf = opts => { for (const o of opts || []) { const m = SIZE_RE.exec(o.choice || ''); if (m) return m[1].toUpperCase(); if (/^upsize/i.test(o.choice || '')) return 'L'; } return null; };
+const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
+
 window.BN = {
+  sizeGroup, sizeOf, isSizeOpt,
   CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
-  ICON_BAG, isTakeaway, qboxHtml, orderLabel,
+  ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
 
