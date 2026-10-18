@@ -69,6 +69,7 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Đơn giao hàng (khách nhắn Facebook)**: chủ quán bấm **+ Đơn giao hàng** (trang Quản lý hoặc màn hình bếp) → chọn **Qua lấy** (khách tới quán lấy, chỉ cần tên) hoặc **Đơn đi ship** (cần địa chỉ, giờ giao) → tích món → **Xem giỏ** → nhập thông tin, tích **Khách đã chuyển khoản** nếu đã nhận tiền → tạo đơn. Đơn qua lấy hiện ô **MANG VỀ** trên bếp/pha chế; đơn đi ship hiện ô **GIAO hh:mm** màu xanh ngọc kèm địa chỉ. Cần đăng nhập tài khoản chủ quán hoặc nhân viên.
 - **Doanh thu** có bảng **Tiền theo quầy**: mỗi quầy thu bao nhiêu tiền mặt, bao nhiêu chuyển khoản, để cuối ngày đối chiếu két.
 - **Nhân viên**: mở `quanly.html` trên điện thoại mình → **Chấm công** → chụp ảnh vào ca, cuối ca chụp ảnh ra ca.
+- **Tìm món**: menu khách có ô **Tìm món…** ngay trên thanh danh mục, chỉ tìm trong menu của mã QR đang mở (gõ không dấu cũng được, ví dụ "tra sua"). Trang Quản lý → Menu có ô tìm riêng cho **Món** và cho **Tuỳ chọn** (tìm được theo tên món đang dùng nhóm đó). Màn hình bếp/pha chế khi **+ Thêm món** vào đơn cũng có ô tìm.
 - **Hết món**: **Menu** → gạt công tắc **Đang bán** sang **Hết món**. Món biến mất khỏi menu khách trong vài giây (không cần tải lại trang); khách nào đã bỏ món đó vào giỏ sẽ được báo và món tự bỏ khỏi giỏ.
 - **Đổi ảnh món**: **Menu** → bấm món → **Chọn ảnh** → **Lưu**.
 - **Tuỳ chọn món** (size M/L, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
@@ -95,6 +96,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-9-size-m-l.sql`: đồ uống có Upsize đổi thành chọn **Size M** (giá gốc, chọn sẵn) / **Size L** (+5k hoặc +10k như cũ). Menu khách hiện cả 2 giá "M 22K · L 32K", màn hình pha chế có nhãn **SIZE M / SIZE L** trên từng ly. Món không có Upsize giữ nguyên 1 giá. Giao diện mới chạy được cả trước và sau khi chạy file này.
 - `sql/cap-nhat-10-ten-khach-hoa-don.sql`: **Hoá đơn gần đây** hiện tên khách (kèm SĐT, địa chỉ nếu đi ship). Chỉ thêm cột, không đụng dữ liệu cũ; hoá đơn trước bản này hiện "—" vì lúc đó chưa lưu tên.
 - `sql/cap-nhat-11-size-chi-ca-phe-matcha.sql`: chỉ danh mục **Cà phê** và **Matcha · Cacao · Khoai môn** có chọn Size M / Size L; các đồ uống khác bỏ mục size, chỉ còn một giá. Chỉ gỡ liên kết món ↔ nhóm Size, không xoá món, không đổi giá.
+- `sql/cap-nhat-12-sap-xep-size-upsize.sql`: sắp xếp lại size đồ uống: **Nước uống** (menu Ăn vặt) có tuỳ chọn **Size XL +5k**; **Trà sữa, Trà hoa quả, Sốt khoai môn tươi, Món nên thử** 1 size L, tuỳ chọn **Upsize +10k**; **Cà phê, Matcha · Cacao · Khoai môn** chọn **Size M / Size L +10k**; **Sốt cốm tươi** tuỳ chọn **Upsize +15k**. Không xoá món, không đổi giá món, không đụng đơn/hoá đơn. (Thay cho cập nhật 9 và 11.)
 
 ## Xoá dữ liệu thử trước khi dùng thật
 
