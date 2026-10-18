@@ -112,6 +112,11 @@
 /* Lựa chọn có hình (lượng đường, lượng đá): 3 ô ngang */
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tiles .choice + .choice { margin-top: 0; }
+.tiles--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.og--size .lv-ico { color: var(--ink); }
+.og--size .choice:has(input:checked) .lv-ico { color: var(--red); }
+.item-price--ml { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 15px; }
+.item-price--ml small { font: 700 11px/1 var(--f-body); color: var(--ink-2); margin-right: 2px; }
 .choice--tile { position: relative; flex-direction: column; justify-content: flex-start; gap: 2px; padding: 8px 4px 10px; text-align: center; }
 .choice--tile input { position: absolute; opacity: 0; pointer-events: none; }
 .choice--tile:has(input:focus-visible) { outline: 3px solid var(--red); outline-offset: 2px; }
@@ -202,7 +207,17 @@
 <script>
 (function () {
 'use strict';
-const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, qboxHtml, orderLabel } = BN;
+const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, qboxHtml, orderLabel, sizeGroup } = BN;
+/* Giá size L của món có chọn size (null nếu món chỉ có 1 giá) */
+const priceL = it => { const g = sizeGroup(it), L = g && g.choices.find(c => /^size l$/i.test(c.name)); return L ? it.price + L.price : null; };
+/* Hình ly: M nhỏ, L to, chữ ở giữa */
+function cupIcon(letter) {
+  const big = letter === 'L', w = big ? 30 : 24, h = big ? 42 : 32, x0 = (60 - w) / 2, y0 = 56 - h;
+  return '<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M' + (x0 - 3) + ' ' + y0 + 'h' + (w + 6) + '" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>' +
+    '<path d="M' + x0 + ' ' + (y0 + 2) + 'L' + (x0 + 3) + ' 56h' + (w - 6) + 'L' + (x0 + w) + ' ' + (y0 + 2) + 'z" fill="var(--red-soft)" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>' +
+    '<path d="M' + (x0 + w - 6) + ' ' + y0 + 'l6 -' + (big ? 12 : 9) + '" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>' +
+    '<text x="30" y="' + (y0 + h / 2 + 6) + '" text-anchor="middle" font-size="' + (big ? 17 : 14) + '" font-weight="800" fill="currentColor" font-family="system-ui,sans-serif">' + letter + '</text></svg>';
+}
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const ICON = {
@@ -384,7 +399,7 @@ function renderMenu() {
         '<span class="item-name">' + esc(it.name) + (it.tag ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
         (it.description ? '<span class="item-desc">' + esc(it.description) + '</span>' : '') +
         (hint ? '<span class="item-opts">' + esc(hint) + '</span>' : '') + '</button>' +
-        '<div class="item-side"><span class="item-price num">' + K(it.price) + '</span>' + addBtnHtml(it) + '</div></li>';
+        '<div class="item-side">' + (priceL(it) ? '<span class="item-price item-price--ml num"><span><small>M</small> ' + K(it.price) + '</span><span><small>L</small> ' + K(priceL(it)) + '</span></span>' : '<span class="item-price num">' + K(it.price) + '</span>') + addBtnHtml(it) + '</div></li>';
     }).join('') + '</ul></section>').join('');
   $('#tabsIn').innerHTML = cats.map((c, i) => '<button class="tab cc-' + esc(c.color || 'vang') + '" type="button" data-go="' + esc(c.id) + '"' + (i === 0 ? ' aria-current="true"' : '') + '>' + esc(c.name) + '</button>').join('');
   watchSections();
@@ -484,6 +499,10 @@ function openItem(id) {
     const price = c => '<span class="choice-price num">' + (c.price ? '+' + K(c.price) : '') + '</span>';
     // Nhóm mà mọi lựa chọn đều có hình (lượng đường, lượng đá) hiện thành ô có hình
     const tiles = g.choices.length > 1 && g.choices.length <= 4 && g.choices.every(c => levelIcon(c.name));
+    // Nhóm size: 2 ô có hình ly, hiện giá đầy đủ của từng size
+    if (sizeGroup({ option_groups: [g] })) return '<fieldset class="og og--tiles og--size" data-g="' + g.id + '"><legend>Chọn size</legend><div class="tiles tiles--2">' +
+      g.choices.map(c => { const L = /l$/i.test(c.name.trim()); return '<label class="choice choice--tile">' + input(c) + '<span class="lv-ico">' + cupIcon(L ? 'L' : 'M') + '</span><span class="choice-name">' + esc(c.name) + (L ? ' · ly lớn' : ' · ly nhỏ') + '</span><span class="choice-price num">' + K(it.price + c.price) + (c.price ? ' (+' + K(c.price) + ')' : '') + '</span></label>'; }).join('') +
+      '</div><span class="og-err" hidden></span></fieldset>';
     return '<fieldset class="og' + (tiles ? ' og--tiles' : '') + '" data-g="' + g.id + '"><legend>' + esc(g.title) + ' ' + rule + '</legend>' +
       (tiles
         ? '<div class="tiles">' + g.choices.map(c => '<label class="choice choice--tile">' + input(c) + '<span class="lv-ico">' + levelIcon(c.name) + '</span><span class="choice-name">' + esc(c.name) + '</span>' + (c.price ? price(c) : '') + '</label>').join('') + '</div>'
@@ -491,7 +510,7 @@ function openItem(id) {
       '<span class="og-err" hidden></span></fieldset>';
   };
   ui.sheet(
-    ui.head(esc(it.name), '<span class="num">' + vnd(it.price) + '</span>' + (it.description ? ' · ' + esc(it.description) : '')) +
+    ui.head(esc(it.name), (priceL(it) ? '<span class="num">Size M ' + vnd(it.price) + ' · Size L ' + vnd(priceL(it)) + '</span>' : '<span class="num">' + vnd(it.price) + '</span>') + (it.description ? ' · ' + esc(it.description) : '')) +
     '<div class="sh-body' + (cat ? ' cc-' + esc(cat.color) : '') + '">' +
     (it.image_path ? '<div class="sh-img"><img src="' + esc(it.image_path) + '" alt="' + esc(it.name) + '"></div>' : '') +
     it.option_groups.map(groupHtml).join('') +
@@ -773,6 +792,9 @@ async function loadMenu() {
     state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
     const ok = l => { const it = state.items.get(l.itemId); if (!it) return false; const ids = new Set(); it.option_groups.forEach(g => g.choices.forEach(c => ids.add(c.id))); return l.choices.every(c => ids.has(c.id)); };
     const gone = state.cart.filter(l => !ok(l)).map(l => l.name);
+    state.cart.filter(ok).forEach(l => { const it = state.items.get(l.itemId); it.option_groups.forEach(g => {
+      if (g.min > 0 && !l.choices.some(c => g.choices.some(x => x.id === c.id))) g.choices.filter(c => c.default).forEach(c => { l.choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }); });
+    }); });
     if (gone.length) { state.cart = state.cart.filter(ok); saveCart(); ui.toast('Vừa hết, đã bỏ khỏi giỏ: ' + [...new Set(gone)].join(', ')); }
     renderMenu(); renderCartBar();
     return gone;
