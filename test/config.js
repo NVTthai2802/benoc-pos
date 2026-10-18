@@ -1,7 +1,8 @@
 /* =====================================================================
    CẤU HÌNH BÉ NỐC POS — 2 môi trường
-   - PRODUCT: quán dùng thật       https://nvtthai2802.github.io/benoc-pos/
-   - TEST:    thử tính năng mới    https://nvtthai2802.github.io/benoc-pos/test/
+   - PRODUCT: quán dùng thật       https://<tên>.pages.dev/          (Cloudflare Pages, nhánh main)
+   - TEST:    thử tính năng mới    https://<tên>.pages.dev/test/
+   (bản cũ trên GitHub Pages vẫn chạy: https://nvtthai2802.github.io/benoc-pos/ và /test/)
    Trang tự chọn môi trường theo địa chỉ: nằm trong thư mục /test/ là TEST.
    Để trống 2 dòng Supabase = chế độ xem thử (dữ liệu lưu trong trình duyệt).
    ===================================================================== */
@@ -18,7 +19,11 @@
       STORE_PREFIX: 'benoc.test.'
     }
   };
-  const isTest = /\/test(\/|$)/.test(location.pathname);
+  // TEST nếu: trang nằm trong thư mục /test/, HOẶC là bản xem trước của Cloudflare Pages
+  // (dạng <nhánh hoặc mã>.benoc.pages.dev). Chỉ đúng địa chỉ chính mới dùng cơ sở dữ liệu thật.
+  const h = location.hostname;
+  const isPreview = /\.pages\.dev$/.test(h) && h.split('.').length > 3;
+  const isTest = isPreview || /\/test(\/|$)/.test(location.pathname);
   window.BENOC_ENV = isTest ? 'test' : 'product';
   window.BENOC_CONFIG = Object.assign({
     POLL_SECONDS: 15,         // trang khách tự cập nhật trạng thái đơn mỗi 15 giây

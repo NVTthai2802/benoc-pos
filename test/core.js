@@ -401,7 +401,8 @@ function buildPublicMenu(db) {
 const DEMO_KEY = 'demo.db.v7'; // v7: đơn mang về (đổi khoá để bản xem thử tạo lại dữ liệu mẫu)
 /* Mỗi "vai" khi test trên một máy có phiên đăng nhập riêng (bếp, chủ quán, nhân viên) */
 const PARAMS = new URLSearchParams(location.search);
-const PAGE = /bep\.html$/.test(location.pathname) ? 'bep' : /phache\.html$/.test(location.pathname) ? 'phache' : /quanly\.html$/.test(location.pathname) ? 'quanly' : 'khach';
+// Nhận cả /bep.html lẫn /bep (Cloudflare Pages tự bỏ đuôi .html)
+const PAGE = /\/bep(\.html)?$/.test(location.pathname) ? 'bep' : /\/phache(\.html)?$/.test(location.pathname) ? 'phache' : /\/quanly(\.html)?$/.test(location.pathname) ? 'quanly' : 'khach';
 const SLOT = (PARAMS.get('slot') || PAGE).replace(/[^a-z0-9_-]/gi, '');
 const SESSION_KEY = 'demo.session.' + SLOT;
 
