@@ -387,15 +387,10 @@ function addBtnHtml(it) {
 }
 /* Danh mục của menu đang mở. Nếu menu này chưa có danh mục nào thì hiện toàn bộ. */
 function shownCats() {
-  if (GIAO) { ['#otherTop', '#otherEnd'].forEach(id => { $(id).hidden = true; }); return state.menu; } // đủ cả đồ ăn và đồ uống
+  // Mỗi mã QR chỉ xem được menu của nó (quét món ăn chỉ thấy món ăn) — không còn nút sang menu kia
+  ['#otherTop', '#otherEnd'].forEach(id => { $(id).hidden = true; });
+  if (GIAO) return state.menu; // trang chủ quán tạo đơn: đủ cả đồ ăn và đồ uống
   const mineCats = state.menu.filter(c => (c.station || 'bep') === state.kind);
-  const hasOther = state.menu.some(c => (c.station || 'bep') === OTHER_KIND);
-  const o = MENU[OTHER_KIND];
-  [['#otherTop', 'Gọi ' + (OTHER_KIND === 'pha_che' ? 'đồ uống' : 'đồ ăn') + '? Xem menu ' + o.link + ' →'],
-   ['#otherEnd', '<b>Xem menu ' + o.link + ' →</b><span>' + o.linkDesc + '</span>']].forEach(([id, html]) => {
-    // &xem=menu: sang menu kia thì mở thẳng menu, kể cả khi đang có đơn (không bị đưa về màn hình theo dõi đơn)
-    const a = $(id); a.hidden = !hasOther || !mineCats.length; a.href = 'index.html' + o.query + '&xem=menu'; a.innerHTML = html;
-  });
   return mineCats.length ? mineCats : state.menu;
 }
 function renderMenu() {
