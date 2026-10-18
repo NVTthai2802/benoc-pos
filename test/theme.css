@@ -124,6 +124,8 @@ button { cursor: pointer; }
 .qbox--mv { border-style: solid; border-color: var(--warn); background: var(--warn-soft); color: var(--warn); gap: 2px; }
 .qbox--mv svg { width: 30px; height: 30px; }
 .qbox--mv span { color: var(--warn); font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
+.qbox--giao { border-color: #2f7d6d; background: #dff3ee; color: #23695b; }
+.qbox--giao span { color: #23695b; }
 
 .empty { text-align: center; color: var(--ink-2); padding-block: 24px; }
 .loading { color: var(--ink-2); padding-block: 24px; }
