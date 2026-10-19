@@ -16,7 +16,7 @@ const SHORT = { bep: 'Bếp', pha_che: 'Pha chế' };
 const COLS = [['cho_nhan', 'Chờ nhận'], ['dang_lam', 'Đang làm'], ['thanh_toan', 'Chờ thanh toán']];
 const EMPTY = { cho_nhan: 'Chưa có đơn mới', dang_lam: 'Không có đơn đang làm', thanh_toan: 'Không có đơn chờ thanh toán' };
 const state = { orders: [], panels: {}, col: null, sound: false, seen: null, seenCalls: null, session: null };
-let audio = null, wakeLock = null;
+let audio = null, wakeLock = null, voice = null;
 
 const demoNote = $('#demoNote'); if (demoNote) demoNote.hidden = !DEMO;
 BN.staff.requireLogin($('#app'), { title: IS_BEP ? 'Màn hình bếp' : 'Màn hình quầy pha chế', onReady: s => { state.session = s; start(); } });
@@ -75,7 +75,7 @@ async function refresh() {
     if (state.seen) {
       const newOrders = [...ids].filter(id => !state.seen.has(id)).length;
       const newCalls = [...calls].filter(c => !state.seenCalls.has(c)).length;
-      if (newOrders || newCalls) alertNew(newOrders ? 'Có ' + newOrders + ' đơn mới' : 'Khách gọi nhân viên');
+      if (newOrders || newCalls) alertNew(newOrders ? 'Có ' + newOrders + ' đơn mới' : 'Khách gọi nhân viên', !!newOrders);
     }
     state.seen = ids; state.seenCalls = calls;
     const all = new Set(state.orders.map(o => o.id));
@@ -344,7 +344,7 @@ function toggleSound() {
   state.sound = !state.sound;
   const b = $('#soundBtn'); b.setAttribute('aria-pressed', state.sound); b.textContent = state.sound ? 'Chuông báo: Bật' : 'Bật chuông báo';
   b.className = 'btn btn-sm ' + (state.sound ? 'btn-ok' : 'btn-line');
-  if (state.sound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); beep(); } catch (e) { /* không có âm thanh */ } lockScreen(); }
+  if (state.sound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); beep(); loadVoice(); } catch (e) { /* không có âm thanh */ } lockScreen(); }
 }
 function beep() {
   if (!audio) return;
@@ -357,9 +357,25 @@ function beep() {
     o.connect(g).connect(audio.destination); o.start(audio.currentTime + t); o.stop(audio.currentTime + t + 0.22);
   });
 }
-function alertNew(msg) {
+// Giọng đọc "Bé Nốc ơi, bé Nốc ơi" (sound/be-noc.mp3). Tải sẵn khi bật chuông; nếu lỗi thì quay về tiếng chuông cũ.
+async function loadVoice() {
+  if (voice || !audio) return;
+  try {
+    const r = await fetch('sound/be-noc.mp3');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const buf = await r.arrayBuffer();
+    voice = await new Promise((ok, no) => audio.decodeAudioData(buf, ok, no)); // dạng callback để chạy được cả trên Safari cũ
+  } catch (e) { voice = null; /* không tải được giọng đọc */ }
+}
+function playVoice() {
+  if (!audio || !voice) return false;
+  const src = audio.createBufferSource(); src.buffer = voice; src.connect(audio.destination);
+  src.start(audio.currentTime + 0.5);
+  return true;
+}
+function alertNew(msg, withVoice) {
   ui.toast(msg);
-  if (state.sound) { beep(); setTimeout(beep, 700); }
+  if (state.sound) { beep(); if (withVoice && playVoice()) { /* chuông + giọng đọc */ } else setTimeout(beep, 700); }
   if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 }
 async function lockScreen() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { /* máy không hỗ trợ giữ màn hình sáng */ } }
