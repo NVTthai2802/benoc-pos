@@ -83,6 +83,18 @@
 .qr { background: #fff; padding: 14px; border-radius: 16px; border: 2px solid var(--line); width: max-content; max-width: 100%; }
 .qr img, .qr canvas { display: block; max-width: 100%; }
 .inline-confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-weight: 600; font-size: 14px; }
+.pill-gift { background: #FFE7B8; color: #8a4b00; }
+.inv-pr { display: inline; padding: 1px 6px; border-radius: 6px; background: #FFF3C4; }
+.pk-h { flex-direction: row; gap: 4px; }
+.pk-box .pk-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto; padding: 2px; }
+.pk-it { align-items: center; }
+.pk-it > span:nth-child(2) { flex: 1; min-width: 0; }
+.pk-it.on { border-color: var(--red); background: var(--red-soft); }
+.pk-q { display: inline-flex; align-items: center; gap: 6px; }
+.pk-q .btn { min-height: 32px; padding: 2px 10px; }
+.seg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 12px; background: var(--line); }
+.seg2 button { padding: 10px 6px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font: 700 15px/1.2 var(--f-body); cursor: pointer; }
+.seg2 button[aria-pressed="true"] { background: var(--card); color: var(--red); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 </style>
 
 <div class="demo-note" id="demoNote" hidden><div class="wrap" style="max-width:980px">Bản xem thử: số liệu doanh thu và ca làm là dữ liệu mẫu. Mọi thay đổi chỉ lưu trong trình duyệt này.</div></div>
@@ -95,7 +107,7 @@
 <script>
 (function () {
 'use strict';
-const { api, ui, esc, K, vnd, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, toLocalInput, errText, applyRounding, DEMO, DRINK_CATS } = BN;
+const { api, ui, esc, K, vnd, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, toLocalInput, errText, applyRounding, DEMO, DRINK_CATS, promoLive, promoWhen, DOW } = BN;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const COLORS = [['vang', 'Vàng'], ['cam', 'Cam'], ['hong', 'Hồng'], ['xanhla', 'Xanh lá'], ['xanhduong', 'Xanh dương'], ['tim', 'Tím'], ['nau', 'Nâu']];
@@ -128,10 +140,10 @@ const PAY_COLOR = { tien_mat: '#E2325C', chuyen_khoan: '#3A7FC2' };
 const ICON_BOWL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>';
 const ICON_CUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.5 13h-9z"/><path d="M5 8h14M12 8l2-6"/></svg>';
 const TABS = {
-  owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
+  owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['uudai', 'Ưu đãi', 'tim'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
   staff: [['chamcong', 'Chấm công', 'cam']]
 };
-const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
+const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', promoQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
 
 $('#demoNote').hidden = !DEMO;
 BN.staff.requireLogin($('#app'), { title: 'Quản lý quán', onReady: s => { state.session = s; boot(); } });
@@ -175,7 +187,7 @@ function go(tab) {
   BN.store.set('qltab.' + BN.SLOT, tab);
   $$('.nav [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
   const main = $('#main'); main.onclick = null; main.onchange = null; main.innerHTML = '<p class="loading">Đang tải…</p>';
-  ({ doanhthu: renderRevenue, menu: renderMenu, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
+  ({ doanhthu: renderRevenue, menu: renderMenu, uudai: renderPromos, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
     .catch(e => { main.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; });
 }
 const rerender = () => go(state.tab);
@@ -269,12 +281,170 @@ async function renderRevenue(main) {
     '<section class="box cc-hong"><h2 class="box-title"><span>' + (state.range === 'today' ? 'Theo giờ' : 'Theo ngày') + '</span></h2><div class="chart" id="chart">' + barChart(buckets) + '</div></section>' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Cách thanh toán</span></h2>' + (total ? '<div class="split">' + ['tien_mat', 'chuyen_khoan'].filter(k => byPay[k]).map(k => '<span style="width:' + (byPay[k] / total * 100) + '%;background:' + PAY_COLOR[k] + '" title="' + PAY[k] + '"></span>').join('') + '</div>' +
       '<div class="legend">' + ['tien_mat', 'chuyen_khoan'].map(k => '<span><i style="background:' + PAY_COLOR[k] + '"></i>' + PAY[k] + ': <b class="num">' + vnd(byPay[k]) + '</b> (' + Math.round(byPay[k] / total * 100) + '%)</span>').join('') + '</div>' : '<p class="empty">Chưa có đơn.</p>') + '</section>' +
-    '<div class="two">' + topBox('bep', 'Món ăn bán chạy', 'cc-vang') + topBox('pha_che', 'Trà sữa · đồ uống bán chạy', 'cc-hong') + '</div>' +
+    '<div class="two">' + topBox('bep', 'Món ăn bán chạy', 'cc-vang') + topBox('pha_che', 'Trà sữa · đồ uống bán chạy', 'cc-hong') + '</div>' + promoStatsBox(sales) +
     '<section class="box cc-nau"><h2 class="box-title"><span>Hoá đơn gần đây</span></h2>' + (recent.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th>Số</th><th>Khách</th><th>Món</th><th class="r">Tổng</th><th>Trả bằng</th></tr></thead><tbody>' +
-      recent.map(x => '<tr><td class="num">' + ddmm(x.paid_at) + ' ' + hhmm(x.paid_at) + '</td><td class="num">' + (x.dine_type === 'giao_hang' ? '<span class="pill pill-mute">Đi ship</span>' : x.dine_type === 'mang_ve' ? '<span class="pill pill-mute">Mang về</span>' : x.queue_number) + '</td><td class="who">' + (x.customer_name ? '<b>' + esc(x.customer_name) + '</b>' + (x.customer_phone ? '<br><span class="small muted">' + esc(x.customer_phone) + '</span>' : '') + (x.address ? '<br><span class="small muted">' + esc(x.address) + '</span>' : '') : '<span class="muted">—</span>') + '</td><td>' + esc((x.items || []).map(i => i.qty + '× ' + i.name).join(', ')) + '</td><td class="r num">' + vnd(x.total) + '</td><td><span class="pill" style="background:' + PAY_COLOR[x.payment_method] + '1F;color:var(--ink)">' + PAY[x.payment_method] + '</span></td></tr>').join('') +
+      recent.map(x => '<tr><td class="num">' + ddmm(x.paid_at) + ' ' + hhmm(x.paid_at) + '</td><td class="num">' + (x.dine_type === 'giao_hang' ? '<span class="pill pill-mute">Đi ship</span>' : x.dine_type === 'mang_ve' ? '<span class="pill pill-mute">Mang về</span>' : x.queue_number) + '</td><td class="who">' + (x.customer_name ? '<b>' + esc(x.customer_name) + '</b>' + (x.customer_phone ? '<br><span class="small muted">' + esc(x.customer_phone) + '</span>' : '') + (x.address ? '<br><span class="small muted">' + esc(x.address) + '</span>' : '') : '<span class="muted">—</span>') + '</td><td>' + invoiceItems(x.items || []) + '</td><td class="r num">' + vnd(x.total) + '</td><td><span class="pill" style="background:' + PAY_COLOR[x.payment_method] + '1F;color:var(--ink)">' + PAY[x.payment_method] + '</span></td></tr>').join('') +
       '</tbody></table></div>' : '<p class="empty">Chưa có hoá đơn trong khoảng này.</p>') + '</section>';
   $$('[data-range]', main).forEach(b => b.onclick = () => { state.range = b.dataset.range; rerender(); });
   wireChart($('#chart'), buckets);
+}
+
+/* Món trên hoá đơn: món thuộc ưu đãi gom dưới tên ưu đãi, món tặng ghi rõ */
+function invoiceItems(items) {
+  const out = [], seen = new Set();
+  items.forEach(i => {
+    if (!i.promo_group) { out.push(esc(i.qty + '× ' + i.name)); return; }
+    if (seen.has(i.promo_group)) return; seen.add(i.promo_group);
+    const g = items.filter(x => x.promo_group === i.promo_group), sum = g.reduce((t, x) => t + x.price * x.qty, 0);
+    out.push('<span class="inv-pr"><b>' + (i.promo_kind === 'combo' ? '' : 'Ưu đãi ') + esc(BN.promoTitle(i.promo_kind, i.promo_name)) + '</b> <span class="num">' + vnd(sum) + '</span>: ' +
+      g.map(x => esc(x.qty + '× ' + x.name) + (x.promo_part === 'tang' ? ' <span class="pill pill-gift">tặng</span>' : '')).join(', ') + '</span>');
+  });
+  return out.join(', ');
+}
+/* Ưu đãi đã bán trong khoảng thời gian: số phần, tiền thu, số món tặng */
+function promoStatsBox(sales) {
+  const by = new Map();
+  sales.forEach(x => { const gs = new Map(); (x.items || []).forEach(i => { if (!i.promo_group) return; const g = gs.get(i.promo_group) || { name: i.promo_name || 'Ưu đãi', kind: i.promo_kind, rev: 0, gift: 0 }; g.rev += i.price * i.qty; if (i.promo_part === 'tang') g.gift += i.qty; gs.set(i.promo_group, g); });
+    gs.forEach(g => { const m = by.get(g.name) || { name: g.name, kind: g.kind, n: 0, rev: 0, gift: 0 }; m.n++; m.rev += g.rev; m.gift += g.gift; by.set(g.name, m); }); });
+  if (!by.size) return '';
+  return '<section class="box cc-tim"><h2 class="box-title"><span>Ưu đãi đã bán</span></h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ưu đãi</th><th class="r">Số lần</th><th class="r">Món tặng</th><th class="r">Tiền thu</th></tr></thead><tbody>' +
+    [...by.values()].sort((a, b) => b.n - a.n).map(m => '<tr><td><b>' + esc(m.name) + '</b> <span class="small muted">' + (m.kind === 'combo' ? 'combo' : 'mua tặng') + '</span></td><td class="r num">' + m.n + '</td><td class="r num">' + (m.gift || '–') + '</td><td class="r num">' + vnd(m.rev) + '</td></tr>').join('') +
+    '</tbody></table></div><p class="small muted" style="margin:8px 0 0">Số lần = số phần ưu đãi khách đặt (combo 2 phần tính 2 lần nếu đặt 2 lần riêng, 1 lần nếu đặt chung số lượng 2).</p></section>';
+}
+
+/* =====================================================================
+   ƯU ĐÃI — combo giá ưu đãi, mua X tặng Y, hẹn giờ hiển thị
+   ===================================================================== */
+const OPT_MODE = { cong_them: 'Cộng thêm tiền như bình thường', mien_phi: 'Miễn phí (0đ)', khong_phi: 'Không cho chọn tuỳ chọn có phí' };
+function promoState(p) {
+  if (!p.is_active) return ['Đang tắt', 'pill-mute'];
+  if (p.end_at && new Date(p.end_at) <= Date.now()) return ['Đã hết hạn', 'pill-mute'];
+  if (promoLive(p)) return ['Đang hiện cho khách', 'pill-ok'];
+  if (p.start_at && new Date(p.start_at) > Date.now()) return ['Chưa tới ngày', 'pill-red'];
+  return ['Ngoài khung giờ', 'pill-red'];
+}
+async function renderPromos(main) {
+  const [list, m] = await Promise.all([api.adminPromotions(), state.menuData ? Promise.resolve(state.menuData) : api.adminMenu()]);
+  state.menuData = m; state.promoData = list;
+  const nameOf = id => (m.items.find(i => i.id === id) || {}).name || '(món đã xoá)';
+  const itemsText = p => p.kind === 'combo'
+    ? p.items.filter(i => i.part === 'combo').map(i => i.qty + ' ' + nameOf(i.menu_item_id)).join(' + ')
+    : 'Mua ' + p.buy_qty + ': ' + p.items.filter(i => i.part === 'mua').map(i => nameOf(i.menu_item_id)).join(', ') + ' · Tặng ' + p.get_qty + ': ' + (p.gift_same ? 'đúng món khách mua' : p.items.filter(i => i.part === 'tang').map(i => nameOf(i.menu_item_id)).join(', '));
+  const words = BN.fold(state.promoQuery).split(/\s+/).filter(Boolean);
+  const shown = list.filter(p => { const t = BN.fold(p.name + ' ' + (p.description || '') + ' ' + itemsText(p)); return words.every(w => t.indexOf(w) >= 0); });
+  main.innerHTML = '<div class="ptitle"><h1>Ưu đãi</h1></div>' +
+    '<div class="toolbar"><input class="search" id="pq" type="search" placeholder="Tìm ưu đãi hoặc tên món…" value="' + esc(state.promoQuery) + '" aria-label="Tìm ưu đãi"><button class="btn" type="button" id="addPromo">+ Tạo ưu đãi</button></div>' +
+    '<p class="muted small" style="margin:-4px 0 12px">Ưu đãi đang hiện sẽ nằm ở đầu menu của khách. Combo có món ăn hiện ở menu Ăn vặt, có đồ uống hiện ở menu Trà · Cà phê.</p>' +
+    '<section class="box cc-tim"><h2 class="box-title"><span>Các ưu đãi</span></h2>' + (shown.length ? '<ul class="list">' + shown.map(p => {
+      const [st, cls] = promoState(p), when = promoWhen(p, false);
+      return '<li><div class="lrow"><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-promo="' + esc(p.id) + '">' +
+        '<span class="lname">' + esc(p.name) + ' <span class="pill ' + (p.kind === 'combo' ? 'pill-red' : 'pill-gift') + '">' + (p.kind === 'combo' ? 'Combo ' + K(p.price || 0) : 'Mua ' + p.buy_qty + ' tặng ' + p.get_qty) + '</span></span>' +
+        '<span class="lsub">' + esc(itemsText(p)) + '</span><span class="lsub"><span class="pill ' + cls + '">' + st + '</span> ' + esc(when || 'Mọi lúc') + '</span></button>' +
+        '<label class="switch"><input type="checkbox" data-pon="' + esc(p.id) + '"' + (p.is_active ? ' checked' : '') + '><span class="track"></span><span class="sw-l">' + (p.is_active ? 'Bật' : 'Tắt') + '</span></label></div></li>';
+    }).join('') + '</ul>' : '<p class="empty">' + (words.length ? 'Không có ưu đãi nào khớp.' : 'Chưa có ưu đãi nào. Bấm “+ Tạo ưu đãi”.') + '</p>') + '</section>';
+  const pq = $('#pq', main);
+  pq.oninput = () => { state.promoQuery = pq.value; clearTimeout(pq._t); pq._t = setTimeout(async () => { const pos = pq.selectionStart; await renderPromos(main); const n = $('#pq', main); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 250); };
+  main.onclick = e => {
+    const b = e.target.closest('[data-promo]'); if (b) { editPromo(state.promoData.find(x => x.id === b.dataset.promo)); return; }
+    if (e.target.closest('#addPromo')) editPromo(null);
+  };
+  main.onchange = async e => {
+    const a = e.target.closest('[data-pon]'); if (!a) return;
+    try { await api.setPromotionActive(a.dataset.pon, a.checked); ui.toast(a.checked ? 'Đã bật ưu đãi' : 'Đã tắt, khách không còn thấy ưu đãi này'); rerender(); }
+    catch (err) { a.checked = !a.checked; ui.toast(errText(err)); }
+  };
+}
+function editPromo(p) {
+  const m = state.menuData, isNew = !p;
+  p = p ? JSON.parse(JSON.stringify(p)) : { name: '', kind: 'combo', description: '', price: null, buy_qty: 1, get_qty: 1, gift_same: false, option_mode: 'cong_them', start_at: null, end_at: null, days: null, time_from: null, time_to: null, is_active: true, sort_order: 0, items: [] };
+  // Món đã chọn: combo → số lượng từng món; mua / tặng → danh sách món
+  const pick = { combo: new Map(), mua: new Set(), tang: new Set() };
+  p.items.forEach(i => { if (i.part === 'combo') pick.combo.set(i.menu_item_id, i.qty); else pick[i.part].add(i.menu_item_id); });
+  const q = { combo: '', mua: '', tang: '' };
+  const catName = it => (m.categories.find(c => c.id === it.category_id) || {}).name || '';
+  const isOn = (part, id) => part === 'combo' ? pick.combo.has(id) : pick[part].has(id);
+  /* Danh sách chọn món có ô tìm riêng (không dấu cũng tìm được); món đã chọn đứng đầu */
+  const pickerHtml = part => {
+    const words = BN.fold(q[part]).split(/\s+/).filter(Boolean);
+    const its = m.items.filter(it => isOn(part, it.id) || words.every(w => BN.fold(it.name + ' ' + catName(it)).indexOf(w) >= 0))
+      .sort((a, b) => (isOn(part, b.id) - isOn(part, a.id)));
+    const n = part === 'combo' ? pick.combo.size : pick[part].size;
+    return '<div class="pk-box"><input class="search" type="search" data-pq="' + part + '" placeholder="Tìm món để thêm…" value="' + esc(q[part]) + '" aria-label="Tìm món"><p class="small muted" style="margin:4px 0">' + (n ? 'Đã chọn ' + n + ' món' : 'Chưa chọn món nào') + '</p><div class="pk-list">' +
+      (its.length ? its.slice(0, 60).map(it => '<label class="check pk-it' + (isOn(part, it.id) ? ' on' : '') + '"><input type="checkbox" data-pp="' + part + '" value="' + esc(it.id) + '"' + (isOn(part, it.id) ? ' checked' : '') + '><span><b>' + esc(it.name) + '</b><small>' + esc(catName(it)) + ' · ' + vnd(it.price) + (it.is_available ? '' : ' · đang hết') + '</small></span>' +
+        (part === 'combo' && isOn(part, it.id) ? '<span class="pk-q"><button type="button" class="btn btn-line btn-sm" data-cq="' + esc(it.id) + '" data-d="-1" aria-label="Bớt">−</button><b class="num">' + pick.combo.get(it.id) + '</b><button type="button" class="btn btn-line btn-sm" data-cq="' + esc(it.id) + '" data-d="1" aria-label="Thêm">+</button></span>' : '') + '</label>').join('') + (its.length > 60 ? '<p class="small muted">Gõ tên để tìm thêm…</p>' : '') : '<p class="small muted">Không có món nào khớp.</p>') + '</div></div>';
+  };
+  const comboNormal = () => [...pick.combo].reduce((s, [id, n]) => s + ((m.items.find(i => i.id === id) || {}).price || 0) * n, 0);
+  const localIn = v => v ? toLocalInput(v) : '';
+  ui.sheet(ui.head(isNew ? 'Tạo ưu đãi' : 'Sửa ưu đãi', isNew ? 'Combo giá ưu đãi hoặc mua X tặng Y' : esc(p.name)) +
+    '<div class="sh-body" id="prForm">' +
+    '<div class="seg2" role="group" aria-label="Loại ưu đãi"><button type="button" data-pk="combo" aria-pressed="' + (p.kind === 'combo') + '">Combo giá ưu đãi</button><button type="button" data-pk="mua_tang" aria-pressed="' + (p.kind === 'mua_tang') + '">Mua X tặng Y</button></div>' +
+    '<label class="field" for="prName">Tên ưu đãi (khách thấy) <span class="req">*</span><input id="prName" maxlength="60" value="' + esc(p.name) + '" placeholder="Ví dụ: Combo no nê, Mua 1 tặng 1 trà sữa"></label>' +
+    '<label class="field" for="prDesc">Mô tả ngắn<input id="prDesc" maxlength="120" value="' + esc(p.description || '') + '" placeholder="Để trống thì tự ghi danh sách món"></label>' +
+    // Combo
+    '<div data-for="combo"' + (p.kind === 'combo' ? '' : ' hidden') + '><div class="field pk-h">Món trong combo <span class="req">*</span></div><div id="pkCombo">' + pickerHtml('combo') + '</div>' +
+    '<div class="grid2" style="margin-top:10px"><label class="field" for="prPrice">Giá combo (VNĐ) <span class="req">*</span><input id="prPrice" class="num" type="number" inputmode="numeric" min="0" step="1000" value="' + (p.price != null ? p.price : '') + '"></label><div class="field">Giá gốc các món<b class="num" id="prNormal" style="font-size:18px;padding-top:8px">' + vnd(comboNormal()) + '</b></div></div></div>' +
+    // Mua X tặng Y
+    '<div data-for="mua_tang"' + (p.kind === 'mua_tang' ? '' : ' hidden') + '>' +
+    '<div class="grid2"><label class="field" for="prBuy">Mua (X món)<input id="prBuy" class="num" type="number" min="1" max="20" value="' + p.buy_qty + '"></label><label class="field" for="prGet">Tặng (Y món)<input id="prGet" class="num" type="number" min="1" max="20" value="' + p.get_qty + '"></label></div>' +
+    '<div class="field pk-h" style="margin-top:10px">Món được tính là món mua <span class="req">*</span></div><div id="pkMua">' + pickerHtml('mua') + '</div>' +
+    '<label class="check" style="margin-top:10px"><input type="checkbox" id="prSame"' + (p.gift_same ? ' checked' : '') + '><span><b>Tặng đúng món khách mua</b><small>Ví dụ mua 1 ly trà sữa nào thì tặng 1 ly giống hệt</small></span></label>' +
+    '<div id="tangBox"' + (p.gift_same ? ' hidden' : '') + '><div class="field pk-h" style="margin-top:10px">Món được tặng <span class="req">*</span></div><div id="pkTang">' + pickerHtml('tang') + '</div></div></div>' +
+    '<label class="field" for="prMode" style="margin-top:6px"><span id="prModeLbl">' + (p.kind === 'combo' ? 'Topping, upsize có phí trong combo' : 'Topping, upsize có phí của món tặng') + '</span><select id="prMode">' + Object.keys(OPT_MODE).map(k => '<option value="' + k + '"' + (p.option_mode === k ? ' selected' : '') + '>' + OPT_MODE[k] + '</option>').join('') + '</select></label>' +
+    // Thời gian
+    '<fieldset style="border:0;padding:0;margin:8px 0 0"><legend class="field" style="margin-bottom:6px">Thời gian hiển thị cho khách</legend>' +
+    '<div class="grid2"><label class="field" for="prFrom">Từ ngày<input id="prFrom" type="datetime-local" value="' + localIn(p.start_at) + '"></label><label class="field" for="prTo">Đến ngày<input id="prTo" type="datetime-local" value="' + localIn(p.end_at) + '"></label></div>' +
+    '<div class="grid2" style="margin-top:8px"><label class="field" for="prT1">Khung giờ mỗi ngày: từ<input id="prT1" type="time" value="' + esc(p.time_from ? String(p.time_from).slice(0, 5) : '') + '"></label><label class="field" for="prT2">đến<input id="prT2" type="time" value="' + esc(p.time_to ? String(p.time_to).slice(0, 5) : '') + '"></label></div>' +
+    '<div class="field" style="margin-top:8px">Các thứ trong tuần</div><div class="chips" id="prDays">' + [1, 2, 3, 4, 5, 6, 7].map(d => '<button class="chipbtn" type="button" data-day="' + d + '" aria-pressed="' + (!(p.days && p.days.length) || p.days.indexOf(d) >= 0) + '">' + DOW[d] + '</button>').join('') + '</div>' +
+    '<p class="small muted" style="margin:6px 0 0">Để trống ngày là chạy luôn, không hết hạn. Để trống khung giờ là cả ngày.</p></fieldset>' +
+    '<label class="switch" style="margin-top:10px"><input type="checkbox" id="prOn"' + (p.is_active ? ' checked' : '') + '><span class="track"></span>Bật ưu đãi</label>' +
+    '<p class="msg" id="prMsg" hidden></p>' + (isNew ? '' : confirmBox('Xoá hẳn ưu đãi “' + esc(p.name) + '”? Hoá đơn cũ vẫn giữ tên ưu đãi.', 'Xoá ưu đãi', 'prDelBox')) + '</div>' +
+    '<div class="sh-foot">' + (isNew ? '' : '<button class="btn btn-danger" type="button" id="prDel">Xoá</button>') + '<button class="btn grow" type="button" id="prSave">' + (isNew ? 'Tạo ưu đãi' : 'Lưu') + '</button></div>',
+    sh => {
+      const box = { combo: '#pkCombo', mua: '#pkMua', tang: '#pkTang' };
+      const redraw = part => { const el = $(box[part], sh), had = document.activeElement && document.activeElement.dataset.pq === part, pos = had ? document.activeElement.selectionStart : 0; el.innerHTML = pickerHtml(part); if (had) { const i = $('[data-pq="' + part + '"]', el); i.focus(); i.setSelectionRange(pos, pos); } if (part === 'combo') $('#prNormal', sh).textContent = vnd(comboNormal()); };
+      sh.addEventListener('click', e => {
+        const k = e.target.closest('[data-pk]');
+        if (k) { p.kind = k.dataset.pk; $$('[data-pk]', sh).forEach(x => x.setAttribute('aria-pressed', x === k)); $$('[data-for]', sh).forEach(x => { x.hidden = x.dataset.for !== p.kind; }); $('#prModeLbl', sh).textContent = p.kind === 'combo' ? 'Topping, upsize có phí trong combo' : 'Topping, upsize có phí của món tặng'; return; }
+        const cq = e.target.closest('[data-cq]');
+        if (cq) { e.preventDefault(); const id = cq.dataset.cq, n = Math.max(1, Math.min(20, (pick.combo.get(id) || 1) + Number(cq.dataset.d))); pick.combo.set(id, n); redraw('combo'); return; }
+        const d = e.target.closest('[data-day]'); if (d) d.setAttribute('aria-pressed', d.getAttribute('aria-pressed') !== 'true');
+      });
+      sh.addEventListener('change', e => {
+        const c = e.target.closest('[data-pp]');
+        if (c) { const part = c.dataset.pp, id = c.value; if (part === 'combo') { if (c.checked) pick.combo.set(id, 1); else pick.combo.delete(id); } else if (c.checked) pick[part].add(id); else pick[part].delete(id); redraw(part); return; }
+        if (e.target.id === 'prSame') $('#tangBox', sh).hidden = e.target.checked;
+      });
+      sh.addEventListener('input', e => { const s2 = e.target.closest('[data-pq]'); if (s2) { q[s2.dataset.pq] = s2.value; clearTimeout(s2._t); s2._t = setTimeout(() => redraw(s2.dataset.pq), 200); } });
+      wireConfirm(sh, '#prDel', 'prDelBox', async () => { await api.deletePromotion(p.id); ui.close(); ui.toast('Đã xoá ưu đãi'); rerender(); });
+      $('#prSave', sh).onclick = async () => {
+        const msg = $('#prMsg', sh); msg.hidden = true;
+        const say = t => { msg.textContent = t; msg.hidden = false; msg.scrollIntoView({ block: 'nearest' }); };
+        const name = $('#prName', sh).value.trim(); if (!name) return say('Nhập tên ưu đãi.');
+        const out = Object.assign({}, p, { name, description: $('#prDesc', sh).value.trim(), option_mode: $('#prMode', sh).value, is_active: $('#prOn', sh).checked });
+        if (p.kind === 'combo') {
+          if (!pick.combo.size) return say('Chọn ít nhất 1 món cho combo.');
+          const price = $('#prPrice', sh).value; if (price === '' || !(Number(price) >= 0)) return say('Nhập giá combo.');
+          out.price = Number(price); out.items = [...pick.combo].map(([id, n]) => ({ part: 'combo', menu_item_id: id, qty: n }));
+        } else {
+          out.buy_qty = Math.max(1, Math.min(20, Number($('#prBuy', sh).value) || 1)); out.get_qty = Math.max(1, Math.min(20, Number($('#prGet', sh).value) || 1));
+          out.gift_same = $('#prSame', sh).checked;
+          if (!pick.mua.size) return say('Chọn món được tính là món mua.');
+          if (!out.gift_same && !pick.tang.size) return say('Chọn món được tặng, hoặc tích “Tặng đúng món khách mua”.');
+          out.items = [...pick.mua].map(id => ({ part: 'mua', menu_item_id: id })).concat(out.gift_same ? [] : [...pick.tang].map(id => ({ part: 'tang', menu_item_id: id })));
+        }
+        const f = $('#prFrom', sh).value, t = $('#prTo', sh).value, t1 = $('#prT1', sh).value, t2 = $('#prT2', sh).value;
+        out.start_at = f ? new Date(f).toISOString() : null; out.end_at = t ? new Date(t).toISOString() : null;
+        if (out.start_at && out.end_at && out.end_at <= out.start_at) return say('Ngày kết thúc phải sau ngày bắt đầu.');
+        if (!!t1 !== !!t2) return say('Nhập đủ giờ bắt đầu và giờ kết thúc của khung giờ, hoặc để trống cả hai.');
+        out.time_from = t1 || null; out.time_to = t2 || null;
+        const days = $$('[data-day]', sh).filter(x => x.getAttribute('aria-pressed') === 'true').map(x => Number(x.dataset.day));
+        if (!days.length) return say('Chọn ít nhất 1 thứ trong tuần.');
+        out.days = days.length === 7 ? null : days;
+        const btn = $('#prSave', sh); btn.disabled = true;
+        try { await api.savePromotion(out); ui.close(); ui.toast(isNew ? 'Đã tạo ưu đãi' : 'Đã lưu ưu đãi'); rerender(); }
+        catch (err) { say(errText(err)); btn.disabled = false; }
+      };
+    }, { wide: true });
 }
 
 /* =====================================================================
