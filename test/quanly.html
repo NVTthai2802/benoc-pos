@@ -316,15 +316,26 @@ function promoStatsBox(sales) {
    ƯU ĐÃI — combo giá ưu đãi, mua X tặng Y, hẹn giờ hiển thị
    ===================================================================== */
 const OPT_MODE = { cong_them: 'Cộng thêm tiền như bình thường', mien_phi: 'Miễn phí (0đ)', khong_phi: 'Không cho chọn tuỳ chọn có phí' };
+/* Món của ưu đãi đang "Hết món" làm ưu đãi bị ẩn (giống get_promotions trong SQL) */
+function promoBlocked(p) {
+  const m = state.menuData, it = id => m && m.items.find(i => i.id === id), off = i => { const x = it(i.menu_item_id); return !x || !x.is_available; };
+  const nm = list => list.map(i => (it(i.menu_item_id) || {}).name || 'món đã xoá').join(', ');
+  if (p.kind === 'combo') { const bad = p.items.filter(i => i.part === 'combo' && off(i)); return bad.length ? 'Ẩn vì hết món: ' + nm(bad) : (p.items.some(i => i.part === 'combo') ? '' : 'Ẩn vì chưa có món'); }
+  const buy = p.items.filter(i => i.part === 'mua'), gift = p.items.filter(i => i.part === 'tang');
+  if (!buy.some(i => !off(i))) return 'Ẩn vì món mua đều hết: ' + nm(buy);
+  if (!p.gift_same && !gift.some(i => !off(i))) return 'Ẩn vì món tặng đều hết: ' + nm(gift);
+  return '';
+}
 function promoState(p) {
   if (!p.is_active) return ['Đang tắt', 'pill-mute'];
   if (p.end_at && new Date(p.end_at) <= Date.now()) return ['Đã hết hạn', 'pill-mute'];
+  const blocked = promoBlocked(p); if (blocked) return [blocked, 'pill-red'];
   if (promoLive(p)) return ['Đang hiện cho khách', 'pill-ok'];
   if (p.start_at && new Date(p.start_at) > Date.now()) return ['Chưa tới ngày', 'pill-red'];
   return ['Ngoài khung giờ', 'pill-red'];
 }
 async function renderPromos(main) {
-  const [list, m] = await Promise.all([api.adminPromotions(), state.menuData ? Promise.resolve(state.menuData) : api.adminMenu()]);
+  const [list, m] = await Promise.all([api.adminPromotions(), api.adminMenu()]); // luôn lấy menu mới: món vừa gạt hết làm ưu đãi bị ẩn
   state.menuData = m; state.promoData = list;
   const nameOf = id => (m.items.find(i => i.id === id) || {}).name || '(món đã xoá)';
   const itemsText = p => p.kind === 'combo'
