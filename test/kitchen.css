@@ -117,3 +117,18 @@
 .dt-tp b { color: #7a3e00; }
 .sz-XL { background: #5b3a8a; color: #fff; }
 .sz-UP { background: #c2410c; color: #fff; }
+
+/* Ưu đãi trên thẻ đơn: tiêu đề phần ưu đãi, món tặng nổi bật */
+.kc-items li.kc-pr { align-items: center; gap: 6px; margin-top: 2px; padding: 4px 8px; border-radius: 8px; background: #FFF0C7; font-size: 14px; }
+.kc-items li.kc-pr b { font-weight: 700; color: #7a3e00; }
+.kc-items li.in-pr { padding-left: 10px; border-left: 3px solid #F2B33D; }
+.kc-items li.is-gift { background: #FFF6E5; border-radius: 0 8px 8px 0; }
+.pm { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 6px; font: 800 11px/1.7 var(--f-body); letter-spacing: .05em; vertical-align: 2px; color: #fff; }
+.pm-combo { background: var(--red); }
+.pm-uu { background: #E58A00; }
+.pm-tang { background: #E58A00; font-size: 12px; }
+.pm-mua { background: var(--ink-2); }
+.dt-pr { list-style: none; display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; padding: 4px 8px; border-radius: 8px; background: #FFF0C7; }
+.dt-in-pr { border-left: 4px solid #F2B33D; }
+.dt-gift { background: #FFF6E5; }
+.ed-pr { background: #FFF6E5; border-radius: 8px; padding-inline: 8px !important; }
