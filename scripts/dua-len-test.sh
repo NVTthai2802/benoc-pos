@@ -9,7 +9,7 @@ git fetch -q origin
 git checkout -q main && git pull -q --ff-only origin main
 SRC=${1:-test}   # nhánh nguồn, mặc định `test`
 rm -rf test && mkdir test
-git archive "$SRC" -- '*.html' '*.js' '*.css' img | tar -x -C test
+git archive "$SRC" -- '*.html' '*.js' '*.css' img sound | tar -x -C test
 rm -rf test/scripts
 git add -A test
 if git diff --cached --quiet; then echo "Test đã là bản mới nhất."; exit 0; fi
