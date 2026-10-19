@@ -217,10 +217,10 @@ begin
     end if;
     -- Chia giá combo cho từng món theo tỉ lệ giá gốc
     select coalesce(sum(base), 0) into v_sum from _pu;
-    update _pu set price = case when v_sum > 0 then (floor(p.price::numeric * base / v_sum / 1000) * 1000)::int else 0 end;
+    update _pu set price = case when v_sum > 0 then (floor(p.price::numeric * base / v_sum / 1000) * 1000)::int else 0 end where i is not null;  -- Supabase chặn UPDATE không có WHERE
     select min(i) into v_first from _pu;
     update _pu set price = price + (p.price - (select sum(price) from _pu)) where i = v_first;
-    update _pu set price = price + extra;
+    update _pu set price = price + extra where i is not null;  -- Supabase chặn UPDATE không có WHERE
   else
     if (select count(*) from _pu where part = 'mua') <> p.buy_qty or (select count(*) from _pu where part = 'tang') <> p.get_qty then
       raise exception 'PROMO_INVALID' using hint = format('%s: chọn đúng %s món mua và %s món tặng', p.name, p.buy_qty, p.get_qty);
@@ -229,7 +229,7 @@ begin
                                  and not exists (select 1 from _pu b where b.part = 'mua' and b.menu_item_id = g.menu_item_id)) then
       raise exception 'PROMO_INVALID' using hint = format('%s: món tặng phải là món bạn mua', p.name);
     end if;
-    update _pu set price = case when part = 'mua' then base + extra else extra end;
+    update _pu set price = case when part = 'mua' then base + extra else extra end where i is not null;  -- Supabase chặn UPDATE không có WHERE
   end if;
 
   -- Gộp các phần giống hệt nhau thành 1 dòng
