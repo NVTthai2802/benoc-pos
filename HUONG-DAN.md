@@ -61,6 +61,7 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 
 - **Máy bếp**: mở `bep.html`, đăng nhập tài khoản máy bếp, bấm **Bật chuông báo** (trình duyệt chỉ cho phát âm thanh sau khi bấm). Nên chọn "Thêm vào màn hình chính" để mở như app.
 - **Máy pha chế**: mở `phache.html`, đăng nhập tài khoản máy pha chế, cũng bấm **Bật chuông báo**.
+- **Tiếng chuông khi có đơn mới**: chuông 2 nốt (bếp và pha chế khác giai điệu) rồi giọng đọc **"Bé Nốc ơi, bé Nốc ơi"** (file `sound/be-noc.mp3`, tạo bằng giọng đọc tiếng Việt của Google). Khách gọi nhân viên thì chỉ kêu chuông, không có giọng. Muốn đổi giọng khác, thay file `sound/be-noc.mp3` bằng file mp3 mới cùng tên. Nhớ tăng âm lượng và tắt chế độ im lặng trên điện thoại.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ, tên và số điện thoại; mang về thì nhập tên và số điện thoại. Số điện thoại bắt buộc (10 số) để quán liên hệ khi có việc. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
 - **Khách trả tiền trước**: bấm **Thu tiền** ngay trên thẻ đơn ở cột nào cũng được. Thẻ hiện **Đã thu …**, đơn vẫn làm tiếp; ra món xong đơn tự hoàn tất, không phải thu lại. Khách cũng thấy "Đã thanh toán trước" trên điện thoại.
@@ -72,6 +73,15 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Tìm món**: menu khách có ô **Tìm món…** ngay trên thanh danh mục, chỉ tìm trong menu của mã QR đang mở (gõ không dấu cũng được, ví dụ "tra sua"). Trang Quản lý → Menu có ô tìm riêng cho **Món** và cho **Tuỳ chọn** (tìm được theo tên món đang dùng nhóm đó). Màn hình bếp/pha chế khi **+ Thêm món** vào đơn cũng có ô tìm.
 - **Hết món**: **Menu** → gạt công tắc **Đang bán** sang **Hết món**. Món biến mất khỏi menu khách trong vài giây (không cần tải lại trang); khách nào đã bỏ món đó vào giỏ sẽ được báo và món tự bỏ khỏi giỏ.
 - **Đổi ảnh món**: **Menu** → bấm món → **Chọn ảnh** → **Lưu**.
+- **Ưu đãi (combo, mua X tặng Y)**: **Quản lý → Ưu đãi → + Tạo ưu đãi**.
+  - **Combo giá ưu đãi**: tích các món trong combo (dùng ô tìm), chỉnh số lượng từng món bằng −/+, nhập **Giá combo**. Bên cạnh có giá gốc để so sánh.
+  - **Mua X tặng Y**: nhập X, Y; tích các món được tính là món mua; tích các món được tặng, hoặc tích **Tặng đúng món khách mua** (ví dụ mua 1 ly trà sữa nào thì tặng 1 ly giống hệt).
+  - **Topping, upsize có phí** trong combo / món tặng: chọn **Cộng thêm tiền**, **Miễn phí** hoặc **Không cho chọn**. Món mua trong mua X tặng Y luôn tính giá thường.
+  - **Thời gian hiển thị**: từ ngày… đến ngày… (để trống là chạy luôn, không hết hạn), khung giờ mỗi ngày (ví dụ 14:00–17:00, để trống là cả ngày), các thứ trong tuần. Công tắc **Bật/Tắt** để dừng ngay. Danh sách ghi rõ ưu đãi **Đang hiện cho khách**, **Ngoài khung giờ**, **Chưa tới ngày** hay **Đã hết hạn**.
+  - Khách thấy ưu đãi đang chạy ở **đầu menu** (ô màu nổi bật), bấm **Chọn ngay** để chọn đường, đá, topping cho từng món rồi thêm vào giỏ. Ưu đãi có món ăn hiện ở menu Ăn vặt, có đồ uống hiện ở menu Trà · Cà phê. Khách đã bỏ vào giỏ thì được giữ giá thêm 10 phút sau khi hết khung giờ.
+  - Trên **bếp / pha chế**, món thuộc ưu đãi nằm dưới dòng **COMBO …** hoặc **ƯU ĐÃI …**, món được tặng có nhãn **TẶNG** màu cam, món mua có nhãn **MUA**. Combo có cả đồ ăn và đồ uống thì mỗi nơi thấy phần của mình. **Sửa đơn**: món thuộc ưu đãi không đổi số lượng được, chỉ có nút **Bỏ cả phần**.
+  - **Doanh thu**: hoá đơn ghi tên ưu đãi, tiền của phần đó và món nào được tặng; có thêm bảng **Ưu đãi đã bán** (số lần, số món tặng, tiền thu).
+  - Giá ưu đãi luôn tính ở máy chủ. Giá combo được chia vào từng món theo tỉ lệ giá gốc (để thống kê món bán chạy vẫn đúng), tổng luôn bằng đúng giá combo.
 - **Tuỳ chọn món** (size M/L, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
 
 ## Lưu ý
@@ -97,6 +107,8 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-10-ten-khach-hoa-don.sql`: **Hoá đơn gần đây** hiện tên khách (kèm SĐT, địa chỉ nếu đi ship). Chỉ thêm cột, không đụng dữ liệu cũ; hoá đơn trước bản này hiện "—" vì lúc đó chưa lưu tên.
 - `sql/cap-nhat-11-size-chi-ca-phe-matcha.sql`: chỉ danh mục **Cà phê** và **Matcha · Cacao · Khoai môn** có chọn Size M / Size L; các đồ uống khác bỏ mục size, chỉ còn một giá. Chỉ gỡ liên kết món ↔ nhóm Size, không xoá món, không đổi giá.
 - `sql/cap-nhat-12-sap-xep-size-upsize.sql`: sắp xếp lại size đồ uống: **Nước uống** (menu Ăn vặt) có tuỳ chọn **Size XL +5k**; **Trà sữa, Trà hoa quả, Sốt khoai môn tươi, Món nên thử, Cà phê, Matcha · Cacao · Khoai môn** size nhỏ nhất là L, tuỳ chọn **Upsize +10k**; **Sốt cốm tươi** tuỳ chọn **Upsize +15k**. Không xoá món, không đổi giá món, không đụng đơn/hoá đơn. (Thay cho cập nhật 9 và 11.)
+- `sql/cap-nhat-13-uu-dai-combo-mua-tang.sql`: thêm **Ưu đãi** (combo giá ưu đãi, mua X tặng Y, hẹn giờ hiển thị). Chỉ thêm bảng/cột/hàm mới và cập nhật hàm đặt món, không xoá món, không đổi giá, không đụng đơn/hoá đơn cũ. Tự thêm cột tên khách trên hoá đơn nếu môi trường chưa chạy cập nhật 10. Chạy **trước** khi đưa giao diện mới lên.
+- `sql/cap-nhat-14-sua-loi-dat-uu-dai.sql`: sửa lỗi "UPDATE requires a WHERE clause" khi khách đặt ưu đãi. Chỉ thay hàm tính giá ưu đãi, không đụng dữ liệu. Chạy sau cập nhật 13.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 

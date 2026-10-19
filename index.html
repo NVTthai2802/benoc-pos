@@ -191,14 +191,64 @@
 .oc--paid h2 { margin: 0; font: 700 20px/1.2 var(--f-head); color: var(--ok); }
 .oc--paid p { margin: 2px 0 6px; color: var(--ink-2); font-size: 14px; }
 .st-foot { color: var(--ink-2); font-size: 13px; text-align: center; padding-block: 8px 40px; }
+/* ---------- Ưu đãi: dải nổi bật đầu menu ---------- */
+.promos { padding-block: 10px 4px; }
+.pr-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font: 800 19px/1.2 var(--f-head); color: var(--red); }
+.pr-head svg { width: 24px; height: 24px; flex: none; }
+.pr-head small { margin-left: auto; font: 600 12px/1.2 var(--f-body); color: var(--ink-2); }
+.pr-list { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -16px; padding: 2px 16px 10px; scrollbar-width: none; }
+.pr-list::-webkit-scrollbar { display: none; }
+.pr-card { position: relative; flex: 0 0 min(84%, 330px); scroll-snap-align: start; display: flex; flex-direction: column; gap: 4px; padding: 14px 14px 12px; border-radius: 20px; border: 2.5px solid var(--red); background: linear-gradient(135deg, #FFF3C4 0%, #FFE1E9 100%); color: var(--ink); text-align: left; font: inherit; cursor: pointer; overflow: hidden; box-shadow: 0 6px 16px rgba(226, 50, 92, .18); }
+.pr-list > .pr-card:only-child { flex-basis: 100%; }
+.pr-card::after { content: ""; position: absolute; right: -28px; top: -28px; width: 96px; height: 96px; border-radius: 50%; background: rgba(226, 50, 92, .10); }
+.pr-badge { align-self: flex-start; padding: 3px 10px; border-radius: 999px; background: var(--red); color: #fff; font: 800 12px/1.3 var(--f-head); letter-spacing: .04em; }
+.pr-badge--gift { background: #E58A00; }
+.pr-name { font: 800 21px/1.15 var(--f-head); margin-top: 2px; }
+.pr-desc { font-size: 13px; color: var(--ink-2); }
+.pr-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.pr-price { display: inline-flex; align-items: baseline; gap: 6px; }
+.pr-price b { font: 800 26px/1 var(--f-head); color: var(--red); }
+.pr-price s { color: var(--ink-2); font-size: 14px; }
+.pr-when { padding: 3px 8px; border-radius: 8px; background: rgba(255, 255, 255, .75); font-size: 12px; font-weight: 600; color: var(--ink); }
+.pr-go { margin-left: auto; padding: 7px 14px; border-radius: 999px; background: var(--red); color: #fff; font-weight: 700; font-size: 14px; position: relative; z-index: 1; }
+/* Bảng chọn món của ưu đãi */
+.pu { border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 12px; background: var(--card); display: flex; flex-direction: column; gap: 8px; }
+.pu--tang { border-color: #E58A00; background: #FFF6E5; }
+.pu-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pu-head b { font-weight: 700; }
+.pu-head .num { margin-left: auto; color: var(--ink-2); font-size: 13px; }
+.pu-tag { padding: 1px 8px; border-radius: 999px; font: 800 11px/1.5 var(--f-head); letter-spacing: .04em; background: var(--red-soft); color: var(--red); }
+.pu-tag--tang { background: #E58A00; color: #fff; }
+.pu select { width: 100%; min-height: 42px; border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; font: inherit; background: #fff; color: var(--ink); }
+.pu-og { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pu-og legend { width: 100%; padding: 0; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.pu-og legend .req { font-weight: 700; }
+.pu-og.bad legend { color: var(--danger); }
+.pu-ch { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; font-size: 13px; cursor: pointer; }
+.pu-ch input { position: absolute; opacity: 0; pointer-events: none; }
+.pu-ch:has(input:checked) { border-color: var(--red); background: var(--red-soft); color: var(--red); font-weight: 600; }
+.pu-ch small { color: var(--ink-2); }
+.pu-ch--tp { border-color: #F2B33D; }
+.pu input[type=text] { width: 100%; min-height: 38px; border: 1.5px dashed var(--line); border-radius: 10px; padding: 4px 10px; font: inherit; font-size: 14px; background: transparent; }
+.pr-save { margin: 0; font-size: 13px; color: var(--ok); font-weight: 600; }
+.pr-rule { margin: 0; padding: 8px 12px; border-radius: 10px; background: #FFF3C4; font-size: 13px; }
+/* Ưu đãi trong giỏ và trong đơn */
+.line--promo { background: linear-gradient(90deg, #FFF3C4, transparent 70%); border-radius: 12px; padding-inline: 8px; }
+.line-promo { display: inline-flex; align-items: center; gap: 6px; }
+.pp { display: inline-block; padding: 0 7px; border-radius: 999px; font: 800 11px/1.6 var(--f-head); letter-spacing: .03em; background: var(--red); color: #fff; vertical-align: 1px; }
+.pp--tang { background: #E58A00; }
+.pp--mua { background: var(--ink-2); }
+.oc-items li.oc-pr { display: block; font-weight: 700; color: var(--red); font-size: 13px; padding-top: 4px; }
 </style>
 
-<div class="demo-note" id="demoNote" hidden><div class="wrap">Bản xem thử, chưa nối với quán. Mở <a href="bep.html" target="_blank">màn hình bếp</a> ở tab khác để nhận đơn, hoặc vào <a href="quanly.html" target="_blank">trang quản lý</a>.</div></div>
+<div class="demo-note\" id="demoNote" hidden><div class="wrap">Bản xem thử, chưa nối với quán. Mở <a href="bep.html" target="_blank">màn hình bếp</a> ở tab khác để nhận đơn, hoặc vào <a href="quanly.html" target="_blank">trang quản lý</a>.</div></div>
 
 <header class="wrap hero">
   <div class="hero-text"><span class="hero-menu">MENU</span><h1 class="hero-name">BÉ NỐC ĂN VẶT</h1><p class="hero-tag" id="heroTag">Ăn ngon · Giá xinh · Ship nhanh</p><a class="other-menu" id="otherTop" hidden></a></div>
   <button class="chip chip--warn" id="chip" type="button">Chưa có số</button>
 </header>
+
+<section class="wrap promos" id="promos" hidden aria-label="Ưu đãi đang có"></section>
 
 <div class="menubar" id="tabs">
   <div class="msearch"><input id="mSearch" type="search" placeholder="Tìm món…" aria-label="Tìm món trong menu" autocomplete="off" enterkeyhint="search"></div>
@@ -226,7 +276,7 @@
 <script>
 (function () {
 'use strict';
-const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, ICON_SCOOTER, qboxHtml, orderLabel, sizeGroup } = BN;
+const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, ICON_SCOOTER, qboxHtml, orderLabel, sizeGroup, promoPrices, promoWhen } = BN;
 /* Giá size L của món có chọn size (null nếu món chỉ có 1 giá) */
 const priceL = it => { const g = sizeGroup(it), L = g && g.choices.find(c => /^size l$/i.test(c.name)); return L ? it.price + L.price : null; };
 /* Hình ly: M nhỏ, L to, chữ ở giữa */
@@ -246,7 +296,7 @@ const ICON = {
 };
 
 const state = {
-  menu: [], items: new Map(), itemCat: new Map(),
+  menu: [], items: new Map(), itemCat: new Map(), promos: [],
   info: Object.assign({ queue: '', name: '', phone: '', dine: '', dineAt: 0 }, store.get('info', {})),
   cart: [], cartNote: '',
   orders: store.get(DEMO ? 'demo.orders' : 'orders', []),
@@ -272,7 +322,7 @@ const saveOrders = () => { if (!GIAO) store.set(DEMO ? 'demo.orders' : 'orders',
 
 function showView(v) {
   state.view = v;
-  $('#menuView').hidden = v !== 'menu'; $('#statusView').hidden = v !== 'status'; $('#tabs').hidden = v !== 'menu';
+  $('#menuView').hidden = v !== 'menu'; $('#statusView').hidden = v !== 'status'; $('#tabs').hidden = v !== 'menu'; renderPromos();
   renderCartBar(); window.scrollTo(0, 0);
   if (v === 'menu') { $$('.tab').forEach((t, i) => t.setAttribute('aria-current', i === 0 ? 'true' : 'false')); $('.tabs').scrollLeft = 0; }
   if (v === 'status') renderStatus(); else renderBanner();
@@ -466,8 +516,12 @@ function watchSections() {
 }
 
 /* ---------- Thêm vào giỏ ---------- */
-const lineKey = l => l.itemId + '|' + l.choices.map(c => c.id).sort((a, b) => a - b).join(',') + '|' + (l.note || '');
-const unitPrice = l => l.base + l.choices.reduce((s, c) => s + c.price, 0);
+const lineKey = l => l.promo ? 'P|' + l.promo + '|' + JSON.stringify(l.units.map(u => [u.part, u.itemId, u.choices.map(c => c.id).sort((a, b) => a - b), u.note || '']))
+  : l.itemId + '|' + l.choices.map(c => c.id).sort((a, b) => a - b).join(',') + '|' + (l.note || '');
+const extraOf = choices => choices.reduce((s, c) => s + c.price, 0);
+/* Giá 1 phần ưu đãi (tính giống máy chủ) */
+const promoUnitPrices = l => promoPrices(l.p, l.units.map(u => ({ part: u.part, base: u.base, extra: extraOf(u.choices) })));
+const unitPrice = l => l.promo ? promoUnitPrices(l).reduce((s, x) => s + x, 0) : l.base + extraOf(l.choices);
 function addLine(line) {
   const ex = state.cart.find(l => lineKey(l) === lineKey(line));
   if (ex) ex.qty = Math.min(50, ex.qty + line.qty); else state.cart.push(line);
@@ -576,8 +630,130 @@ function openItem(id) {
     });
 }
 
+/* ---------- Ưu đãi: dải nổi bật đầu menu + bảng chọn món ---------- */
+const GIFT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8c-1.5-3-5-3.5-5-1.2C7 8 9.5 8 12 8zM12 8c1.5-3 5-3.5 5-1.2C17 8 14.5 8 12 8z"/></svg>';
+const promoItems = (p, part) => (p.items || []).filter(i => i.part === part && state.items.has(i.menu_item_id));
+/* Ưu đãi hiện ở menu nào: menu có ít nhất 1 món của ưu đãi (trang tạo đơn giao hàng thấy tất cả) */
+function promoUsable(p) {
+  const its = p.items || [], has = i => state.items.has(i.menu_item_id);
+  const ok = p.kind === 'combo' ? its.some(i => i.part === 'combo') && its.filter(i => i.part === 'combo').every(has)
+    : promoItems(p, 'mua').length > 0 && (p.gift_same || promoItems(p, 'tang').length > 0);
+  if (!ok) return false;
+  if (GIAO || !state.menu.some(c => (c.station || 'bep') === state.kind)) return true;
+  return its.some(i => { const c = state.itemCat.get(i.menu_item_id); return c && (c.station || 'bep') === state.kind; });
+}
+const promoNormal = p => promoItems(p, 'combo').reduce((s, i) => s + state.items.get(i.menu_item_id).price * i.qty, 0);
+const promoBadge = p => p.kind === 'combo' ? 'COMBO' : 'MUA ' + p.buy_qty + ' TẶNG ' + p.get_qty;
+const namesOf = list => { const n = list.map(i => state.items.get(i.menu_item_id).name); return n.length > 3 ? n.slice(0, 3).join(', ') + '…' : n.join(', '); };
+function promoDesc(p) {
+  if (p.description) return p.description;
+  if (p.kind === 'combo') return promoItems(p, 'combo').map(i => i.qty + ' ' + state.items.get(i.menu_item_id).name).join(' + ');
+  return 'Mua ' + p.buy_qty + ': ' + namesOf(promoItems(p, 'mua')) + ' · Tặng ' + p.get_qty + (p.gift_same ? ' món giống hệt' : ': ' + namesOf(promoItems(p, 'tang')));
+}
+function renderPromos() {
+  const el = $('#promos'), list = state.promos.filter(promoUsable);
+  el.hidden = !(list.length && state.view === 'menu');
+  if (el.hidden) { el.innerHTML = ''; return; }
+  el.innerHTML = '<h2 class="pr-head">' + GIFT + 'Ưu đãi đang có' + (list.length > 1 ? '<small>Vuốt ngang xem thêm ›</small>' : '') + '</h2><div class="pr-list">' + list.map(p => {
+    const normal = p.kind === 'combo' ? promoNormal(p) : 0, when = promoWhen(p, true);
+    return '<button class="pr-card" type="button" data-promo="' + esc(p.id) + '">' +
+      '<span class="pr-badge' + (p.kind === 'combo' ? '' : ' pr-badge--gift') + '">' + promoBadge(p) + '</span>' +
+      '<span class="pr-name">' + esc(p.name) + '</span><span class="pr-desc">' + esc(promoDesc(p)) + '</span>' +
+      '<span class="pr-foot"><span class="pr-price">' + (p.kind === 'combo' ? '<b class="num">' + K(p.price) + '</b>' + (normal > p.price ? '<s class="num">' + K(normal) + '</s>' : '') : '<b>Tặng ' + p.get_qty + '</b>') + '</span>' +
+      (when ? '<span class="pr-when">' + esc(when) + '</span>' : '') + '<span class="pr-go">Chọn ngay ›</span></span></button>';
+  }).join('') + '</div>';
+}
+$('#promos').addEventListener('click', e => { const b = e.target.closest('[data-promo]'); if (b) openPromo(b.dataset.promo); });
+
+function openPromo(id) {
+  if (GIAO && state.staff === false) { ui.toast('Cần đăng nhập ở trang Quản lý trước'); return; }
+  if (!dineMode()) { needDine(() => openPromo(id)); return; }
+  const p = state.promos.find(x => x.id === id); if (!p || !promoUsable(p)) { ui.toast('Ưu đãi này vừa hết'); return; }
+  const free = part => part !== 'mua';           // phần áp cài đặt tuỳ chọn có phí của ưu đãi
+  const defaults = it => new Map(it.option_groups.map(g => [g.id, new Set(g.choices.filter(c => c.default && !(c.price > 0 && p.option_mode === 'khong_phi')).map(c => c.id))]));
+  // Mỗi "phần" là 1 món: combo 2 cơm + 1 trà = 3 phần; mua 2 tặng 1 = 2 phần mua + 1 phần tặng
+  const units = [];
+  if (p.kind === 'combo') promoItems(p, 'combo').forEach(i => { for (let k = 0; k < i.qty; k++) units.push({ part: 'combo', pick: [i.menu_item_id], itemId: i.menu_item_id }); });
+  else {
+    const buy = promoItems(p, 'mua').map(i => i.menu_item_id);
+    for (let k = 0; k < p.buy_qty; k++) units.push({ part: 'mua', pick: buy, itemId: buy[0] });
+    const gift = promoItems(p, 'tang').map(i => i.menu_item_id);
+    for (let k = 0; k < p.get_qty; k++) units.push({ part: 'tang', pick: gift, itemId: p.gift_same ? buy[0] : gift[0] });
+  }
+  units.forEach(u => { u.sel = defaults(state.items.get(u.itemId)); u.note = ''; });
+  // Tặng đúng món khách mua: món tặng chọn trong các món đã chọn ở phần mua
+  const giftPick = () => [...new Set(units.filter(u => u.part === 'mua').map(u => u.itemId))];
+  const syncGifts = () => { if (!p.gift_same) return; const can = giftPick(); units.filter(u => u.part === 'tang').forEach((u, k) => { u.pick = can; const want = can[Math.min(k, can.length - 1)]; if (can.indexOf(u.itemId) < 0 || (can.length === 1 && u.itemId !== want)) { u.itemId = want; u.sel = defaults(state.items.get(want)); } }); };
+  syncGifts();
+  let qty = 1;
+  const choicesOf = u => { const it = state.items.get(u.itemId), out = []; it.option_groups.forEach(g => g.choices.forEach(c => { if (u.sel.get(g.id).has(c.id)) out.push({ id: c.id, name: c.name, price: c.price, group: g.title }); })); return out; };
+  const asUnits = () => units.map(u => ({ part: u.part, base: state.items.get(u.itemId).price, extra: extraOf(choicesOf(u)) }));
+  const total = () => promoPrices(p, asUnits()).reduce((s, x) => s + x, 0) * qty;
+  const normal = () => asUnits().reduce((s, u) => s + u.base + u.extra, 0) * qty;
+  const label = (u, i) => {
+    const same = units.filter(x => x.part === u.part), n = same.indexOf(u) + 1;
+    if (u.part === 'combo') { const k = units.filter(x => x.itemId === u.itemId); return k.length > 1 ? 'Phần ' + (k.indexOf(u) + 1) + '/' + k.length : ''; }
+    return (u.part === 'mua' ? 'Món mua' : 'Món tặng') + (same.length > 1 ? ' ' + n + '/' + same.length : '');
+  };
+  const unitHtml = (u, i) => {
+    const it = state.items.get(u.itemId);
+    const head = '<div class="pu-head">' + (u.part === 'tang' ? '<span class="pu-tag pu-tag--tang">TẶNG</span>' : u.part === 'mua' ? '<span class="pu-tag">MUA</span>' : '') +
+      (u.pick.length > 1 ? '<b>' + label(u, i) + '</b>' : '<b>' + esc(it.name) + '</b>' + (label(u, i) ? ' <span class="small muted">' + label(u, i) + '</span>' : '')) +
+      '<span class="num">' + (u.part === 'tang' ? '<s>' + K(it.price) + '</s> 0đ' : K(it.price)) + '</span></div>';
+    const pick = u.pick.length > 1 ? '<select data-u="' + i + '" aria-label="Chọn món">' + u.pick.map(mid => { const m = state.items.get(mid); return '<option value="' + esc(mid) + '"' + (mid === u.itemId ? ' selected' : '') + '>' + esc(m.name) + ' · ' + K(m.price) + '</option>'; }).join('') + '</select>' : '';
+    const groups = it.option_groups.map(g => {
+      const chs = g.choices.filter(c => !(free(u.part) && p.option_mode === 'khong_phi' && c.price > 0)); if (!chs.length) return '';
+      const type = g.max === 1 ? 'radio' : 'checkbox', tp = /topping/i.test(g.title);
+      return '<fieldset class="pu-og" data-u="' + i + '" data-g="' + g.id + '"><legend>' + esc(g.title) + (g.min > 0 ? ' <span class="req">*</span>' : '') + '</legend>' +
+        chs.map(c => '<label class="pu-ch' + (tp ? ' pu-ch--tp' : '') + '"><input type="' + type + '" name="u' + i + 'g' + g.id + '" value="' + c.id + '"' + (u.sel.get(g.id).has(c.id) ? ' checked' : '') + '>' + esc(c.name) +
+          (c.price ? ' <small class="num">' + (free(u.part) && p.option_mode === 'mien_phi' ? 'miễn phí' : '+' + K(c.price)) + '</small>' : '') + '</label>').join('') + '</fieldset>';
+    }).join('');
+    return '<section class="pu' + (u.part === 'tang' ? ' pu--tang' : '') + '" data-unit="' + i + '">' + head + pick + groups +
+      '<input type="text" data-note="' + i + '" maxlength="120" placeholder="Ghi chú cho món này (không bắt buộc)" value="' + esc(u.note) + '"></section>';
+  };
+  const rule = p.kind === 'combo' ? '' : '<p class="pr-rule">Chọn ' + p.buy_qty + ' món mua, được tặng ' + p.get_qty + ' món' + (p.gift_same ? ' giống món bạn mua' : '') + '.' +
+    (p.option_mode === 'khong_phi' ? ' Món tặng không kèm tuỳ chọn có phí.' : p.option_mode === 'mien_phi' ? ' Tuỳ chọn của món tặng được miễn phí.' : '') + '</p>';
+  const comboRule = p.kind === 'combo' && p.option_mode !== 'cong_them' ? '<p class="pr-rule">' + (p.option_mode === 'mien_phi' ? 'Topping, upsize trong combo được miễn phí.' : 'Combo không kèm topping, upsize có phí.') + '</p>' : '';
+  const when = promoWhen(p, false);
+  ui.sheet(ui.head('<span class="pp' + (p.kind === 'combo' ? '' : ' pp--tang') + '">' + promoBadge(p) + '</span> ' + esc(p.name), esc(promoDesc(p)) + (when ? ' · ' + esc(when) : '')) +
+    '<div class="sh-body">' + rule + comboRule + '<div id="puList" style="display:flex;flex-direction:column;gap:10px">' + units.map(unitHtml).join('') + '</div><p class="msg" id="puMsg" hidden></p></div>' +
+    '<div class="sh-foot"><div class="stepper" role="group" aria-label="Số phần ưu đãi"><button type="button" data-q="-1" aria-label="Bớt 1">−</button><output id="puQty" class="num">1</output><button type="button" data-q="1" aria-label="Thêm 1">+</button></div>' +
+    '<div class="grow" style="display:flex;flex-direction:column;gap:4px"><button class="btn btn-block" type="button" id="puAdd"></button><p class="pr-save" id="puSave"></p></div></div>',
+    sh => {
+      const paint = () => {
+        const t = total(), n = normal();
+        $('#puAdd', sh).innerHTML = 'Thêm ưu đãi · <span class="num">' + vnd(t) + '</span>';
+        $('#puSave', sh).textContent = n > t ? 'Giá thường ' + vnd(n) + ' · tiết kiệm ' + vnd(n - t) : '';
+        $('#puQty', sh).textContent = qty; $('[data-q="-1"]', sh).disabled = qty <= 1; $('[data-q="1"]', sh).disabled = qty >= 20;
+      };
+      const redraw = () => { $('#puList', sh).innerHTML = units.map(unitHtml).join(''); paint(); };
+      paint();
+      sh.addEventListener('change', e => {
+        const sel = e.target.closest('select[data-u]');
+        if (sel) { const u = units[Number(sel.dataset.u)]; u.itemId = sel.value; u.sel = defaults(state.items.get(u.itemId)); if (u.part === 'mua') syncGifts(); redraw(); return; }
+        const fs = e.target.closest('.pu-og'); if (!fs) return;
+        const u = units[Number(fs.dataset.u)], g = state.items.get(u.itemId).option_groups.find(x => String(x.id) === fs.dataset.g);
+        let picked = $$('input:checked', fs);
+        if (picked.length > g.max) { e.target.checked = false; picked = $$('input:checked', fs); ui.toast('Chọn tối đa ' + g.max + ' mục'); }
+        u.sel.set(g.id, new Set(picked.map(o => Number(o.value)))); fs.classList.remove('bad'); paint();
+      });
+      sh.addEventListener('input', e => { const n = e.target.closest('[data-note]'); if (n) units[Number(n.dataset.note)].note = n.value; });
+      sh.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { qty = Math.max(1, Math.min(20, qty + Number(q.dataset.q))); paint(); } });
+      $('#puAdd', sh).onclick = () => {
+        const msg = $('#puMsg', sh); msg.hidden = true;
+        for (let i = 0; i < units.length; i++) {
+          const u = units[i], bad = state.items.get(u.itemId).option_groups.find(g => u.sel.get(g.id).size < g.min);
+          if (bad) { const fs = $('.pu-og[data-u="' + i + '"][data-g="' + bad.id + '"]', sh); if (fs) { fs.classList.add('bad'); fs.scrollIntoView({ block: 'center' }); } msg.textContent = 'Chọn "' + bad.title.toLowerCase() + '" cho ' + state.items.get(u.itemId).name; msg.hidden = false; return; }
+        }
+        addLine({ promo: p.id, p: { kind: p.kind, price: p.price, option_mode: p.option_mode }, name: p.name, qty,
+          units: units.map(u => ({ part: u.part, itemId: u.itemId, name: state.items.get(u.itemId).name, base: state.items.get(u.itemId).price, choices: choicesOf(u), note: u.note.trim() })) });
+        ui.close(); ui.toast('Đã thêm ' + (qty > 1 ? qty + ' phần ' : '') + p.name);
+      };
+    });
+}
+
 /* ---------- Giỏ hàng ---------- */
-const cartCount = () => state.cart.reduce((s, l) => s + l.qty, 0);
+const cartCount = () => state.cart.reduce((s, l) => s + l.qty * (l.promo ? l.units.length : 1), 0);
 const cartTotal = () => state.cart.reduce((s, l) => s + unitPrice(l) * l.qty, 0);
 function renderCartBar() {
   const n = cartCount();
@@ -586,10 +762,17 @@ function renderCartBar() {
 }
 $('#cartBtn').onclick = () => openCart();
 const lineSub = l => l.choices.map(c => c.name + (c.price ? ' +' + K(c.price) : '')).concat(l.note ? ['Ghi chú: ' + l.note] : []).join(' · ');
+/* Các món trong 1 phần ưu đãi: món nào mua, món nào được tặng */
+const PART_TAG = { combo: '', mua: '<span class="pp pp--mua">MUA</span> ', tang: '<span class="pp pp--tang">TẶNG</span> ' };
+const promoSubHtml = l => l.units.map(u => PART_TAG[u.part] + esc(u.name) + (u.choices.length || u.note ? ' (' + esc(u.choices.map(c => c.name).concat(u.note ? [u.note] : []).join(', ')) + ')' : '')).join('<br>');
+/* Gửi lên máy chủ: món thường và phần ưu đãi */
+const orderPayload = () => state.cart.map(l => l.promo
+  ? { promo_id: l.promo, qty: l.qty, parts: l.units.map(u => ({ part: u.part, menu_item_id: u.itemId, choice_ids: u.choices.map(c => c.id), note: u.note || null })) }
+  : { menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) });
 function openCart() {
   const linesHtml = () => state.cart.length ? '<ul class="lines">' + state.cart.map((l, i) =>
-    '<li class="line"><span class="line-name">' + esc(l.name) + '</span><span class="line-price num">' + vnd(unitPrice(l) * l.qty) + '</span>' +
-    '<span class="line-sub">' + esc(lineSub(l)) + '</span>' +
+    '<li class="line' + (l.promo ? ' line--promo' : '') + '"><span class="line-name">' + (l.promo ? '<span class="line-promo"><span class="pp">' + (l.p.kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '</span>' + esc(l.name) + '</span>' : esc(l.name)) + '</span><span class="line-price num">' + vnd(unitPrice(l) * l.qty) + '</span>' +
+    '<span class="line-sub">' + (l.promo ? promoSubHtml(l) : esc(lineSub(l))) + '</span>' +
     '<div class="stepper stepper--sm" role="group" aria-label="Số lượng ' + esc(l.name) + '"><button type="button" data-line="' + i + '" data-d="-1" aria-label="Bớt 1">−</button><output class="num">' + l.qty + '</output><button type="button" data-line="' + i + '" data-d="1" aria-label="Thêm 1"' + (l.qty >= 50 ? ' disabled' : '') + '>+</button></div></li>').join('') + '</ul>'
     : '<p class="empty">Giỏ đang trống.</p>';
   if (GIAO) { openGiaoCart(linesHtml); return; }
@@ -677,7 +860,7 @@ async function sendGiao(sh) {
   try {
     const res = await api.placeOrder({
       queue: null, dine: lay ? 'mang_ve' : 'giao_hang', name: g.name.trim(), phone: g.phone.trim(), address: lay ? null : g.address.trim(), deliverAt: lay ? null : deliverIso(g.time), note: state.cartNote.trim(),
-      items: state.cart.map(l => ({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }))
+      items: orderPayload()
     });
     let paidMsg = '';
     if (g.paid) { try { await api.completePayment(res.order_id, 'chuyen_khoan'); paidMsg = ', đã ghi nhận chuyển khoản'; } catch (e) { paidMsg = '. Chưa ghi nhận được tiền, thu ở màn hình bếp'; } }
@@ -688,7 +871,7 @@ async function sendGiao(sh) {
   } catch (e) {
     btn.disabled = false; btn.textContent = lay ? 'Tạo đơn qua lấy' : 'Tạo đơn đi ship';
     msg.textContent = errText(e); msg.hidden = false; msg.scrollIntoView({ block: 'nearest' });
-    if (e.code === 'ITEM_UNAVAILABLE' || e.code === 'OPTION_INVALID') loadMenu().then(() => { const l = $('#cLines', sh); if (l) { l.innerHTML = '<p class="small muted">Giỏ đã được cập nhật theo menu mới.</p>'; } });
+    if (/^(ITEM_UNAVAILABLE|OPTION_INVALID|PROMO_)/.test(e.code || '')) loadMenu().then(() => { const l = $('#cLines', sh); if (l) { l.innerHTML = '<p class="small muted">Giỏ đã được cập nhật theo menu mới.</p>'; } });
   }
 }
 /* Số điện thoại Việt Nam: 10 số bắt đầu bằng 0 (chấp nhận +84, dấu cách, chấm, gạch) */
@@ -705,7 +888,7 @@ async function sendOrder(sh, confirm) {
   try {
     const res = await api.placeOrder({
       queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine,
-      items: state.cart.map(l => ({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }))
+      items: orderPayload()
     });
     state.orders.unshift({ token: res.access_token, id: res.order_id, queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), paid: false }); saveOrders();
     state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons();
@@ -722,7 +905,7 @@ async function sendOrder(sh, confirm) {
       return;
     }
     msg.textContent = errText(e); msg.hidden = false; msg.scrollIntoView({ block: 'nearest' });
-    if (e.code === 'ITEM_UNAVAILABLE' || e.code === 'OPTION_INVALID') {
+    if (/^(ITEM_UNAVAILABLE|OPTION_INVALID|PROMO_)/.test(e.code || '')) {
       const gone = await loadMenu();
       if (gone && gone.length) msg.textContent = 'Món vừa hết, đã bỏ khỏi giỏ: ' + gone.join(', ') + '. Kiểm tra lại giỏ rồi gửi.';
       const l = $('#cLines', sh); if (l) ui.close(), openCart();
@@ -769,7 +952,8 @@ function orderCard(o) {
     '<ol class="steps">' + ['Chờ nhận', 'Đang làm', 'Ra món'].map((s, i) => '<li class="' + (i < step ? 'done' : i === step ? 'now' : '') + '">' + s + '</li>').join('') + '</ol>' + partsHtml(d) +
     (d.paid_amount != null ? '<p class="oc-paid">' + (d.paid_amount >= d.total ? 'Đã thanh toán trước ' + vnd(d.paid_amount) : 'Đã trả ' + vnd(d.paid_amount) + ' · còn ' + vnd(d.total - d.paid_amount) + ' do thêm món') + '</p>' : '') +
     '<details class="oc-items"><summary>' + count + ' món · <span class="num">' + vnd(d.total) + '</span> · ' + esc(d.customer_name) + '</summary><ul>' +
-    items.map(i => '<li><span>' + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
+    items.map((i, k) => (i.promo_group && (k === 0 || items[k - 1].promo_group !== i.promo_group) ? '<li class="oc-pr">' + (i.promo_kind === 'combo' ? '' : 'Ưu đãi · ') + esc(BN.promoTitle(i.promo_kind, i.promo_name)) + '</li>' : '') +
+      '<li><span>' + (PART_TAG[i.promo_part] || '') + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
       ((i.options && i.options.length) || i.note ? '<span class="line-sub">' + esc((i.options || []).map(x => x.choice).concat(i.note ? ['Ghi chú: ' + i.note] : []).join(' · ')) + '</span>' : '') + '</li>').join('') +
     '</ul></details>' +
     (d.note ? '<p class="oc-note"><b>Ghi chú:</b> ' + esc(d.note) + '</p>' : '') +
@@ -831,13 +1015,16 @@ async function loadMenu() {
     state.menu = await api.getMenu() || []; lastMenuAt = Date.now();
     state.items = new Map(); state.itemCat = new Map();
     state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
-    const ok = l => { const it = state.items.get(l.itemId); if (!it) return false; const ids = new Set(); it.option_groups.forEach(g => g.choices.forEach(c => ids.add(c.id))); return l.choices.every(c => ids.has(c.id)); };
+    try { state.promos = (await api.getPromotions()) || []; } catch (e) { state.promos = []; }
+    const choiceOk = (itemId, choices) => { const it = state.items.get(itemId); if (!it) return false; const ids = new Set(); it.option_groups.forEach(g => g.choices.forEach(c => ids.add(c.id))); return choices.every(c => ids.has(c.id)); };
+    // Phần ưu đãi trong giỏ: ưu đãi còn chạy và mọi món còn bán
+    const ok = l => l.promo ? state.promos.some(p => p.id === l.promo) && l.units.every(u => choiceOk(u.itemId, u.choices)) : choiceOk(l.itemId, l.choices);
     const gone = state.cart.filter(l => !ok(l)).map(l => l.name);
-    state.cart.filter(ok).forEach(l => { const it = state.items.get(l.itemId); it.option_groups.forEach(g => {
+    state.cart.filter(l => ok(l) && !l.promo).forEach(l => { const it = state.items.get(l.itemId); it.option_groups.forEach(g => {
       if (g.min > 0 && !l.choices.some(c => g.choices.some(x => x.id === c.id))) g.choices.filter(c => c.default).forEach(c => { l.choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }); });
     }); });
     if (gone.length) { state.cart = state.cart.filter(ok); saveCart(); ui.toast('Vừa hết, đã bỏ khỏi giỏ: ' + [...new Set(gone)].join(', ')); }
-    renderMenu(); renderCartBar();
+    renderMenu(); renderPromos(); renderCartBar();
     return gone;
   } catch (e) { if (!state.menu.length) $('#menuList').innerHTML = '<p class="msg">Không tải được menu. Kiểm tra mạng rồi tải lại trang.</p>'; return []; }
 }
