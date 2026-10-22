@@ -430,7 +430,7 @@ function supabaseApi() {
       return await q(c.from('sales').select('*').gte('paid_at', new Date(f.from).toISOString()).lt('paid_at', new Date(f.to).toISOString()).order('paid_at'));
     },
     async settings() { const c = await cl(); return await q(c.from('shop_settings').select('*').eq('id', 1).single()); },
-    async saveBank(b) { const c = await cl(); await q(c.from('shop_settings').update({ bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', updated_at: new Date().toISOString() }).eq('id', 1)); },
+    async saveBank(b) { const c = await cl(); await q(c.from('shop_settings').update({ bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT, updated_at: new Date().toISOString() }).eq('id', 1)); },
     async saveSettings(s) {
       const c = await cl();
       await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, pay_round: s.pay_round, kitchen_capacity: s.kitchen_capacity, bar_capacity: s.bar_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
@@ -808,7 +808,7 @@ function demoApi() {
     /* ---------- Khách ---------- */
     async getMenu() { await wait(120); return buildPublicMenu(load()); },
     async getPromotions() { await wait(60); return buildPublicPromos(load()); },
-    async paymentInfo() { const st = load().shop_settings; return st.bank_account ? { bin: st.bank_bin, bank: st.bank_name, account: st.bank_account, holder: st.bank_holder || '' } : null; },
+    async paymentInfo() { const st = load().shop_settings; return st.bank_account ? { bin: st.bank_bin, bank: st.bank_name, account: st.bank_account, holder: st.bank_holder || '', note: st.bank_note || NOTE_DEFAULT } : null; },
     async placeOrder({ queue, name, phone, items, confirm, note, dine, address, deliverAt }) {
       await wait(350);
       if (dine === 'giao_hang') { need(); if (!String(address || '').trim()) fail('MISSING_ADDRESS'); }
@@ -1092,7 +1092,7 @@ function demoApi() {
     /* ---------- Doanh thu & cài đặt ---------- */
     async sales(f) { const a = new Date(f.from), b = new Date(f.to); return load().sales.filter(s => { const t = new Date(s.paid_at); return t >= a && t < b; }).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1); },
     async settings() { return Object.assign({}, load().shop_settings); },
-    async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '' })); },
+    async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT })); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {
       try { Object.keys(localStorage).filter(k => k.indexOf(SP) === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
@@ -1113,7 +1113,14 @@ const api = DEMO ? demoApi() : supabaseApi();
    VIETQR ĐỘNG — mã chuyển khoản theo chuẩn NAPAS (EMVCo), có sẵn số tiền và nội dung.
    Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
    ===================================================================== */
-const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '' }, CONFIG.BANK || {});
+const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '', note: 'BENOC {ban} {ma}' }, CONFIG.BANK || {});
+const NOTE_DEFAULT = 'BENOC {ban} {ma}';
+/* Nội dung chuyển khoản của 1 đơn theo mẫu chủ quán đặt: {ban} = SO 15 / MV / GIAO, {ten} = tên khách, {ma} = mã đơn */
+function qrNoteFor(o, tpl) {
+  const dine = o.dine_type || 'tai_quan', ban = dine === 'giao_hang' ? 'GIAO' : dine === 'mang_ve' ? 'MV' : 'SO ' + (o.queue_number != null ? o.queue_number : '');
+  const t = String(tpl || BANK.note || NOTE_DEFAULT);
+  return qrInfo(t.replace(/\{ban\}/gi, ban).replace(/\{ten\}/gi, o.customer_name || '').replace(/\{ma\}/gi, String(o.id || '').replace(/-/g, '').slice(0, 4)));
+}
 /* Ngân hàng hỗ trợ VietQR: [mã BIN, tên ngắn, tên đầy đủ] (theo api.vietqr.io) */
 const BANKS = [['970422', 'MB Bank', 'Quân đội'], ['970436', 'Vietcombank', 'Ngoại thương'], ['970415', 'VietinBank', 'Công thương'], ['970418', 'BIDV', 'Đầu tư và Phát triển'], ['970405', 'Agribank', 'Nông nghiệp'],
   ['970407', 'Techcombank', 'Kỹ thương'], ['970416', 'ACB', 'Á Châu'], ['970432', 'VPBank', 'Việt Nam Thịnh Vượng'], ['970423', 'TPBank', 'Tiên Phong'], ['970403', 'Sacombank', 'Sài Gòn Thương Tín'],
@@ -1170,7 +1177,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, BANKS, loadBank, vietQR, qrInfo, qrDataUrl, loadScript,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, BANKS, loadBank, qrNoteFor, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
