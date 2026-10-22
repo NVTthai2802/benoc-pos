@@ -9,7 +9,7 @@
    ===================================================================== */
 (function () {
 'use strict';
-const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery } = BN;
+const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery } = BN; // (phiếu không in mã đơn, không in giá)
 const KEY = 'printer.' + (window.BENOC_STATION || 'bep');
 const DEF = { mode: 'off', width: 58, copies: 1, big: true };
 const get = () => Object.assign({}, DEF, store.get(KEY, {}));
@@ -33,12 +33,12 @@ function ticketCanvas(o, items, extra, set) {
   const ops = []; let y = pad;
   const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, W - pad * 2).forEach(l => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: align || 'left' }); y += px * k * 1.28; }); y += (gap || 0) * k; };
   const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
-  const where = isDelivery(o) ? 'GIAO HÀNG' : isTakeaway(o) ? 'MANG VỀ' : 'BÀN ' + o.queue_number;
-  text(STN[extra.station || window.BENOC_STATION] + ' · BÉ NỐC' + (extra.reprint ? ' (IN LẠI)' : ''), 20, true, 'center', 2);
-  text(where, 46, true, 'center', 2);
-  text(o.customer_name || '', 26, true, 'center');
-  text('Nhận ' + hhmm(Date.now()) + (extra.minutes ? ' · hẹn ' + extra.minutes + ' phút' : '') + ' · đặt ' + hhmm(o.created_at), 18, false, 'center', 4);
-  if (isDelivery(o) && o.address) text('Giao: ' + o.address + (o.deliver_at ? ' · ' + hhmm(o.deliver_at) : ''), 20, false, 'left', 2);
+  // Phiếu gọn để tiết kiệm giấy: loại đơn + số bàn / giờ giao, địa chỉ (ship), khách, giờ đặt, giờ nhận, món, ghi chú
+  const where = isDelivery(o) ? 'ĐI SHIP' + (o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' : isTakeaway(o) ? 'MANG VỀ' : 'Ở ĐÂY · BÀN ' + o.queue_number;
+  text(where, 40, true, 'center', 2);
+  if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
+  text([o.customer_name, o.customer_phone].filter(Boolean).join(' · '), 24, true, 'center');
+  text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · in lại' : ''), 20, false, 'center', 2);
   rule(false);
   let lastGroup = null;
   items.forEach(i => {
@@ -53,11 +53,8 @@ function ticketCanvas(o, items, extra, set) {
     if (i.note) text('   * ' + i.note, 24, true);
     y += 6 * k;
   });
-  rule(true);
-  if (o.note) text('Ghi chú: ' + o.note, 24, true, 'left', 4);
-  const n = items.reduce((s, i) => s + i.qty, 0);
-  text(n + ' món · mã ' + String(o.id).replace(/-/g, '').slice(0, 4).toUpperCase(), 18, false, 'center');
-  y += 30 * k; // chừa giấy để xé
+  if (o.note) { rule(true); text('Ghi chú: ' + o.note, 24, true, 'left', 2); }
+  y += 12 * k; // chừa chút giấy để xé
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
@@ -111,7 +108,7 @@ function printTicket(o, items, extra, set) {
 
 /* ---------- Cài đặt máy in (từng máy) ---------- */
 function sample() {
-  return { o: { id: 'abcd1234', queue_number: 12, customer_name: 'Khách thử', dine_type: 'tai_quan', created_at: new Date().toISOString(), note: 'In thử phiếu' },
+  return { o: { id: 'abcd1234', queue_number: 12, customer_name: 'Khách thử', customer_phone: '0912345678', dine_type: 'tai_quan', created_at: new Date().toISOString(), note: 'In thử phiếu' },
     items: [{ qty: 2, item_name: window.BENOC_STATION === 'pha_che' ? 'Hồng trà sữa trân châu' : 'Cơm heo chua ngọt', options: window.BENOC_STATION === 'pha_che' ? [{ group: 'Upsize', choice: 'Upsize', price: 10000 }, { group: 'Đường', choice: 'Ít đường' }, { group: 'Topping thêm', choice: 'Trân châu hoàng gia' }] : [{ group: 'Topping thêm', choice: 'Trứng ốp la' }], note: 'ít cay' },
       { qty: 1, item_name: window.BENOC_STATION === 'pha_che' ? 'Trà đào' : 'Kimbap chiên', options: [], note: null }] };
 }
