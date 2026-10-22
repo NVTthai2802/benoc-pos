@@ -215,6 +215,7 @@ function supabaseApi() {
     callStaff: token => rpc('call_staff', { p_token: token }),
     /* Ưu đãi đang chạy. Cơ sở dữ liệu chưa chạy cập nhật 13 thì coi như không có ưu đãi. */
     async getPromotions() { try { return (await rpc('get_promotions')) || []; } catch (e) { return []; } },
+    async paymentInfo() { try { return await rpc('get_payment_info'); } catch (e) { return null; } },
 
     /* ---------- Đăng nhập ---------- */
     async session() {
@@ -429,6 +430,7 @@ function supabaseApi() {
       return await q(c.from('sales').select('*').gte('paid_at', new Date(f.from).toISOString()).lt('paid_at', new Date(f.to).toISOString()).order('paid_at'));
     },
     async settings() { const c = await cl(); return await q(c.from('shop_settings').select('*').eq('id', 1).single()); },
+    async saveBank(b) { const c = await cl(); await q(c.from('shop_settings').update({ bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', updated_at: new Date().toISOString() }).eq('id', 1)); },
     async saveSettings(s) {
       const c = await cl();
       await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, pay_round: s.pay_round, kitchen_capacity: s.kitchen_capacity, bar_capacity: s.bar_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
@@ -806,6 +808,7 @@ function demoApi() {
     /* ---------- Khách ---------- */
     async getMenu() { await wait(120); return buildPublicMenu(load()); },
     async getPromotions() { await wait(60); return buildPublicPromos(load()); },
+    async paymentInfo() { const st = load().shop_settings; return st.bank_account ? { bin: st.bank_bin, bank: st.bank_name, account: st.bank_account, holder: st.bank_holder || '' } : null; },
     async placeOrder({ queue, name, phone, items, confirm, note, dine, address, deliverAt }) {
       await wait(350);
       if (dine === 'giao_hang') { need(); if (!String(address || '').trim()) fail('MISSING_ADDRESS'); }
@@ -1089,6 +1092,7 @@ function demoApi() {
     /* ---------- Doanh thu & cài đặt ---------- */
     async sales(f) { const a = new Date(f.from), b = new Date(f.to); return load().sales.filter(s => { const t = new Date(s.paid_at); return t >= a && t < b; }).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1); },
     async settings() { return Object.assign({}, load().shop_settings); },
+    async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '' })); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {
       try { Object.keys(localStorage).filter(k => k.indexOf(SP) === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
@@ -1110,6 +1114,19 @@ const api = DEMO ? demoApi() : supabaseApi();
    Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
    ===================================================================== */
 const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '' }, CONFIG.BANK || {});
+/* Ngân hàng hỗ trợ VietQR: [mã BIN, tên ngắn, tên đầy đủ] (theo api.vietqr.io) */
+const BANKS = [['970422', 'MB Bank', 'Quân đội'], ['970436', 'Vietcombank', 'Ngoại thương'], ['970415', 'VietinBank', 'Công thương'], ['970418', 'BIDV', 'Đầu tư và Phát triển'], ['970405', 'Agribank', 'Nông nghiệp'],
+  ['970407', 'Techcombank', 'Kỹ thương'], ['970416', 'ACB', 'Á Châu'], ['970432', 'VPBank', 'Việt Nam Thịnh Vượng'], ['970423', 'TPBank', 'Tiên Phong'], ['970403', 'Sacombank', 'Sài Gòn Thương Tín'],
+  ['970437', 'HDBank', 'Phát triển TP.HCM'], ['970441', 'VIB', 'Quốc tế'], ['970443', 'SHB', 'Sài Gòn - Hà Nội'], ['970431', 'Eximbank', 'Xuất Nhập khẩu'], ['970426', 'MSB', 'Hàng Hải'],
+  ['970448', 'OCB', 'Phương Đông'], ['970440', 'SeABank', 'Đông Nam Á'], ['970449', 'LPBank', 'Lộc Phát'], ['970428', 'Nam A Bank', 'Nam Á'], ['970425', 'ABBANK', 'An Bình'],
+  ['970427', 'VietABank', 'Việt Á'], ['970409', 'Bac A Bank', 'Bắc Á'], ['970412', 'PVcomBank', 'Đại Chúng'], ['970452', 'KienlongBank', 'Kiên Long'], ['970454', 'BVBank', 'Bản Việt'],
+  ['970429', 'SCB', 'Sài Gòn'], ['970419', 'NCB', 'Quốc Dân'], ['970430', 'PGBank', 'Thịnh vượng và Phát triển'], ['970433', 'VietBank', 'Việt Nam Thương Tín'], ['970438', 'BaoVietBank', 'Bảo Việt'],
+  ['970400', 'SaigonBank', 'Sài Gòn Công Thương'], ['970414', 'MBV', 'Việt Nam Hiện Đại'], ['970406', 'Vikki', 'Ngân hàng số Vikki'], ['970444', 'CBBank', 'Vietcombank Neo'], ['970408', 'GPBank', 'Dầu Khí Toàn Cầu'],
+  ['970424', 'Shinhan Bank', 'Shinhan Việt Nam'], ['970457', 'Woori', 'Woori Việt Nam'], ['970410', 'Standard Chartered', 'Standard Chartered'], ['458761', 'HSBC', 'HSBC Việt Nam'], ['422589', 'CIMB', 'CIMB Việt Nam'],
+  ['970439', 'Public Bank', 'Public Việt Nam'], ['970442', 'Hong Leong', 'Hong Leong Việt Nam'], ['970434', 'Indovina', 'Indovina'], ['970421', 'VRB', 'Việt - Nga'], ['970446', 'Co-opBank', 'Hợp tác xã'],
+  ['546034', 'CAKE', 'Ngân hàng số CAKE (VPBank)'], ['546035', 'Ubank', 'Ngân hàng số Ubank (VPBank)'], ['963388', 'Timo', 'Ngân hàng số Timo'], ['963326', 'TNEX', 'TNEX (MSB)'], ['971133', 'PVcomBank Pay', 'Ngân hàng số PVcomBank']];
+/* Lấy tài khoản nhận tiền chủ quán đã cài (chưa chạy cập nhật 18 thì giữ mặc định) */
+async function loadBank() { try { const r = await api.paymentInfo(); if (r && r.account && r.bin) Object.assign(BANK, r, CONFIG.BANK || {}); } catch (e) { /* giữ mặc định */ } return BANK; }
 const tlv = (id, v) => id + String(v.length).padStart(2, '0') + v;
 function crc16(str) { // CRC-16/CCITT-FALSE
   let c = 0xFFFF;
@@ -1153,7 +1170,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, vietQR, qrInfo, qrDataUrl, loadScript,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, BANKS, loadBank, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS

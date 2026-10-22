@@ -970,7 +970,7 @@ const custQrNote = (o, d) => 'BENOC ' + (d.dine_type === 'giao_hang' ? 'GIAO ' :
 function payQrHtml(o, d) {
   if (!BN.FEATURES.vietqr) return '';
   const due = d.total - (d.paid_amount || 0); if (!(due > 0) || !o.id) return '';
-  const key = due + '|' + custQrNote(o, d), img = qrImgs.get(key), open = qrOpen.has(o.token);
+  const key = due + '|' + custQrNote(o, d) + '|' + BN.BANK.bin + BN.BANK.account, img = qrImgs.get(key), open = qrOpen.has(o.token);
   if (open && !qrImgs.has(key)) { qrImgs.set(key, null); BN.qrDataUrl(BN.vietQR(due, custQrNote(o, d)), 360).then(u => { qrImgs.set(key, u); renderStatus(); }).catch(() => qrImgs.delete(key)); }
   return '<details class="oc-qr" data-qr="' + esc(o.token) + '"' + (open ? ' open' : '') + '><summary>Chuyển khoản bằng mã QR · <span class="num">' + vnd(due) + '</span></summary>' +
     '<div class="oc-qr-box">' + (img ? '<img src="' + img + '" alt="Mã VietQR chuyển khoản ' + vnd(due) + '">' : '<p class="loading">Đang tạo mã…</p>') +
@@ -1054,6 +1054,7 @@ ui.init(); renderTicket();
 if (GIAO) api.staffSession().then(e => { state.staff = e || false; renderTicket(); });
 const wantMenu = BN.PARAMS.get('xem') === 'menu';
 if (wantMenu) { try { const u = new URL(location.href); u.searchParams.delete('xem'); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ } }
+if (BN.FEATURES.vietqr) BN.loadBank().then(() => renderStatus());
 loadMenu().then(() => { if (activeOrders().length) { showView(wantMenu ? 'menu' : 'status'); startPolling(); } else showView('menu'); });
 })();
 </script>
