@@ -80,6 +80,7 @@ const ERR = {
   PROMO_INVALID: 'Ưu đãi chưa chọn đủ món. Mở lại ưu đãi để chọn.',
   PROMO_OPTION: 'Món trong ưu đãi không chọn được tuỳ chọn có phí.',
   DELIVERY_LOCKED: 'Đơn giao hàng không đổi sang ăn tại quán / mang về ở đây.',
+  BAD_KIND: 'Thao tác kho không hợp lệ.',
   BAD_DINE: 'Chọn ăn tại quán hoặc mang về.',
   PROMO_LOCKED: 'Món thuộc ưu đãi không đổi được số lượng. Muốn bớt thì bỏ cả phần ưu đãi rồi thêm lại.'
 };
@@ -349,6 +350,24 @@ function supabaseApi() {
     async setPromotionActive(id, on) { const c = await cl(); await q(c.from('promotions').update({ is_active: on }).eq('id', id)); },
     async deletePromotion(id) { const c = await cl(); await q(c.from('promotions').delete().eq('id', id)); },
 
+    /* ---------- Kho hàng ---------- */
+    async stockItems() { const c = await cl(); return await q(c.from('stock_items').select('*').order('sort_order').order('name')); },
+    async saveStockItem(it) {
+      const c = await cl(); const row = stockRow(it);
+      if (it.id) { await q(c.from('stock_items').update(row).eq('id', it.id)); return it.id; }
+      const id = (await q(c.from('stock_items').insert(row).select('id').single())).id;
+      if (Number(it.qty) > 0) await api.stockMove(id, 'kiem', Number(it.qty), false, 'Tồn ban đầu');
+      return id;
+    },
+    async deleteStockItem(id) { const c = await cl(); await q(c.from('stock_items').delete().eq('id', id)); },
+    stockMove: (itemId, kind, amount, inBuy, note, cost) => rpc('stock_move', { p_item: itemId, p_kind: kind, p_amount: amount, p_in_buy_unit: !!inBuy, p_note: note || null, p_cost: cost == null || cost === '' ? null : Number(cost) }),
+    async stockMoves(f) {
+      const c = await cl(); let b = c.from('stock_moves').select('*').order('created_at', { ascending: false }).limit((f && f.limit) || 100);
+      if (f && f.itemId) b = b.eq('item_id', f.itemId);
+      if (f && f.from) b = b.gte('created_at', new Date(f.from).toISOString());
+      return await q(b);
+    },
+
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { const c = await cl(); return await q(c.from('employees').select('*').order('is_active', { ascending: false }).order('full_name')); },
     async saveEmployee(e) {
@@ -502,6 +521,12 @@ function promoRow(p) {
     start_at: p.start_at || null, end_at: p.end_at || null, days: p.days && p.days.length && p.days.length < 7 ? p.days.slice().sort((a, b) => a - b) : null,
     time_from: p.time_from || null, time_to: p.time_to || null, is_active: p.is_active !== false, sort_order: Number(p.sort_order) || 0
   };
+}
+/* Dòng ghi vào bảng stock_items (kho hàng) */
+function stockRow(it) {
+  return { name: String(it.name || '').trim(), grp: (it.grp || '').trim() || null, use_unit: (it.use_unit || 'gói').trim(), buy_unit: (it.buy_unit || it.use_unit || 'thùng').trim(),
+    per_buy: Math.max(0.001, Number(it.per_buy) || 1), min_qty: Math.max(0, Number(it.min_qty) || 0), cost_per_buy: it.cost_per_buy === '' || it.cost_per_buy == null ? null : Math.max(0, Number(it.cost_per_buy) || 0),
+    note: (it.note || '').trim() || null, is_active: it.is_active !== false, sort_order: Number(it.sort_order) || 0 };
 }
 /* Ưu đãi đang chạy cho khách — cùng hình dạng với hàm get_promotions() trong SQL */
 function buildPublicPromos(db) {
@@ -713,7 +738,7 @@ function demoSeed() {
   mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size L', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
   mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Đường', choice: 'Ít đường', price: 0 }]]]);
   mk(null, 'Hà', 3, [['Cơm gà viên', 1], ['Trà quất', 1, [{ group: 'Đá', choice: 'Ít đá', price: 0 }]]]); // đơn mang về (không có số thẻ)
-  demoPromoSeed(db);
+  demoPromoSeed(db); demoStockSeed(db);
   return db;
 }
 
@@ -729,6 +754,14 @@ function demoPromoSeed(db) {
   if (kim && cat(/^nước uống/i)[0]) add({ name: 'Mua 2 kimbap tặng 1 nước', kind: 'mua_tang', description: 'Giờ vàng buổi chiều', buy_qty: 2, get_qty: 1, option_mode: 'cong_them', time_from: '14:00', time_to: '17:00', sort_order: 3 }, [{ part: 'mua', m: kim }].concat(cat(/^nước uống/i).slice(0, 3).map(m => ({ part: 'tang', m }))));
   return db;
 }
+/* Kho mẫu của bản xem thử */
+function demoStockSeed(db) {
+  db.stock_items = []; db.stock_moves = []; db.seq.stock_moves = 1;
+  [['Mì Hàn Quốc', 'Đồ khô', 'gói', 'thùng', 24, 30, 10, 312000], ['Đường pha chế', 'Nguyên liệu pha chế', 'can', 'can', 1, 3, 2, 95000], ['Dầu ăn', 'Gia vị', 'can', 'thùng', 4, 2, 1, 420000],
+   ['Trân châu đen', 'Nguyên liệu pha chế', 'gói', 'thùng', 20, 8, 5, 560000], ['Sữa đặc', 'Nguyên liệu pha chế', 'hộp', 'thùng', 48, 60, 12, 1150000], ['Ly nhựa 700ml', 'Bao bì', 'cây', 'thùng', 20, 4, 5, 380000]]
+    .forEach(([name, grp, use, buy, per, qty, min, cost], k) => db.stock_items.push({ id: uuid(), name, grp, use_unit: use, buy_unit: buy, per_buy: per, qty, min_qty: min, cost_per_buy: cost, note: null, is_active: true, sort_order: k, created_at: new Date().toISOString() }));
+  return db;
+}
 function demoApi() {
   let cache = null;
   const load = () => {
@@ -736,6 +769,7 @@ function demoApi() {
     cache = store.get(DEMO_KEY, null);
     if (!cache || !cache.menu_items) { cache = demoSeed(); store.set(DEMO_KEY, cache); }
     if (!cache.promotions) { demoPromoSeed(cache); store.set(DEMO_KEY, cache); } // dữ liệu xem thử cũ: thêm ưu đãi mẫu
+    if (!cache.stock_items) { demoStockSeed(cache); store.set(DEMO_KEY, cache); } // thêm kho mẫu
     return cache;
   };
   const save = () => {
@@ -949,6 +983,29 @@ function demoApi() {
     },
     async setPromotionActive(id, on) { need('owner'); tx(db => { db.promotions.find(p => p.id === id).is_active = on; }); },
     async deletePromotion(id) { need('owner'); tx(db => { db.promotions = db.promotions.filter(p => p.id !== id); db.promotion_items = db.promotion_items.filter(i => i.promotion_id !== id); db.order_items.forEach(i => { if (i.promo_id === id) i.promo_id = null; }); }); },
+
+    /* ---------- Kho hàng ---------- */
+    async stockItems() { need(); return load().stock_items.slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi')).map(x => Object.assign({}, x)); },
+    async saveStockItem(it) {
+      need('owner');
+      const id = tx(db => { const row = stockRow(it); if (it.id) { Object.assign(db.stock_items.find(x => x.id === it.id), row); return it.id; } const nid = uuid(); db.stock_items.push(Object.assign({ id: nid, qty: 0, created_at: iso() }, row)); return nid; });
+      if (!it.id && Number(it.qty) > 0) await api.stockMove(id, 'kiem', Number(it.qty), false, 'Tồn ban đầu');
+      return id;
+    },
+    async deleteStockItem(id) { need('owner'); tx(db => { db.stock_items = db.stock_items.filter(x => x.id !== id); db.stock_moves = db.stock_moves.filter(m => m.item_id !== id); }); },
+    async stockMove(itemId, kind, amount, inBuy, note, cost) {
+      const e = need();
+      return tx(db => {
+        if (['nhap', 'dung', 'hong', 'kiem'].indexOf(kind) < 0) fail('BAD_KIND');
+        amount = Number(amount); if (!(amount >= 0) || (kind !== 'kiem' && amount === 0)) fail('BAD_QTY');
+        const it = db.stock_items.find(x => x.id === itemId); if (!it) fail('ITEM_NOT_FOUND');
+        const use = amount * (inBuy ? it.per_buy : 1), delta = kind === 'nhap' ? use : kind === 'kiem' ? use - it.qty : -use;
+        it.qty = Math.round((it.qty + delta) * 1000) / 1000;
+        db.stock_moves.push({ id: db.seq.stock_moves++, item_id: it.id, kind, delta, qty_after: it.qty, amount, unit: inBuy ? it.buy_unit : it.use_unit, cost: kind === 'nhap' && cost !== '' && cost != null ? Number(cost) : null, note: note ? String(note).trim().slice(0, 200) || null : null, employee_id: e.id, employee_name: e.full_name, created_at: iso() });
+        return { qty: it.qty, delta };
+      });
+    },
+    async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
 
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { return load().employees.slice().sort((a, b) => (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name, 'vi')); },
