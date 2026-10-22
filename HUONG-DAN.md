@@ -78,7 +78,8 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
   4. **Mỗi lần mở lại màn hình Pha chế** (tải lại trang, tắt Chrome), Chrome bắt nối lại máy tem: màn hình hiện khung vàng **"Máy in tem … chưa kết nối"** → bấm **Kết nối máy tem** → chọn CT221B. Lỡ nhận đơn khi chưa nối: phiếu vẫn in, tem hiện nút **In 2 tem · số 12** để bấm sau khi nối.
   5. Điện thoại không ai bấm mà phải tự in, Android có thể chặn mở RawBT → khung vàng hiện nút **In phiếu · số 12** để bấm. Nên bật **Chuông báo** để màn hình luôn sáng.
   6. In lại: thẻ đơn ở cột **Đang làm** có nút **In lại phiếu + tem**.
-  - Trang dò máy tem (khi đổi máy in tem khác): `/test/maytem.html`.
+  - **iPhone / iPad**: không có RawBT, Safari và Chrome trên iPhone cũng không nối Bluetooth được. Cài app **Bluefy – Web BLE Browser** (miễn phí, App Store), mở trang Bếp / Pha chế bằng Bluefy → **Cài máy in** → Phiếu món chọn **Bluetooth trực tiếp** → **Chọn máy in phiếu**; Tem dán ly chọn **Bluetooth trực tiếp** → **Chọn máy in tem**. Máy in phải có Bluetooth BLE (máy chỉ có Bluetooth thường thì iPhone không nối được) — thử trước bằng trang dò.
+  - Trang dò máy in Bluetooth (máy mới, hoặc thử trên iPhone): `/test/maytem.html`.
   - Máy in có ứng dụng in riêng của hãng thì có thể chọn **Hộp thoại in của trình duyệt** thay cho RawBT.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ, tên và số điện thoại; mang về thì nhập tên và số điện thoại. Số điện thoại bắt buộc (10 số) để quán liên hệ khi có việc. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
