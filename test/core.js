@@ -1102,6 +1102,42 @@ function demoApi() {
 
 const api = DEMO ? demoApi() : supabaseApi();
 
+/* =====================================================================
+   VIETQR ĐỘNG — mã chuyển khoản theo chuẩn NAPAS (EMVCo), có sẵn số tiền và nội dung.
+   Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
+   ===================================================================== */
+const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '' }, CONFIG.BANK || {});
+const tlv = (id, v) => id + String(v.length).padStart(2, '0') + v;
+function crc16(str) { // CRC-16/CCITT-FALSE
+  let c = 0xFFFF;
+  for (let i = 0; i < str.length; i++) { c ^= str.charCodeAt(i) << 8; for (let k = 0; k < 8; k++) c = (c & 0x8000) ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; }
+  return c.toString(16).toUpperCase().padStart(4, '0');
+}
+/* Nội dung chuyển khoản: chữ không dấu, viết hoa, tối đa 25 ký tự */
+const qrInfo = s => fold(s).toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 25);
+function vietQR(amount, info) {
+  const acc = tlv('00', 'A000000727') + tlv('01', tlv('00', BANK.bin) + tlv('01', BANK.account)) + tlv('02', 'QRIBFTTA');
+  const amt = Math.round(Number(amount) || 0), note = qrInfo(info || '');
+  const body = tlv('00', '01') + tlv('01', amt > 0 ? '12' : '11') + tlv('38', acc) + tlv('53', '704') + (amt > 0 ? tlv('54', String(amt)) : '') + tlv('58', 'VN') + (note ? tlv('62', tlv('08', note)) : '') + '6304';
+  return body + crc16(body);
+}
+/* Vẽ mã QR thành ảnh (data URL). Tải thư viện qrcodejs lần đầu. */
+const loadScript = src => new Promise((res, rej) => {
+  const ex = document.querySelector('script[data-src="' + src + '"]');
+  if (ex) { if (ex.dataset.ok) res(); else { ex.addEventListener('load', res); ex.addEventListener('error', rej); } return; }
+  const sc = document.createElement('script'); sc.src = src; sc.dataset.src = src;
+  sc.onload = () => { sc.dataset.ok = '1'; res(); }; sc.onerror = () => rej(new Error('Không tải được thư viện, kiểm tra mạng')); document.head.appendChild(sc);
+});
+async function qrDataUrl(text, size) {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
+  const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-9999px;top:0';
+  document.body.appendChild(box);
+  try {
+    new window.QRCode(box, { text, width: size || 320, height: size || 320, colorDark: '#000000', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+    const cv = box.querySelector('canvas'); return cv ? cv.toDataURL('image/png') : (box.querySelector('img') || {}).src;
+  } finally { box.remove(); }
+}
+
 /* Size đồ uống: nhóm có 2 lựa chọn "Size M" và "Size L" */
 const SIZE_RE = /^size\s*(xl|m|l)$/i;
 const sizeGroup = it => (it.option_groups || []).find(g => g.choices.length >= 2 && g.choices.some(c => /^size m$/i.test(c.name)) && g.choices.some(c => /^size l$/i.test(c.name))) || null;
@@ -1114,7 +1150,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
