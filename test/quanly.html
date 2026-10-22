@@ -1059,7 +1059,7 @@ async function renderSettings(main) {
     '<p class="small muted" style="margin:0">Hai số này dùng để ước tính thời gian chờ báo cho khách.</p>' +
     '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
-    bankBoxHtml(cfg) +
+    (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
     QRS.map(q => '<section class="box cc-' + q.color + '"><h2 class="box-title"><span>' + q.title + '</span></h2><div class="row" style="align-items:flex-start;gap:18px"><div class="qr" id="qr-' + q.key + '"><p class="loading">Đang tạo mã…</p></div>' +
       '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">' + q.desc + '</p><label class="field" for="qUrl-' + q.key + '">Địa chỉ mã này mở ra<input id="qUrl-' + q.key + '" value="' + esc(orderUrl + q.query) + '"></label>' +
       (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') +
@@ -1078,7 +1078,7 @@ async function renderSettings(main) {
     catch (err) { ui.toast(errText(err)); }
     e.target.disabled = false;
   };
-  wireBankBox(main, cfg);
+  if (BN.FEATURES.vietqr) wireBankBox(main, cfg);
   if ($('#reset', main)) {
     const box = $('#resetBox', main);
     $('#reset', main).onclick = () => { box.hidden = false; };
