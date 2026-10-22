@@ -151,16 +151,36 @@ function bits(cv) {
   return { bw, H, data: out };
 }
 const ascii = s => Array.from(s, c => c.charCodeAt(0));
+/* Các dải hàng có mực: tách dải ở mỗi khe trắng; mỗi dải cắt bớt cột trắng hai bên */
+function inkBands(b) {
+  const rows = [];
+  for (let r = 0; r < b.H; r++) { let c0 = -1, c1 = -1; for (let c = 0; c < b.bw; c++) if (b.data[r * b.bw + c]) { if (c0 < 0) c0 = c; c1 = c; } rows.push(c0 < 0 ? null : [c0, c1]); }
+  const out = []; let cur = null, gap = 0;
+  rows.forEach((v, r) => {
+    if (!v) { if (cur && ++gap >= 2) { out.push(cur); cur = null; } return; }
+    gap = 0;
+    if (!cur) cur = { r0: r, r1: r, c0: v[0], c1: v[1] }; else { cur.r1 = r; cur.c0 = Math.min(cur.c0, v[0]); cur.c1 = Math.max(cur.c1, v[1]); }
+  });
+  if (cur) out.push(cur);
+  return out;
+}
 /* Lệnh TSPL cho máy in tem (Xprinter, TSC, Gprinter…): mỗi tem một lần CLS / BITMAP / PRINT */
 function tspl(cvs, set) {
   const L = labelOf(set), out = ascii('SIZE ' + L.w + ' mm,' + L.h + ' mm\r\nGAP ' + L.gap + ' mm,0 mm\r\nDIRECTION 1\r\nREFERENCE 0,0\r\n');
   const x = Math.max(0, Math.round((set.offx || 0) * 8)), y = Math.max(0, Math.round((set.offy || 0) * 8)); // căn lề: dịch tem (mm)
   cvs.forEach(cv => {
     const b = bits(cv);
-    out.push(...ascii('CLS\r\nBITMAP ' + x + ',' + y + ',' + b.bw + ',' + b.H + ',0,'));
-    // TSPL: bit 0 = in đen (ngược với ESC/POS). "Đảo màu" cho máy in ngược.
-    for (let j = 0; j < b.data.length; j++) out.push(set.inv ? b.data[j] : (~b.data[j]) & 255);
-    out.push(...ascii('\r\nPRINT 1,1\r\n'));
+    out.push(...ascii('CLS\r\n'));
+    // Chỉ gửi những dải có chữ (bỏ phần trắng) → ít dữ liệu, in nhanh hơn nhiều qua Bluetooth.
+    // TSPL: bit 0 = in đen (ngược với ESC/POS). "Đảo màu" (máy in ngược) thì gửi cả tem.
+    const bands = set.inv ? [{ r0: 0, r1: b.H - 1, c0: 0, c1: b.bw - 1 }] : inkBands(b);
+    bands.forEach(t => {
+      const wb = t.c1 - t.c0 + 1, h = t.r1 - t.r0 + 1;
+      out.push(...ascii('BITMAP ' + (x + t.c0 * 8) + ',' + (y + t.r0) + ',' + wb + ',' + h + ',0,'));
+      for (let r = t.r0; r <= t.r1; r++) for (let c = t.c0; c <= t.c1; c++) { const v = b.data[r * b.bw + c]; out.push(set.inv ? v : (~v) & 255); }
+      out.push(13, 10);
+    });
+    out.push(...ascii('PRINT 1,1\r\n'));
   });
   return new Uint8Array(out);
 }
@@ -250,8 +270,13 @@ function bleSend(k, u8) {
   const run = async () => {
     if (window.BENOC_BLE_HOOK) return window.BENOC_BLE_HOOK(u8, k);
     if (!bleOk(k)) { if (!b.dev) throw Object.assign(new Error(SLOT_NAME[k] + ' chưa kết nối'), { code: 'NO_BLE' }); await bleOpen(k); }
-    const w = b.ch.writeValueWithResponse ? x => b.ch.writeValueWithResponse(x) : x => b.ch.writeValue(x); // Bluefy: writeValue
-    for (let i = 0; i < u8.length; i += 180) await w(u8.slice(i, i + 180));
+    const slow = b.ch.writeValueWithResponse ? x => b.ch.writeValueWithResponse(x) : x => b.ch.writeValue(x); // Bluefy: writeValue
+    // Gửi nhanh: liền nhiều gói không chờ xác nhận, cứ 8 gói chờ 1 lần để máy in kịp nhận (không tràn bộ nhớ)
+    const fast = b.ch.properties.writeWithoutResponse && b.ch.writeValueWithoutResponse && store.get('bleFast', true) ? x => b.ch.writeValueWithoutResponse(x) : null;
+    for (let i = 0, n = 0; i < u8.length; i += 180, n++) {
+      const part = u8.slice(i, i + 180);
+      if (fast && n % 8 !== 7 && i + 180 < u8.length) await fast(part); else await slow(part);
+    }
   };
   const p = b.q.then(run, run); b.q = p.catch(() => {}); return p;
 }
@@ -319,6 +344,7 @@ function openSettings(onChange) {
   const prevT = () => { const x = sample(); return '<div class="pr-prev"><img src="' + ticketCanvas(x.o, x.items, { minutes: 10 }, s).toDataURL('image/png') + '" alt="Phiếu mẫu" style="width:' + (s.width === 80 ? 288 : 220) + 'px"></div>'; };
   const prevL = () => { const x = sample(); return '<div class="pr-prev">' + cups(x.items).slice(0, 2).map(c => '<img src="' + labelCanvas(x.o, c, s).toDataURL('image/png') + '" alt="Tem mẫu" style="width:' + labelOf(s).w * 4.4 + 'px">').join('') + '</div>'; };
   const bleBox = k => '<div class="pr-ble"><span class="grow">' + (bleOk(k) ? '<b class="ok">● Đã nối</b> ' + esc(bleName(k)) : bleName(k) ? '<b class="bad">● Chưa nối</b> ' + esc(bleName(k)) : 'Chưa chọn ' + SLOT_NAME[k]) + '</span><button class="btn btn-sm" type="button" data-ble="' + k + '">' + (bleName(k) ? 'Kết nối lại' : 'Chọn ' + SLOT_NAME[k]) + '</button></div>' +
+    '<label class="check"><input type="checkbox" class="prFast"' + (store.get('bleFast', true) ? ' checked' : '') + '><span><b>Gửi nhanh</b><small>Bỏ chọn nếu tem / phiếu in ra bị vỡ, thiếu dòng (gửi chậm mà chắc)</small></span></label>' +
     '<p class="small muted" style="margin:0">' + (canBle() ? 'Tắt app riêng của máy in trước (máy chỉ nối được một nơi). Bật Bluetooth' + (isIOS() ? '.' : ' và Vị trí.') : isIOS() ? '<b>iPhone:</b> Safari / Chrome không nối Bluetooth được. Cài app <b>Bluefy</b> (App Store) rồi mở trang này bằng Bluefy.' : 'Trình duyệt này không nối Bluetooth được, mở bằng Chrome.') + '</p>';
   const IOS = isIOS();
   const body = () => '' +
@@ -345,7 +371,7 @@ function openSettings(onChange) {
   ui.sheet(ui.head('Máy in ' + PLACE, 'Cài riêng trên điện thoại này') + '<div class="sh-body pr-set" id="prBody">' + body() + '</div>' +
     '<div class="sh-foot"><button class="btn btn-block" type="button" id="prSave">Lưu</button></div>', sh => {
     const q = id => sh.querySelector(id);
-    const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; };
+    const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; const f = sh.querySelector('.prFast'); if (f) store.set('bleFast', f.checked); };
     const redraw = () => { read(); const top = q('#prBody').scrollTop; q('#prBody').innerHTML = body(); q('#prBody').scrollTop = top; };
     const unsub = () => { const i = bleSubs.indexOf(onBle); if (i >= 0) bleSubs.splice(i, 1); };
     const onBle = () => { if (!document.body.contains(sh)) { unsub(); return; } redraw(); };
