@@ -157,3 +157,15 @@
 .vqr-big { text-align: center; }
 .vqr-big img { width: min(84vw, 360px); height: auto; image-rendering: pixelated; background: #fff; padding: 10px; border-radius: 12px; }
 @media (max-width: 380px) { .vqr { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
+
+/* Cài máy in */
+.pr-set .pr-modes { display: flex; flex-direction: column; gap: 6px; }
+.pr-set .seg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--line); }
+.pr-set .seg2 button { padding: 8px; border: 0; border-radius: 8px; background: transparent; font: 700 14px/1.2 var(--f-body); color: var(--ink-2); }
+.pr-set .seg2 button[aria-pressed="true"] { background: #fff; color: var(--red); }
+.pr-prev { display: flex; justify-content: center; padding: 12px; background: var(--line); border-radius: 12px; }
+.pr-prev img { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); image-rendering: pixelated; }
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; }
+.check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--red); flex: none; }
+.check small { display: block; color: var(--ink-2); }
