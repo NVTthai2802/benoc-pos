@@ -244,6 +244,8 @@
 .oc-qr-box { text-align: center; padding-top: 8px; }
 .oc-qr-box img { width: min(70vw, 260px); height: auto; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: 10px; }
 .oc-qr-box p { margin: 6px 0 0; }
+.line-act { display: flex; align-items: center; gap: 8px; justify-self: end; }
+.line-edit { border: 1.5px solid var(--red); background: var(--card); color: var(--red); border-radius: 999px; padding: 5px 12px; font: 700 13px/1.2 var(--f-body); cursor: pointer; }
 </style>
 
 <div class="demo-note\" id="demoNote" hidden><div class="wrap">Bản xem thử, chưa nối với quán. Mở <a href="bep.html" target="_blank">màn hình bếp</a> ở tab khác để nhận đơn, hoặc vào <a href="quanly.html" target="_blank">trang quản lý</a>.</div></div>
@@ -527,6 +529,18 @@ const extraOf = choices => choices.reduce((s, c) => s + c.price, 0);
 /* Giá 1 phần ưu đãi (tính giống máy chủ) */
 const promoUnitPrices = l => promoPrices(l.p, l.units.map(u => ({ part: u.part, base: u.base, extra: extraOf(u.choices) })));
 const unitPrice = l => l.promo ? promoUnitPrices(l).reduce((s, x) => s + x, 0) : l.base + extraOf(l.choices);
+/* Thay 1 dòng trong giỏ bằng bản đã sửa; nếu trùng hệt dòng khác thì gộp số lượng */
+function replaceLine(index, line) {
+  state.cart.splice(index, 1);
+  const ex = state.cart.find(l => lineKey(l) === lineKey(line));
+  if (ex) ex.qty = Math.min(50, ex.qty + line.qty); else state.cart.splice(Math.min(index, state.cart.length), 0, line);
+  saveCart(); refreshAddButtons(); renderCartBar();
+}
+function editLine(i) {
+  const l = state.cart[i]; if (!l) return;
+  if (l.promo ? !state.promos.some(p => p.id === l.promo) : !state.items.has(l.itemId)) { ui.toast('Món này vừa hết, không sửa được'); return; }
+  ui.close(); setTimeout(() => l.promo ? openPromo(l.promo, { index: i, line: l }) : openItem(l.itemId, { index: i, line: l }), 0);
+}
 function addLine(line) {
   const ex = state.cart.find(l => lineKey(l) === lineKey(line));
   if (ex) ex.qty = Math.min(50, ex.qty + line.qty); else state.cart.push(line);
@@ -577,12 +591,14 @@ function quickAdd(id) {
   addLine({ itemId: it.id, name: it.name, base: it.price, choices, qty: 1, note: '' });
   ui.toast('Đã thêm ' + it.name + (choices.length ? ' (' + choices.map(c => c.name).join(', ') + ')' : ''));
 }
-function openItem(id) {
-  if (!dineMode()) { needDine(() => openItem(id)); return; }
+/* edit = { index, line }: sửa món đã có trong giỏ (thêm topping, đổi đường đá… khách quên lúc đầu) */
+function openItem(id, edit) {
+  if (!dineMode()) { needDine(() => openItem(id, edit)); return; }
   const it = state.items.get(id); if (!it) return;
   const cat = state.itemCat.get(id);
-  const sel = new Map(); it.option_groups.forEach(g => sel.set(g.id, new Set(g.choices.filter(c => c.default).map(c => c.id))));
-  let qty = 1;
+  const had = edit ? new Set(edit.line.choices.map(c => c.id)) : null;
+  const sel = new Map(); it.option_groups.forEach(g => sel.set(g.id, new Set(g.choices.filter(c => had ? had.has(c.id) : c.default).map(c => c.id))));
+  let qty = edit ? edit.line.qty : 1;
   const total = () => { let x = 0; it.option_groups.forEach(g => g.choices.forEach(c => { if (sel.get(g.id).has(c.id)) x += c.price; })); return (it.price + x) * qty; };
   const groupHtml = g => {
     const single = g.max === 1, type = (g.min === 1 && g.max === 1) ? 'radio' : 'checkbox';
@@ -607,12 +623,12 @@ function openItem(id) {
     '<div class="sh-body' + (cat ? ' cc-' + esc(cat.color) : '') + '">' +
     (it.image_path ? '<div class="sh-img"><img src="' + esc(it.image_path) + '" alt="' + esc(it.name) + '"></div>' : '') +
     it.option_groups.map(groupHtml).join('') +
-    '<label class="field" for="itNote">Ghi chú cho món này <textarea id="itNote" maxlength="120"></textarea></label></div>' +
-    '<div class="sh-foot"><div class="stepper" role="group" aria-label="Số lượng"><button type="button" data-q="-1" aria-label="Bớt 1">−</button><output id="itQty" class="num">1</output><button type="button" data-q="1" aria-label="Thêm 1">+</button></div>' +
+    '<label class="field" for="itNote">Ghi chú cho món này <textarea id="itNote" maxlength="120">' + esc(edit ? edit.line.note || '' : '') + '</textarea></label></div>' +
+    '<div class="sh-foot"><div class="stepper" role="group" aria-label="Số lượng"><button type="button" data-q="-1" aria-label="Bớt 1">−</button><output id="itQty" class="num">' + qty + '</output><button type="button" data-q="1" aria-label="Thêm 1">+</button></div>' +
     '<button class="btn grow" type="button" id="itAdd"></button></div>',
     sh => {
       const paint = () => {
-        $('#itAdd', sh).innerHTML = 'Thêm vào giỏ · <span class="num">' + vnd(total()) + '</span>';
+        $('#itAdd', sh).innerHTML = (edit ? 'Lưu thay đổi · ' : 'Thêm vào giỏ · ') + '<span class="num">' + vnd(total()) + '</span>';
         $('#itQty', sh).textContent = qty; $('[data-q="-1"]', sh).disabled = qty <= 1; $('[data-q="1"]', sh).disabled = qty >= 50;
       };
       paint();
@@ -629,7 +645,9 @@ function openItem(id) {
         const bad = it.option_groups.find(g => sel.get(g.id).size < g.min);
         if (bad) { const fs = $('.og[data-g="' + bad.id + '"]', sh); fs.classList.add('og--bad'); const er = $('.og-err', fs); er.textContent = 'Vui lòng chọn: ' + bad.title.toLowerCase(); er.hidden = false; fs.scrollIntoView({ block: 'center' }); return; }
         const choices = []; it.option_groups.forEach(g => g.choices.forEach(c => { if (sel.get(g.id).has(c.id)) choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }); }));
-        addLine({ itemId: it.id, name: it.name, base: it.price, choices, qty, note: $('#itNote', sh).value.trim() });
+        const line = { itemId: it.id, name: it.name, base: it.price, choices, qty, note: $('#itNote', sh).value.trim() };
+        if (edit) { replaceLine(edit.index, line); ui.close(); ui.toast('Đã sửa ' + it.name); setTimeout(openCart, 0); return; }
+        addLine(line);
         ui.close(); ui.toast('Đã thêm ' + qty + ' ' + it.name);
       };
     });
@@ -670,9 +688,9 @@ function renderPromos() {
 }
 $('#promos').addEventListener('click', e => { const b = e.target.closest('[data-promo]'); if (b) openPromo(b.dataset.promo); });
 
-function openPromo(id) {
+function openPromo(id, edit) {
   if (GIAO && state.staff === false) { ui.toast('Cần đăng nhập ở trang Quản lý trước'); return; }
-  if (!dineMode()) { needDine(() => openPromo(id)); return; }
+  if (!dineMode()) { needDine(() => openPromo(id, edit)); return; }
   const p = state.promos.find(x => x.id === id); if (!p || !promoUsable(p)) { ui.toast('Ưu đãi này vừa hết'); return; }
   const free = part => part !== 'mua';           // phần áp cài đặt tuỳ chọn có phí của ưu đãi
   const defaults = it => new Map(it.option_groups.map(g => [g.id, new Set(g.choices.filter(c => c.default && !(c.price > 0 && p.option_mode === 'khong_phi')).map(c => c.id))]));
@@ -690,7 +708,12 @@ function openPromo(id) {
   const giftPick = () => [...new Set(units.filter(u => u.part === 'mua').map(u => u.itemId))];
   const syncGifts = () => { if (!p.gift_same) return; const can = giftPick(); units.filter(u => u.part === 'tang').forEach((u, k) => { u.pick = can; const want = can[Math.min(k, can.length - 1)]; if (can.indexOf(u.itemId) < 0 || (can.length === 1 && u.itemId !== want)) { u.itemId = want; u.sel = defaults(state.items.get(want)); } }); };
   syncGifts();
-  let qty = 1;
+  // Sửa phần ưu đãi đã có trong giỏ: điền lại món, tuỳ chọn, ghi chú từng phần
+  if (edit) {
+    units.forEach((u, i) => { const eu = edit.line.units[i]; if (!eu || u.part !== eu.part || u.pick.indexOf(eu.itemId) < 0 || !state.items.has(eu.itemId)) return; u.itemId = eu.itemId; const ids = new Set(eu.choices.map(c => c.id)); u.sel = new Map(state.items.get(eu.itemId).option_groups.map(g => [g.id, new Set(g.choices.filter(c => ids.has(c.id)).map(c => c.id))])); u.note = eu.note || ''; });
+    syncGifts();
+  }
+  let qty = edit ? edit.line.qty : 1;
   const choicesOf = u => { const it = state.items.get(u.itemId), out = []; it.option_groups.forEach(g => g.choices.forEach(c => { if (u.sel.get(g.id).has(c.id)) out.push({ id: c.id, name: c.name, price: c.price, group: g.title }); })); return out; };
   const asUnits = () => units.map(u => ({ part: u.part, base: state.items.get(u.itemId).price, extra: extraOf(choicesOf(u)) }));
   const total = () => promoPrices(p, asUnits()).reduce((s, x) => s + x, 0) * qty;
@@ -727,7 +750,7 @@ function openPromo(id) {
     sh => {
       const paint = () => {
         const t = total(), n = normal();
-        $('#puAdd', sh).innerHTML = 'Thêm ưu đãi · <span class="num">' + vnd(t) + '</span>';
+        $('#puAdd', sh).innerHTML = (edit ? 'Lưu thay đổi · ' : 'Thêm ưu đãi · ') + '<span class="num">' + vnd(t) + '</span>';
         $('#puSave', sh).textContent = n > t ? 'Giá thường ' + vnd(n) + ' · tiết kiệm ' + vnd(n - t) : '';
         $('#puQty', sh).textContent = qty; $('[data-q="-1"]', sh).disabled = qty <= 1; $('[data-q="1"]', sh).disabled = qty >= 20;
       };
@@ -750,9 +773,9 @@ function openPromo(id) {
           const u = units[i], bad = state.items.get(u.itemId).option_groups.find(g => u.sel.get(g.id).size < g.min);
           if (bad) { const fs = $('.pu-og[data-u="' + i + '"][data-g="' + bad.id + '"]', sh); if (fs) { fs.classList.add('bad'); fs.scrollIntoView({ block: 'center' }); } msg.textContent = 'Chọn "' + bad.title.toLowerCase() + '" cho ' + state.items.get(u.itemId).name; msg.hidden = false; return; }
         }
-        addLine({ promo: p.id, p: { kind: p.kind, price: p.price, option_mode: p.option_mode }, name: p.name, qty,
+        (edit ? l => { replaceLine(edit.index, l); setTimeout(openCart, 0); } : addLine)({ promo: p.id, p: { kind: p.kind, price: p.price, option_mode: p.option_mode }, name: p.name, qty,
           units: units.map(u => ({ part: u.part, itemId: u.itemId, name: state.items.get(u.itemId).name, base: state.items.get(u.itemId).price, choices: choicesOf(u), note: u.note.trim() })) });
-        ui.close(); ui.toast('Đã thêm ' + (qty > 1 ? qty + ' phần ' : '') + p.name);
+        ui.close(); ui.toast(edit ? 'Đã sửa ' + p.name : 'Đã thêm ' + (qty > 1 ? qty + ' phần ' : '') + p.name);
       };
     });
 }
@@ -778,7 +801,7 @@ function openCart() {
   const linesHtml = () => state.cart.length ? '<ul class="lines">' + state.cart.map((l, i) =>
     '<li class="line' + (l.promo ? ' line--promo' : '') + '"><span class="line-name">' + (l.promo ? '<span class="line-promo"><span class="pp">' + (l.p.kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '</span>' + esc(l.name) + '</span>' : esc(l.name)) + '</span><span class="line-price num">' + vnd(unitPrice(l) * l.qty) + '</span>' +
     '<span class="line-sub">' + (l.promo ? promoSubHtml(l) : esc(lineSub(l))) + '</span>' +
-    '<div class="stepper stepper--sm" role="group" aria-label="Số lượng ' + esc(l.name) + '"><button type="button" data-line="' + i + '" data-d="-1" aria-label="Bớt 1">−</button><output class="num">' + l.qty + '</output><button type="button" data-line="' + i + '" data-d="1" aria-label="Thêm 1"' + (l.qty >= 50 ? ' disabled' : '') + '>+</button></div></li>').join('') + '</ul>'
+    '<div class="line-act"><button class="line-edit" type="button" data-edit="' + i + '" aria-label="Sửa ' + esc(l.name) + ': topping, tuỳ chọn">Sửa</button><div class="stepper stepper--sm" role="group" aria-label="Số lượng ' + esc(l.name) + '"><button type="button" data-line="' + i + '" data-d="-1" aria-label="Bớt 1">−</button><output class="num">' + l.qty + '</output><button type="button" data-line="' + i + '" data-d="1" aria-label="Thêm 1"' + (l.qty >= 50 ? ' disabled' : '') + '>+</button></div></div></li>').join('') + '</ul>'
     : '<p class="empty">Giỏ đang trống.</p>';
   if (GIAO) { openGiaoCart(linesHtml); return; }
   ui.sheet(ui.head('Giỏ của bạn', 'Kiểm tra món rồi gửi cho quán.') +
@@ -798,6 +821,7 @@ function openCart() {
       const repaint = () => { $('#cLines', sh).innerHTML = linesHtml(); $('#cTotal', sh).textContent = vnd(cartTotal()); $('#cSend', sh).disabled = !state.cart.length; };
       repaint();
       sh.addEventListener('click', e => {
+        const ed = e.target.closest('[data-edit]'); if (ed) { editLine(Number(ed.dataset.edit)); return; }
         const b = e.target.closest('[data-line]'); if (!b) return;
         const i = Number(b.dataset.line), l = state.cart[i]; l.qty += Number(b.dataset.d);
         if (l.qty <= 0) state.cart.splice(i, 1);
@@ -842,6 +866,7 @@ function openGiaoCart(linesHtml) {
       sh.addEventListener('click', e => {
         const k = e.target.closest('[data-gk]');
         if (k) { setGiaoKind(k.dataset.gk); $$('.seg2 [data-gk]', sh).forEach(x => x.setAttribute('aria-pressed', x === k)); $('#fAddr', sh).hidden = $('#fTime', sh).hidden = isLay(); $('#cSend', sh).textContent = isLay() ? 'Tạo đơn qua lấy' : 'Tạo đơn đi ship'; $('#cMsg', sh).hidden = true; return; }
+        const ed = e.target.closest('[data-edit]'); if (ed) { editLine(Number(ed.dataset.edit)); return; }
         const b = e.target.closest('[data-line]'); if (!b) return;
         const i = Number(b.dataset.line), l = state.cart[i]; l.qty += Number(b.dataset.d);
         if (l.qty <= 0) state.cart.splice(i, 1);
