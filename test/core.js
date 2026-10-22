@@ -13,6 +13,9 @@
 const CONFIG = Object.assign({ SUPABASE_URL: '', SUPABASE_ANON_KEY: '', POLL_SECONDS: 15, LOGIN_DOMAIN: 'benoc.app', STORE_PREFIX: 'benoc.' }, window.BENOC_CONFIG || {});
 const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa product và test
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+/* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
+const ON_TEST = DEMO || window.BENOC_ENV === 'test';
+const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
 /* =====================================================================
@@ -1151,7 +1154,7 @@ const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice 
 
 window.BN = {
   sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, vietQR, qrInfo, qrDataUrl, loadScript,
-  CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
+  CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
