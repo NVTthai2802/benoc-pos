@@ -134,6 +134,28 @@ function otherHtml(o) {
   const n = items.reduce((s, i) => s + i.qty, 0);
   return '<p class="kc-other"><b>' + STATIONS[OTHER] + ':</b> ' + n + ' món (' + esc(items.map(i => i.item_name + (i.promo_part === 'tang' ? ' (tặng)' : '')).join(', ')) + ') ' + partStatus(p) + '</p>';
 }
+/* ---------- VietQR: mã chuyển khoản đúng số tiền của đơn ---------- */
+const qrNote = o => 'BENOC ' + (isDelivery(o) ? 'GIAO ' : isTakeaway(o) ? 'MV ' : 'SO ' + o.queue_number + ' ') + (isTakeaway(o) ? (o.customer_name || '') + ' ' : '') + String(o.id).replace(/-/g, '').slice(0, 4);
+const qrCache = new Map(); // khoá "số tiền|nội dung" → ảnh
+function qrImg(o, due) {
+  const key = due + '|' + qrNote(o);
+  if (qrCache.has(key)) return qrCache.get(key);
+  qrCache.set(key, null);
+  BN.qrDataUrl(BN.vietQR(due, qrNote(o)), 360).then(u => { qrCache.set(key, u); render(); }).catch(() => { qrCache.delete(key); ui.toast('Không tạo được mã QR, kiểm tra mạng'); });
+  return null;
+}
+function qrPanelHtml(o, due) {
+  const img = qrImg(o, due), B = BN.BANK;
+  return '<div class="vqr"><button class="vqr-img" type="button" data-act="qr-big" data-id="' + o.id + '" aria-label="Mở to mã QR">' + (img ? '<img src="' + img + '" alt="Mã VietQR chuyển khoản ' + vnd(due) + '">' : '<span class="small muted">Đang tạo mã…</span>') + '</button>' +
+    '<div class="vqr-info"><b class="num">' + vnd(due) + '</b><span>' + esc(B.bank) + ' · <span class="num">' + esc(B.account) + '</span>' + (B.holder ? '<br>' + esc(B.holder) : '') + '</span><span class="small muted">Nội dung: ' + esc(BN.qrInfo(qrNote(o))) + '</span>' +
+    '<span class="small muted">Khách quét bằng app ngân hàng, số tiền tự điền. Thấy tiền về rồi bấm <b>Đã nhận chuyển khoản</b>.</span><button class="link small" type="button" data-act="qr-big" data-id="' + o.id + '">Mở to cho khách quét ›</button></div></div>';
+}
+function openQrBig(o) {
+  const due = dueOf(o), img = qrImg(o, due), B = BN.BANK;
+  ui.sheet(ui.head('Chuyển khoản ' + vnd(due), 'Đơn ' + esc(orderLabel(o))) + '<div class="sh-body vqr-big">' + (img ? '<img src="' + img + '" alt="Mã VietQR">' : '<p class="loading">Đang tạo mã…</p>') +
+    '<p><b>' + esc(B.bank) + '</b> · <b class="num">' + esc(B.account) + '</b>' + (B.holder ? '<br>' + esc(B.holder) : '') + '</p><p class="small muted">Nội dung: ' + esc(BN.qrInfo(qrNote(o))) + '</p></div>' +
+    '<div class="sh-foot"><button class="btn btn-line btn-block" type="button" data-close>Đóng</button></div>');
+}
 function panelHtml(o) {
   const p = state.panels[o.id]; if (!p) return '';
   if (p.kind === 'accept') {
@@ -156,10 +178,12 @@ function panelHtml(o) {
     return '<div class="panel"><p class="panel-title">' + (o.paid_amount != null ? 'Thu thêm ' : 'Thu ') + vnd(due) + '</p>' +
       (o.paid_amount != null ? '<p class="small muted" style="margin:0">Đã thu ' + vnd(o.paid_amount) + ', đơn sau khi sửa là ' + vnd(o.total) + '.</p>' : '') +
       (st && o.paid_amount == null ? '<p class="small muted" style="margin:0">Thu trước: đơn vẫn làm tiếp, ra món xong tự hoàn tất.</p>' : '') +
-      '<div class="chips">' + [due, 50000, 100000, 200000, 500000].filter((v, i, a) => v >= due && a.indexOf(v) === i).map(v => '<button class="chipbtn" type="button" data-act="given" data-v="' + v + '" data-id="' + o.id + '" aria-pressed="' + (given === v) + '">' + (v === due ? 'Vừa đủ' : vnd(v)) + '</button>').join('') + '</div>' +
-      (given ? '<div class="change"><span>Tiền thối</span><b class="num">' + (change >= 0 ? vnd(change) : 'Thiếu ' + vnd(-change)) + '</b></div>' : '') +
+      (p.qr ? '' :       '<div class="chips">' + [due, 50000, 100000, 200000, 500000].filter((v, i, a) => v >= due && a.indexOf(v) === i).map(v => '<button class="chipbtn" type="button" data-act="given" data-v="' + v + '" data-id="' + o.id + '" aria-pressed="' + (given === v) + '">' + (v === due ? 'Vừa đủ' : vnd(v)) + '</button>').join('') + '</div>' +
+      (given ? '<div class="change"><span>Tiền thối</span><b class="num">' + (change >= 0 ? vnd(change) : 'Thiếu ' + vnd(-change)) + '</b></div>' : '')) +
+      (p.qr ? qrPanelHtml(o, due) : '') +
       '<div class="row"><button class="btn btn-ok grow" type="button" data-act="pay-ok" data-m="tien_mat" data-id="' + o.id + '">Tiền mặt</button>' +
-      '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Chuyển khoản</button>' +
+      (p.qr ? '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Đã nhận chuyển khoản</button>'
+            : '<button class="btn grow" type="button" data-act="qr" data-id="' + o.id + '">QR chuyển khoản</button>') +
       '<button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
   }
   if (p.kind === 'edit') {
@@ -297,6 +321,8 @@ async function onAction(e) {
     case 'extend': run(b, () => api.extendWait(id, 5, STATION), 'Đã báo khách thêm 5 phút'); break;
     case 'served': run(b, () => api.markServed(id, STATION), 'Đơn ' + orderLabel(o) + ' đã ra món', isMinePay(o) ? 'thanh_toan' : null); break;
     case 'pay': state.panels[id] = { kind: 'pay', given: 0 }; render(); break;
+    case 'qr': state.panels[id] = Object.assign(state.panels[id] || { kind: 'pay', given: 0 }, { qr: true }); render(); break;
+    case 'qr-big': openQrBig(o); break;
     case 'given': state.panels[id].given = Number(b.dataset.v); render(); break;
     case 'pay-ok': {
       delete state.panels[id]; const due = dueOf(o);
