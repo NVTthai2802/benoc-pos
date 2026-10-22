@@ -178,11 +178,10 @@ function panelHtml(o) {
     };
     // Đổi ăn tại quán / mang về và số bàn (đơn giao hàng không đổi ở đây)
     const dine = p.dine || o.dine_type, q = p.queue != null ? p.queue : (o.queue_number || '');
-    const changed = dine !== o.dine_type || (dine === 'tai_quan' && String(q) !== String(o.queue_number || ''));
     const dineBox = isDelivery(o) ? '' : '<div class="ed-dine"><div class="seg2" role="group" aria-label="Ăn tại quán hay mang về">' +
       [['tai_quan', 'Ăn tại quán'], ['mang_ve', 'Mang về']].map(([k, t]) => '<button type="button" data-act="dine" data-v="' + k + '" data-id="' + o.id + '" aria-pressed="' + (dine === k) + '">' + t + '</button>').join('') + '</div>' +
-      (dine === 'tai_quan' ? '<label class="ed-ql">Số bàn<input class="num" data-eq="' + o.id + '" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="' + esc(q) + '" aria-label="Số bàn"></label>' : '') +
-      '<button class="btn btn-sm' + (changed ? '' : ' btn-line') + '" type="button" data-act="dine-save" data-id="' + o.id + '">Lưu</button></div>';
+      (dine === 'tai_quan' ? '<label class="ed-ql">Số bàn<input class="num" data-eq="' + o.id + '" inputmode="numeric" pattern="[0-9]*" maxlength="3" enterkeyhint="done" value="' + esc(q) + '" aria-label="Số bàn"></label>' +
+        (o.dine_type !== 'tai_quan' ? '<span class="small muted ed-hint">Nhập số bàn, xong là tự lưu</span>' : '') : '') + '</div>';
     return '<div class="panel"><p class="panel-title">Sửa đơn ' + esc(orderLabel(o)) + '</p>' + dineBox +
       '<ul class="ed-list">' + items.map(edRow).join('') + '</ul>' +
       '<p class="small muted" style="margin:0">Bấm <b>Tuỳ chọn</b> để thêm/bớt topping, đổi đường, đá, size của món đã có. <b>+ Thêm món</b> là để khách gọi món mới.</p>' +
@@ -235,6 +234,23 @@ function grouped() {
   return by;
 }
 document.addEventListener('input', e => { const q = e.target.closest && e.target.closest('[data-eq]'); if (!q) return; q.value = q.value.replace(/\D/g, ''); const p = state.panels[q.dataset.eq]; if (p) p.queue = q.value; });
+/* Số bàn: gõ xong (Enter hoặc bấm ra ngoài) là lưu */
+document.addEventListener('change', e => {
+  const q = e.target.closest && e.target.closest('[data-eq]'); if (!q) return;
+  const o = state.orders.find(x => x.id === q.dataset.eq), n = parseInt(q.value, 10); if (!o) return;
+  if (!(n > 0)) { if (o.dine_type === 'tai_quan') { q.value = o.queue_number || ''; ui.toast('Số bàn phải lớn hơn 0'); } return; }
+  if (o.dine_type === 'tai_quan' && n === o.queue_number) return;
+  saveDine(o, 'tai_quan', n, null);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('[data-eq]')) e.target.blur(); });
+async function saveDine(o, dine, q, btn) {
+  const p = state.panels[o.id];
+  await run(btn, async () => {
+    const r = await api.staffUpdateOrder(o.id, dine, q);
+    if (p) { delete p.dine; delete p.queue; }
+    ui.toast((dine === 'tai_quan' ? 'Đã lưu: ăn tại quán, bàn số ' + q : 'Đã lưu: mang về') + (r && r.duplicate_with ? ' · lưu ý: số ' + q + ' cũng đang có đơn của ' + r.duplicate_with : ''));
+  });
+}
 document.addEventListener('focusout', e => { if (e.target.closest && e.target.closest('[data-eq]') && state.renderLater) { state.renderLater = false; setTimeout(render, 0); } });
 function render() {
   const ae = document.activeElement; // đang gõ số bàn thì để gõ xong mới vẽ lại (không mất chữ đang gõ)
@@ -288,15 +304,14 @@ async function onAction(e) {
       run(b, () => api.completePayment(id, b.dataset.m), msg, 'cho_nhan'); break;
     }
     case 'edit': state.panels[id] = { kind: 'edit' }; render(); break;
-    case 'dine': { const p = state.panels[id]; p.dine = b.dataset.v; if (p.dine === 'tai_quan' && p.queue == null) p.queue = o.queue_number || ''; render(); if (p.dine === 'tai_quan') { const inp = document.querySelector('[data-eq="' + id + '"]'); if (inp && !inp.value) inp.focus(); } break; }
-    case 'dine-save': {
-      const p = state.panels[id], dine = p.dine || o.dine_type, q = parseInt(p.queue != null ? p.queue : o.queue_number, 10);
-      if (dine === 'tai_quan' && !(q > 0)) { ui.toast('Nhập số bàn'); const inp = document.querySelector('[data-eq="' + id + '"]'); if (inp) inp.focus(); break; }
-      run(b, async () => {
-        const r = await api.staffUpdateOrder(id, dine, q);
-        delete p.dine; delete p.queue;
-        ui.toast((dine === 'tai_quan' ? 'Đã đổi sang ăn tại quán, bàn số ' + q : 'Đã đổi sang mang về') + (r && r.duplicate_with ? ' · lưu ý: số ' + q + ' cũng đang có đơn của ' + r.duplicate_with : ''));
-      });
+    case 'dine': {
+      // Bấm là lưu: mang về lưu ngay; ăn tại quán cần số bàn (đơn đã có số thì lưu ngay, chưa có thì nhập số xong tự lưu)
+      const p = state.panels[id], v = b.dataset.v;
+      if (v === 'mang_ve') { if (o.dine_type !== 'mang_ve') saveDine(o, 'mang_ve', null, b); else { p.dine = 'mang_ve'; render(); } break; }
+      p.dine = 'tai_quan';
+      if (o.dine_type === 'tai_quan') { render(); break; }
+      if (o.queue_number > 0) { saveDine(o, 'tai_quan', o.queue_number, b); break; }
+      p.queue = ''; render(); const inp = document.querySelector('[data-eq="' + id + '"]'); if (inp) inp.focus();
       break;
     }
     case 'opts': { const it = o.items.find(x => String(x.id) === b.dataset.item); if (it) openOptEdit(o, it); break; }
