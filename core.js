@@ -15,7 +15,7 @@ const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa p
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 /* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
 const ON_TEST = DEMO || window.BENOC_ENV === 'test';
-const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST, report: ON_TEST }, CONFIG.FEATURES || {});
+const FEATURES = Object.assign({ print: true, vietqr: ON_TEST, report: ON_TEST }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
 /* =====================================================================
