@@ -18,7 +18,7 @@ const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDeliver
 const STATION = window.BENOC_STATION || 'bep';
 const KEY = 'printer.' + STATION;
 /* mode = cách in phiếu món, tmode = cách in tem dán ly ('off' | 'rawbt' | 'ble' | 'browser') */
-const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, auto: true };
+const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, offy: 0, auto: true };
 function get() {
   const raw = store.get(KEY, {}), s = Object.assign({}, DEF, raw);
   if (raw.job) { if (raw.job === 'tem') { s.tmode = raw.mode || 'off'; s.mode = 'off'; } delete s.job; } // cài đặt bản trước (1 việc / máy)
@@ -129,15 +129,16 @@ function labelCanvas(o, cup, set) {
     if (rest.length) line(rest.join(', '), 20, false, 2);
     if (tops.length) line(tops.join(' '), 20, true, 2);
     if (i.note) line('* ' + i.note, 20, true, 1);
-    const fits = y <= H - pad - lh(16);
+    const TIN = 24; // giờ in lùi vào trong và lên trên 3 mm (mép tem hay bị xén)
+    const fits = y <= H - pad - TIN - lh(16);
     if (!fits && k > 0.61) continue;
-    ops.push({ t: hhmm(Date.now()), font: F(16, false), y: H - pad, right: true });
+    ops.push({ t: hhmm(Date.now()), font: F(18, true), y: H - pad - TIN, right: true, inset: TIN });
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
-    if (set.offx < 0) ctx.translate(Math.round(set.offx * 8), 0); // căn lề sang trái
+    if (set.offx < 0 || set.offy < 0) ctx.translate(Math.min(0, Math.round((set.offx || 0) * 8)), Math.min(0, Math.round((set.offy || 0) * 8))); // căn lề trái / lên
     ops.forEach(op => {
       if (op.rule) { ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); return; }
       ctx.font = op.font; ctx.textBaseline = 'alphabetic'; ctx.textAlign = op.right ? 'right' : 'left';
-      ctx.fillText(op.t, op.right ? W - pad : pad, op.y);
+      ctx.fillText(op.t, op.right ? W - pad - (op.inset || 0) : pad, op.y);
     });
     break;
   }
@@ -153,10 +154,10 @@ const ascii = s => Array.from(s, c => c.charCodeAt(0));
 /* Lệnh TSPL cho máy in tem (Xprinter, TSC, Gprinter…): mỗi tem một lần CLS / BITMAP / PRINT */
 function tspl(cvs, set) {
   const L = labelOf(set), out = ascii('SIZE ' + L.w + ' mm,' + L.h + ' mm\r\nGAP ' + L.gap + ' mm,0 mm\r\nDIRECTION 1\r\nREFERENCE 0,0\r\n');
-  const x = Math.max(0, Math.round((set.offx || 0) * 8)); // căn lề: dịch tem (mm)
+  const x = Math.max(0, Math.round((set.offx || 0) * 8)), y = Math.max(0, Math.round((set.offy || 0) * 8)); // căn lề: dịch tem (mm)
   cvs.forEach(cv => {
     const b = bits(cv);
-    out.push(...ascii('CLS\r\nBITMAP ' + x + ',0,' + b.bw + ',' + b.H + ',0,'));
+    out.push(...ascii('CLS\r\nBITMAP ' + x + ',' + y + ',' + b.bw + ',' + b.H + ',0,'));
     // TSPL: bit 0 = in đen (ngược với ESC/POS). "Đảo màu" cho máy in ngược.
     for (let j = 0; j < b.data.length; j++) out.push(set.inv ? b.data[j] : (~b.data[j]) & 255);
     out.push(...ascii('\r\nPRINT 1,1\r\n'));
@@ -318,6 +319,7 @@ function openSettings(onChange) {
         '<div class="field">Khổ tem</div>' + seg('lb', s.label, [['40x30', '40×30'], ['50x30', '50×30'], ['50x40', '50×40'], ['58', 'Cuộn 58']]) +
         (s.tmode === 'rawbt' && s.label !== '58' ? '<div class="field">Lệnh máy in</div>' + seg('lang', s.lang, [['tspl', 'TSPL (máy in tem)'], ['escpos', 'ESC/POS']]) : '') +
         (s.label !== '58' ? '<div class="field">Căn lề ngang</div><div class="pr-off"><button class="btn btn-line btn-sm" type="button" data-off="-1" aria-label="Dịch sang trái">◀ Trái</button><b class="num">' + (s.offx > 0 ? '+' : '') + s.offx + ' mm</b><button class="btn btn-line btn-sm" type="button" data-off="1" aria-label="Dịch sang phải">Phải ▶</button></div>' +
+          '<div class="field">Căn lề dọc</div><div class="pr-off"><button class="btn btn-line btn-sm" type="button" data-offy="-1" aria-label="Dịch lên">▲ Lên</button><b class="num">' + (s.offy > 0 ? '+' : '') + (s.offy || 0) + ' mm</b><button class="btn btn-line btn-sm" type="button" data-offy="1" aria-label="Dịch xuống">Xuống ▼</button></div>' +
           '<p class="small muted" style="margin:0">In thử thấy chữ lệch khỏi tem thì dịch về phía ngược lại, mỗi lần 1 mm, rồi in thử lại.</p>' +
           '<label class="check"><input type="checkbox" id="prInv"' + (s.inv ? ' checked' : '') + '><span><b>Đảo màu</b><small>Bật nếu in ra tem đen kín, chữ trắng</small></span></label>' : '') +
         prevL() + '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="tem">In thử tem</button></div>'
@@ -333,8 +335,8 @@ function openSettings(onChange) {
     ble.subs.push(onBle);
     sh.addEventListener('change', e => { if (e.target.name === 'prm') s.mode = e.target.value; if (e.target.name === 'prt') s.tmode = e.target.value; redraw(); });
     sh.addEventListener('click', async e => {
-      const t = e.target.closest('[data-w],[data-lb],[data-lang],[data-off]');
-      if (t) { if (t.dataset.w) s.width = Number(t.dataset.w); if (t.dataset.lb) s.label = t.dataset.lb; if (t.dataset.lang) s.lang = t.dataset.lang; if (t.dataset.off) s.offx = Math.max(-10, Math.min(10, (s.offx || 0) + Number(t.dataset.off))); redraw(); return; }
+      const t = e.target.closest('[data-w],[data-lb],[data-lang],[data-off],[data-offy]');
+      if (t) { if (t.dataset.w) s.width = Number(t.dataset.w); if (t.dataset.lb) s.label = t.dataset.lb; if (t.dataset.lang) s.lang = t.dataset.lang; if (t.dataset.off) s.offx = Math.max(-10, Math.min(10, (s.offx || 0) + Number(t.dataset.off))); if (t.dataset.offy) s.offy = Math.max(-10, Math.min(10, (s.offy || 0) + Number(t.dataset.offy))); redraw(); return; }
       if (e.target.closest('#prBle')) {
         const b = e.target.closest('#prBle'); b.disabled = true;
         try { const n = await bleConnect(); ui.toast('Đã nối máy in tem ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
