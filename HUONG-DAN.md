@@ -62,11 +62,22 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Máy bếp**: mở `bep.html`, đăng nhập tài khoản máy bếp, bấm **Bật chuông báo** (trình duyệt chỉ cho phát âm thanh sau khi bấm). Nên chọn "Thêm vào màn hình chính" để mở như app.
 - **Máy pha chế**: mở `phache.html`, đăng nhập tài khoản máy pha chế, cũng bấm **Bật chuông báo**.
 - **Tiếng chuông khi có đơn mới**: chuông 2 nốt (bếp và pha chế khác giai điệu) rồi giọng đọc **"Bé Nốc ơi, bé Nốc ơi"** (file `sound/be-noc.mp3`, tạo bằng giọng đọc tiếng Việt của Google). Khách gọi nhân viên thì chỉ kêu chuông, không có giọng. Muốn đổi giọng khác, thay file `sound/be-noc.mp3` bằng file mp3 mới cùng tên. Nhớ tăng âm lượng và tắt chế độ im lặng trên điện thoại.
-- **In phiếu bếp / pha chế (máy in nhiệt Bluetooth, Android)**: mỗi nơi một máy in, cài riêng trên từng điện thoại/máy tính bảng.
-  1. Cài app **RawBT** (miễn phí) từ Play Store, mở app → chọn máy in Bluetooth của quán (ghép đôi Bluetooth trước trong Cài đặt Android nếu cần) → bấm in thử trong app.
-  2. Trên màn hình bếp (hoặc pha chế) bấm **Cài máy in** → chọn **Qua app RawBT**, khổ giấy **58 mm** hoặc **80 mm**, số bản, chữ to → **In thử** → **Lưu**. Lần đầu Android hỏi mở bằng RawBT thì chọn **Luôn luôn**.
-  3. Từ đó **chỉ khi bấm Nhận đơn** máy mới in phiếu (khách gửi đơn ảo không bị in). Phiếu gọn để tiết kiệm giấy: **Ở ĐÂY · BÀN 12** / **MANG VỀ** / **ĐẾN LẤY** / **ĐI SHIP · giờ giao** (kèm địa chỉ), tên khách và số điện thoại (nếu có), giờ đặt đơn và giờ nhận đơn, từng món chữ to kèm size, đường, đá, topping, ghi chú món, combo / món tặng, ghi chú đơn (nếu có). Không in giá, không in mã đơn. Bếp chỉ in món của bếp, pha chế chỉ in món của pha chế.
-  4. Cần in lại: bấm **In lại phiếu** trên thẻ đơn ở cột Đang làm.
+- **In phiếu và tem dán ly (máy in nhiệt Bluetooth, Android)**: mỗi máy in nối với một điện thoại riêng, mở sẵn màn hình của nơi đó. Cách quán đang dùng:
+  | Điện thoại | Mở màn hình | Cài máy in → "Máy in này in gì" |
+  |---|---|---|
+  | Máy bếp | Bếp | **Phiếu món** |
+  | Máy pha chế 1 | Pha chế | **Phiếu món** |
+  | Máy pha chế 2 | Pha chế | **Tem dán ly** |
+  1. Trên từng điện thoại: cài app **RawBT** (miễn phí) từ Play Store, mở app → chọn máy in Bluetooth nối với điện thoại đó (ghép đôi Bluetooth trước trong Cài đặt Android nếu cần) → in thử trong app. Máy in tem: trong RawBT chọn đúng loại máy in tem.
+  2. Trên màn hình bếp / pha chế bấm **Cài máy in** → chọn **Phiếu món** hoặc **Tem dán ly** → **Qua app RawBT**:
+     - Phiếu món: khổ giấy **58 mm** hoặc **80 mm**, số bản, chữ to.
+     - Tem dán ly: khổ tem **40 × 30**, **50 × 30** mm hoặc **cuộn 58 mm**; lệnh máy in **TSPL** (đa số máy in tem) hoặc **ESC/POS**. In thử ra tem đen kín, chữ trắng thì bật **Đảo màu**; in thử không ra gì thì đổi sang ESC/POS.
+     - Bấm **In thử** → **Lưu**. Lần đầu Android hỏi mở bằng RawBT thì chọn **Luôn luôn**.
+  3. **Chỉ khi có người bấm Nhận đơn** mới in (khách gửi đơn ảo không bị in). Bấm Nhận đơn ở **bất kỳ máy nào** của nơi đó thì **mọi máy** có máy in của nơi đó đều in phần việc của mình (trong vòng vài giây), mỗi máy chỉ in một lần mỗi lần nhận đơn.
+     - Phiếu món gọn để tiết kiệm giấy: **Ở ĐÂY · BÀN 12** / **MANG VỀ** / **ĐẾN LẤY** / **ĐI SHIP · giờ giao** (kèm địa chỉ), tên khách và số điện thoại (nếu có), giờ đặt và giờ nhận đơn, từng món chữ to kèm size, đường, đá, topping, ghi chú món, combo / món tặng, ghi chú đơn. Không in giá, không in mã đơn. Bếp chỉ in món của bếp, pha chế chỉ in món của pha chế.
+     - Tem dán ly: **mỗi ly một tem** (3 trà sữa → 3 tem 1/3, 2/3, 3/3): bàn / mang về / đến lấy / ship, tên khách, tên món + size, đường, đá, topping, ghi chú món, giờ in.
+  4. Điện thoại không có người bấm mà phải tự in, Android có thể chặn tự mở RawBT. Khi đó màn hình hiện khung vàng **"Đơn vừa được nhận, máy này chưa in"** với nút **In 3 tem · số 12** — bấm là in. Nên bật **Chuông báo** để màn hình luôn sáng (máy tắt màn hình thì không tự in được).
+  5. In lại: thẻ đơn ở cột **Đang làm** có nút **In lại phiếu** / **In lại tem**.
   - Máy in có ứng dụng in riêng của hãng thì có thể chọn **Hộp thoại in của trình duyệt** thay cho RawBT.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ, tên và số điện thoại; mang về thì nhập tên và số điện thoại. Số điện thoại bắt buộc (10 số) để quán liên hệ khi có việc. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
