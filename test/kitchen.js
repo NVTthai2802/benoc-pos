@@ -54,7 +54,11 @@ function start() {
     '<div class="wrap" style="max-width:none"><div class="prq" id="prq"></div><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
     '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2><div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
-  if (BN.FEATURES.print) { paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); }); }
+  if (BN.FEATURES.print) {
+    paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); });
+    BNPrint.ble.on(() => render()); // nối / mất nối máy tem → vẽ lại thanh nhắc
+    if (BNPrint.get().tmode === 'ble') BNPrint.ble.restore().then(ok => { if (ok) ui.toast('Đã nối máy in tem ' + BNPrint.ble.name()); render(); });
+  }
   $('#cols').addEventListener('click', onAction);
   $('#calls').addEventListener('click', onCall);
   $('#prq').addEventListener('click', onPrq);
@@ -84,7 +88,7 @@ async function refresh() {
     state.seen = ids; state.seenCalls = calls;
     const all = new Set(state.orders.map(o => o.id));
     Object.keys(state.panels).forEach(id => { if (!all.has(id)) delete state.panels[id]; });
-    state.prq = state.prq.filter(id => all.has(id));
+    state.prq = state.prq.filter(x => all.has(x.id));
     autoPrint();
     render();
   } catch (e) { ui.toast(errText(e)); }
@@ -243,7 +247,7 @@ function actionsHtml(o, col) {
   const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
   const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
   if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
-  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại ' + (BNPrint.get().job === 'tem' ? 'tem' : 'phiếu') + '</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
+  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.jobs(BNPrint.get()).length ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại ' + BNPrint.label() + '</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
   return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + cancel;
 }
 function cardHtml(o, col) {
@@ -329,7 +333,7 @@ async function onAction(e) {
       const m = state.panels[id].minutes; delete state.panels[id];
       // In phiếu chỉ khi người làm bấm Nhận đơn (đơn ảo không bị in)
       state.self.add(id); // máy này tự in, không in lại khi tải đơn về
-      run(b, async () => { try { await api.acceptOrder(id, m, STATION); } catch (err) { state.self.delete(id); throw err; } printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? ' · đang in ' + (BNPrint.get().job === 'tem' ? 'tem' : 'phiếu') : ''), 'dang_lam');
+      run(b, async () => { try { await api.acceptOrder(id, m, STATION); } catch (err) { state.self.delete(id); throw err; } printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.label() ? ' · đang in ' + BNPrint.label() : ''), 'dang_lam');
       break;
     }
     case 'reprint': if (!printFor(o, { reprint: true })) ui.toast('Chưa cài máy in. Bấm nút Máy in ở trên.'); break;
@@ -483,14 +487,21 @@ function pickOptions(o, it) {
 function onCall(e) { const b = e.target.closest('[data-call]'); if (b) run(b, () => api.resolveCall(Number(b.dataset.call))); }
 
 /* ---------- In phiếu (print.js) ---------- */
-function paintPrintBtn() { const m = BNPrint.get().mode, b = $('#printBtn'); if (!b) return; b.textContent = m === 'off' ? 'Cài máy in' : 'Máy in: ' + (BNPrint.get().job === 'tem' ? 'tem ly' : 'phiếu'); b.className = 'btn btn-sm ' + (m === 'off' ? 'btn-line' : 'btn-ok'); }
+function paintPrintBtn() { const t = BNPrint.label(), b = $('#printBtn'); if (!b) return; b.textContent = t ? 'Máy in: ' + t : 'Cài máy in'; b.className = 'btn btn-sm ' + (t ? 'btn-ok' : 'btn-line'); }
 /* Phiếu của nơi này: chỉ món của bếp (hoặc pha chế), đúng thứ tự trên thẻ */
 function printFor(o, extra) {
   if (!BN.FEATURES.print || !window.BNPrint) return false;
   // Gộp các dòng giống hệt nhau (combo chia giá thành nhiều dòng) để phiếu gọn: 2 x Cơm heo
-  const out = myItems(o);
+  const out = myItems(o), set = BNPrint.get();
   markPrinted(o);
-  return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra));
+  let only = BNPrint.jobs(set);
+  // Máy tem Bluetooth chưa nối (vừa mở lại trang): in phiếu trước, tem để chờ nối xong bấm in
+  if (only.includes('tem') && set.tmode === 'ble' && !BNPrint.ble.has()) {
+    only = only.filter(k => k !== 'tem');
+    if (!state.prq.some(x => x.id === o.id)) state.prq.push({ id: o.id, jobs: ['tem'] });
+    ui.toast('Máy tem chưa kết nối: bấm "Kết nối máy tem" rồi bấm in tem');
+  }
+  return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra), set, only) || (only.length === 0 && state.prq.some(x => x.id === o.id));
 }
 function myItems(o) {
   const out = [], by = new Map();
@@ -514,9 +525,9 @@ const wasPrinted = o => { const m = mine(o); return !!(m && BN.store.get(PKEY, {
 let autoBusy = false;
 async function autoPrint() {
   if (!BN.FEATURES.print || !window.BNPrint || autoBusy) return;
-  const set = BNPrint.get(); if (set.mode === 'off' || !set.auto) return;
+  const set = BNPrint.get(); if (!BNPrint.jobs(set).length) return;
   const now = Date.now();
-  const todo = state.orders.filter(o => { const m = mine(o); if (m && m.accepted_at && state.self.has(o.id)) { state.self.delete(o.id); markPrinted(o); return false; } return m && m.status === 'dang_lam' && m.accepted_at && now - new Date(m.accepted_at) < 180000 && !wasPrinted(o) && !state.prq.includes(o.id); })
+  const todo = state.orders.filter(o => { const m = mine(o); if (m && m.accepted_at && state.self.has(o.id)) { state.self.delete(o.id); markPrinted(o); return false; } return m && m.status === 'dang_lam' && m.accepted_at && now - new Date(m.accepted_at) < 180000 && !wasPrinted(o) && !state.prq.some(x => x.id === o.id); })
     .sort((a, b) => new Date(mine(a).accepted_at) - new Date(mine(b).accepted_at));
   if (!todo.length) return;
   autoBusy = true;
@@ -525,26 +536,32 @@ async function autoPrint() {
       // Đợi trang hiện lại (vừa mở RawBT in đơn trước) rồi mới in đơn sau
       for (let n = 0; document.hidden && n < 40; n++) await new Promise(r => setTimeout(r, 250));
       markPrinted(o);
-      const r = await BNPrint.tryAuto(o, myItems(o), { station: STATION, minutes: null });
-      if (r === 'manual') { state.prq.push(o.id); alertNew('Bấm in ' + (set.job === 'tem' ? 'tem' : 'phiếu') + ' đơn ' + orderLabel(o), false); }
+      const left = await BNPrint.tryAuto(o, myItems(o), { station: STATION, minutes: null });
+      if (left.length) { state.prq.push({ id: o.id, jobs: left }); alertNew('Bấm in ' + left.map(k => k === 'tem' ? 'tem' : 'phiếu').join(' + ') + ' đơn ' + orderLabel(o), false); }
     }
   } finally { autoBusy = false; render(); }
 }
 function prqHtml() {
-  if (!state.prq.length) return '';
-  const tem = BNPrint.get().job === 'tem';
-  return '<div class="prq-in" role="alert"><span class="grow">Đơn vừa được nhận, máy này chưa in:</span>' + state.prq.map(id => {
-    const o = state.orders.find(x => x.id === id); if (!o) return '';
+  const set = BNPrint.get(), parts = [];
+  // Máy tem Bluetooth: mở lại trang thì Chrome bắt bấm nối lại
+  if (set.tmode === 'ble' && !BNPrint.ble.ok()) parts.push('<div class="prq-in" role="alert"><span class="grow">Máy in tem ' + esc(BNPrint.ble.name()) + ' chưa kết nối. Bấm để nối (tắt app CLABEL trước).</span><button class="btn btn-sm" type="button" data-ble="1">Kết nối máy tem</button></div>');
+  if (state.prq.length) parts.push('<div class="prq-in" role="alert"><span class="grow">Đơn vừa được nhận, máy này chưa in:</span>' + state.prq.map(x => {
+    const o = state.orders.find(y => y.id === x.id); if (!o) return '';
     const n = myItems(o).reduce((t, i) => t + i.qty, 0);
-    return '<button class="btn btn-sm" type="button" data-prq="' + id + '">In ' + (tem ? n + ' tem' : 'phiếu') + ' · ' + esc(isTakeaway(o) ? o.customer_name || 'mang về' : 'số ' + o.queue_number) + '</button>';
-  }).join('') + '<button class="btn btn-sm btn-line" type="button" data-prq="">Bỏ qua</button></div>';
+    return '<button class="btn btn-sm" type="button" data-prq="' + x.id + '">In ' + x.jobs.map(k => k === 'tem' ? n + ' tem' : 'phiếu').join(' + ') + ' · ' + esc(isTakeaway(o) ? o.customer_name || 'mang về' : 'số ' + o.queue_number) + '</button>';
+  }).join('') + '<button class="btn btn-sm btn-line" type="button" data-prq="">Bỏ qua</button></div>');
+  return parts.join('');
 }
-function onPrq(e) {
+async function onPrq(e) {
+  if (e.target.closest('[data-ble]')) {
+    try { const n = await BNPrint.ble.connect(); ui.toast('Đã nối máy in tem ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
+    render(); return;
+  }
   const b = e.target.closest('[data-prq]'); if (!b) return;
   if (!b.dataset.prq) { state.prq = []; render(); return; }
-  const o = state.orders.find(x => x.id === b.dataset.prq);
-  state.prq = state.prq.filter(x => x !== b.dataset.prq);
-  if (o) printFor(o, {});
+  const x = state.prq.find(y => y.id === b.dataset.prq), o = state.orders.find(y => y.id === b.dataset.prq);
+  state.prq = state.prq.filter(y => y.id !== b.dataset.prq);
+  if (o && x) { markPrinted(o); BNPrint.printTicket(o, myItems(o), { station: STATION }, null, x.jobs); }
   render();
 }
 /* ---------- Chuông báo ---------- */
