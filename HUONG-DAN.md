@@ -118,7 +118,7 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 
 ## Lưu ý
 
-- **In phiếu** và **QR chuyển khoản động** hiện chỉ bật ở môi trường Test (và bản xem thử). Muốn bật cho quán thật: trong `core.js` đổi dòng `const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST }, …)` thành `print: true, vietqr: true` (hoặc chỉ một trong hai), rồi đưa lên Product. Không cần chạy SQL.
+- **In phiếu / tem**: đã bật cho quán thật (Product). **QR chuyển khoản động** và **Xuất Excel tháng** hiện chỉ bật ở môi trường Test. Muốn bật cho quán thật: trong `core.js` đổi `vietqr: ON_TEST` / `report: ON_TEST` thành `true`, rồi đưa lên Product (QR động cần chạy cập nhật 18 trên Supabase Product trước).
 
 - Đổi mật khẩu nhân viên: Supabase → **Authentication → Users** → chọn người → đặt lại mật khẩu.
 - Dự án Supabase miễn phí tự tạm dừng nếu một tuần không ai dùng; quán mở hằng ngày thì không bị.
