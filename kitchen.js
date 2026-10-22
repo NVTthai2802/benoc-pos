@@ -247,8 +247,10 @@ function actionsHtml(o, col) {
   const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
   const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
   if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
-  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.jobs(BNPrint.get()).length ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại ' + BNPrint.label() + '</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
-  return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + cancel;
+  // Nút In lại luôn hiện (đơn có món của nơi này); máy chưa cài máy in thì bấm sẽ mở phần cài
+  const reprint = BN.FEATURES.print && window.BNPrint && o.items.some(i => i.station === STATION) ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại ' + (BNPrint.label() || 'phiếu') + '</button>' : '';
+  if (col === 'dang_lam') return edit + pay + reprint + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
+  return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + reprint + cancel;
 }
 function cardHtml(o, col) {
   // Cột làm món: chỉ món của nơi này. Cột thanh toán: cả đơn.
@@ -336,7 +338,10 @@ async function onAction(e) {
       run(b, async () => { try { await api.acceptOrder(id, m, STATION); } catch (err) { state.self.delete(id); throw err; } printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.label() ? ' · đang in ' + BNPrint.label() : ''), 'dang_lam');
       break;
     }
-    case 'reprint': if (!printFor(o, { reprint: true })) ui.toast('Chưa cài máy in. Bấm nút Máy in ở trên.'); break;
+    case 'reprint':
+      if (!BNPrint.jobs(BNPrint.get()).length) { ui.toast('Máy này chưa cài máy in: chọn máy in rồi bấm Lưu'); BNPrint.openSettings(() => { paintPrintBtn(); render(); }); break; }
+      if (!printFor(o, { reprint: true })) ui.toast('Chưa in được: kiểm tra máy in'); else ui.toast('Đang in lại ' + BNPrint.label() + ' · ' + orderLabel(o));
+      break;
     case 'extend': run(b, () => api.extendWait(id, 5, STATION), 'Đã báo khách thêm 5 phút'); break;
     case 'served': run(b, () => api.markServed(id, STATION), 'Đơn ' + orderLabel(o) + ' đã ra món', isMinePay(o) ? 'thanh_toan' : null); break;
     case 'pay': state.panels[id] = { kind: 'pay', given: 0 }; render(); break;
