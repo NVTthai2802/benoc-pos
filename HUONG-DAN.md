@@ -70,13 +70,14 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
   - Máy in có ứng dụng in riêng của hãng thì có thể chọn **Hộp thoại in của trình duyệt** thay cho RawBT.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ, tên và số điện thoại; mang về thì nhập tên và số điện thoại. Số điện thoại bắt buộc (10 số) để quán liên hệ khi có việc. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
-- **Chuyển khoản bằng VietQR**: bấm **Thu tiền** → **QR chuyển khoản**: màn hình hiện mã VietQR của tài khoản **MB Bank 0393247469** với **đúng số tiền của đơn** và nội dung (ví dụ `BENOC SO 15 A1B2`). Khách quét bằng app ngân hàng là số tiền, nội dung tự điền. Bấm **Mở to cho khách quét** để phóng to. Thấy tiền về thì bấm **Đã nhận chuyển khoản**. Khách cũng tự mở được mã này trên điện thoại ở thẻ đơn (**Chuyển khoản bằng mã QR**). Đổi tài khoản nhận tiền: thêm `BANK: { bin: '970422', bank: 'MB Bank', account: '…', holder: 'TÊN CHỦ TK' }` vào `config.js`.
+- **Chuyển khoản bằng VietQR**: bấm **Thu tiền** → **QR chuyển khoản**: màn hình hiện mã VietQR của tài khoản **MB Bank 0393247469** với **đúng số tiền của đơn** và nội dung (ví dụ `BENOC SO 15 A1B2`). Khách quét bằng app ngân hàng là số tiền, nội dung tự điền. Bấm **Mở to cho khách quét** để phóng to. Thấy tiền về thì bấm **Đã nhận chuyển khoản**. Khách cũng tự mở được mã này trên điện thoại ở thẻ đơn (**Chuyển khoản bằng mã QR**). Đổi tài khoản nhận tiền: **Quản lý → Cài đặt → Tài khoản nhận chuyển khoản (mã QR)** → chọn ngân hàng (hoặc *Ngân hàng khác* rồi nhập mã BIN 6 số), số tài khoản, tên chủ tài khoản → **Nội dung chuyển khoản**: gõ mẫu, bấm chèn nhanh `{ban}` (SO 15 / MV / GIAO), `{ten}` (tên khách), `{ma}` (mã đơn 4 ký tự) — mặc định `BENOC {ban} {ma}`; bên dưới hiện ví dụ thật cho đơn ăn tại quán, mang về, giao hàng và báo nếu dài quá 25 ký tự (ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự) → xem mã thử 10.000đ, quét thử bằng app ngân hàng cho chắc → **Lưu tài khoản**. Mọi máy quầy và điện thoại khách dùng ngay tài khoản mới.
 - **Khách trả tiền trước**: bấm **Thu tiền** ngay trên thẻ đơn ở cột nào cũng được. Thẻ hiện **Đã thu …**, đơn vẫn làm tiếp; ra món xong đơn tự hoàn tất, không phải thu lại. Khách cũng thấy "Đã thanh toán trước" trên điện thoại.
 - **Xem chi tiết đơn**: bấm vào phần món trên thẻ đơn (hoặc dòng **Xem chi tiết đơn**) để xem toàn bộ đơn, gồm cả món của bếp và pha chế: size, đường, đá, topping, ghi chú và giá từng món.
 - **Sửa đơn sau khi đã nhận**: bấm **Sửa đơn** trên thẻ → đổi **Ăn tại quán / Mang về** và **số bàn** rồi bấm **Lưu**; bấm **Tuỳ chọn** ở món đã có để thêm/bớt topping, đổi đường, đá, size (giá tự tính lại, món có nhãn **ĐÃ SỬA**); **−/+** để đổi số lượng (bấm **×** để bỏ món); **+ Thêm món** chỉ dùng khi khách gọi món mới. Bếp và pha chế sửa món của mình, chủ quán sửa được cả đơn. Món thêm sau có nhãn **MỚI**. Nếu đơn đã thu tiền mà sửa làm đổi tổng, thẻ hiện **thu thêm** hoặc **trả lại** bao nhiêu.
 - **Đơn giao hàng (khách nhắn Facebook)**: chủ quán bấm **+ Đơn giao hàng** (trang Quản lý hoặc màn hình bếp) → chọn **Qua lấy** (khách tới quán lấy, chỉ cần tên) hoặc **Đơn đi ship** (cần địa chỉ, giờ giao) → tích món → **Xem giỏ** → nhập thông tin, tích **Khách đã chuyển khoản** nếu đã nhận tiền → tạo đơn. Đơn qua lấy hiện ô **MANG VỀ** trên bếp/pha chế; đơn đi ship hiện ô **GIAO hh:mm** màu xanh ngọc kèm địa chỉ. Cần đăng nhập tài khoản chủ quán hoặc nhân viên.
 - **Doanh thu** có bảng **Tiền theo quầy**: mỗi quầy thu bao nhiêu tiền mặt, bao nhiêu chuyển khoản, để cuối ngày đối chiếu két.
 - **Nhân viên**: mở `quanly.html` trên điện thoại mình → **Chấm công** → chụp ảnh vào ca, cuối ca chụp ảnh ra ca.
+- **Sửa món trong giỏ (khách quên topping)**: trong giỏ, mỗi món và mỗi phần ưu đãi có nút **Sửa** → mở lại đúng món đó với topping, đường, đá, size, ghi chú, số lượng đang chọn → đổi xong bấm **Lưu thay đổi**, giá tự tính lại. Sửa thành giống hệt một món khác trong giỏ thì tự gộp số lượng.
 - **Tìm món**: menu khách có ô **Tìm món…** ngay trên thanh danh mục, chỉ tìm trong menu của mã QR đang mở (gõ không dấu cũng được, ví dụ "tra sua"). Trang Quản lý → Menu có ô tìm riêng cho **Món** và cho **Tuỳ chọn** (tìm được theo tên món đang dùng nhóm đó). Màn hình bếp/pha chế khi **+ Thêm món** vào đơn cũng có ô tìm.
 - **Hết món**: **Menu** → gạt công tắc **Đang bán** sang **Hết món**. Món biến mất khỏi menu khách trong vài giây (không cần tải lại trang); khách nào đã bỏ món đó vào giỏ sẽ được báo và món tự bỏ khỏi giỏ.
 - **Đổi ảnh món**: **Menu** → bấm món → **Chọn ảnh** → **Lưu**.
@@ -97,6 +98,8 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Tuỳ chọn món** (size M/L, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
 
 ## Lưu ý
+
+- **In phiếu** và **QR chuyển khoản động** hiện chỉ bật ở môi trường Test (và bản xem thử). Muốn bật cho quán thật: trong `core.js` đổi dòng `const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST }, …)` thành `print: true, vietqr: true` (hoặc chỉ một trong hai), rồi đưa lên Product. Không cần chạy SQL.
 
 - Đổi mật khẩu nhân viên: Supabase → **Authentication → Users** → chọn người → đặt lại mật khẩu.
 - Dự án Supabase miễn phí tự tạm dừng nếu một tuần không ai dùng; quán mở hằng ngày thì không bị.
@@ -124,6 +127,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-15-sua-don-tai-cho.sql`: sửa đơn ngay trên bếp/pha chế: đổi ăn tại quán ↔ mang về, đổi số bàn, đổi tuỳ chọn (topping, đường, đá, size) của món đã có. Thêm 1 cột và 2 hàm, không đụng dữ liệu.
 - `sql/cap-nhat-16-kho-hang.sql`: thêm lại **Kho hàng** (nhập theo thùng, dùng theo gói, quy đổi tuỳ từng mặt hàng; lịch sử nhập / dùng / kiểm kho). Chỉ thêm bảng và hàm mới.
 - `sql/cap-nhat-17-quy-cach-kho.sql`: thêm **Quy cách nhập hàng** dùng chung (Thùng 24 gói, Thùng 4 can, Can…). Chạy sau cập nhật 16.
+- `sql/cap-nhat-18-tai-khoan-ngan-hang.sql`: lưu tài khoản nhận chuyển khoản (ngân hàng, số tài khoản, tên chủ, mẫu nội dung chuyển khoản) trong Cài đặt để đổi được mà không sửa code. Mặc định MB Bank 0393247469.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 
