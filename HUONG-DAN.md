@@ -62,11 +62,18 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Máy bếp**: mở `bep.html`, đăng nhập tài khoản máy bếp, bấm **Bật chuông báo** (trình duyệt chỉ cho phát âm thanh sau khi bấm). Nên chọn "Thêm vào màn hình chính" để mở như app.
 - **Máy pha chế**: mở `phache.html`, đăng nhập tài khoản máy pha chế, cũng bấm **Bật chuông báo**.
 - **Tiếng chuông khi có đơn mới**: chuông 2 nốt (bếp và pha chế khác giai điệu) rồi giọng đọc **"Bé Nốc ơi, bé Nốc ơi"** (file `sound/be-noc.mp3`, tạo bằng giọng đọc tiếng Việt của Google). Khách gọi nhân viên thì chỉ kêu chuông, không có giọng. Muốn đổi giọng khác, thay file `sound/be-noc.mp3` bằng file mp3 mới cùng tên. Nhớ tăng âm lượng và tắt chế độ im lặng trên điện thoại.
+- **In phiếu bếp / pha chế (máy in nhiệt Bluetooth, Android)**: mỗi nơi một máy in, cài riêng trên từng điện thoại/máy tính bảng.
+  1. Cài app **RawBT** (miễn phí) từ Play Store, mở app → chọn máy in Bluetooth của quán (ghép đôi Bluetooth trước trong Cài đặt Android nếu cần) → bấm in thử trong app.
+  2. Trên màn hình bếp (hoặc pha chế) bấm **Cài máy in** → chọn **Qua app RawBT**, khổ giấy **58 mm** hoặc **80 mm**, số bản, chữ to → **In thử** → **Lưu**. Lần đầu Android hỏi mở bằng RawBT thì chọn **Luôn luôn**.
+  3. Từ đó **chỉ khi bấm Nhận đơn** máy mới in phiếu (khách gửi đơn ảo không bị in). Phiếu có số bàn / MANG VỀ / GIAO, tên khách, giờ nhận và số phút hẹn, từng món chữ to kèm size, đường, đá, topping, ghi chú, combo / món tặng. Không in giá. Bếp chỉ in món của bếp, pha chế chỉ in món của pha chế.
+  4. Cần in lại: bấm **In lại phiếu** trên thẻ đơn ở cột Đang làm.
+  - Máy in có ứng dụng in riêng của hãng thì có thể chọn **Hộp thoại in của trình duyệt** thay cho RawBT.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ, tên và số điện thoại; mang về thì nhập tên và số điện thoại. Số điện thoại bắt buộc (10 số) để quán liên hệ khi có việc. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
+- **Chuyển khoản bằng VietQR**: bấm **Thu tiền** → **QR chuyển khoản**: màn hình hiện mã VietQR của tài khoản **MB Bank 0393247469** với **đúng số tiền của đơn** và nội dung (ví dụ `BENOC SO 15 A1B2`). Khách quét bằng app ngân hàng là số tiền, nội dung tự điền. Bấm **Mở to cho khách quét** để phóng to. Thấy tiền về thì bấm **Đã nhận chuyển khoản**. Khách cũng tự mở được mã này trên điện thoại ở thẻ đơn (**Chuyển khoản bằng mã QR**). Đổi tài khoản nhận tiền: thêm `BANK: { bin: '970422', bank: 'MB Bank', account: '…', holder: 'TÊN CHỦ TK' }` vào `config.js`.
 - **Khách trả tiền trước**: bấm **Thu tiền** ngay trên thẻ đơn ở cột nào cũng được. Thẻ hiện **Đã thu …**, đơn vẫn làm tiếp; ra món xong đơn tự hoàn tất, không phải thu lại. Khách cũng thấy "Đã thanh toán trước" trên điện thoại.
 - **Xem chi tiết đơn**: bấm vào phần món trên thẻ đơn (hoặc dòng **Xem chi tiết đơn**) để xem toàn bộ đơn, gồm cả món của bếp và pha chế: size, đường, đá, topping, ghi chú và giá từng món.
-- **Sửa đơn sau khi đã nhận**: bấm **Sửa đơn** trên thẻ → **−/+** để đổi số lượng (bấm **×** để bỏ món), **+ Thêm món** để chọn món và tuỳ chọn. Bếp và pha chế sửa món của mình, chủ quán sửa được cả đơn. Món thêm sau có nhãn **MỚI**. Nếu đơn đã thu tiền mà sửa làm đổi tổng, thẻ hiện **thu thêm** hoặc **trả lại** bao nhiêu.
+- **Sửa đơn sau khi đã nhận**: bấm **Sửa đơn** trên thẻ → đổi **Ăn tại quán / Mang về** và **số bàn** rồi bấm **Lưu**; bấm **Tuỳ chọn** ở món đã có để thêm/bớt topping, đổi đường, đá, size (giá tự tính lại, món có nhãn **ĐÃ SỬA**); **−/+** để đổi số lượng (bấm **×** để bỏ món); **+ Thêm món** chỉ dùng khi khách gọi món mới. Bếp và pha chế sửa món của mình, chủ quán sửa được cả đơn. Món thêm sau có nhãn **MỚI**. Nếu đơn đã thu tiền mà sửa làm đổi tổng, thẻ hiện **thu thêm** hoặc **trả lại** bao nhiêu.
 - **Đơn giao hàng (khách nhắn Facebook)**: chủ quán bấm **+ Đơn giao hàng** (trang Quản lý hoặc màn hình bếp) → chọn **Qua lấy** (khách tới quán lấy, chỉ cần tên) hoặc **Đơn đi ship** (cần địa chỉ, giờ giao) → tích món → **Xem giỏ** → nhập thông tin, tích **Khách đã chuyển khoản** nếu đã nhận tiền → tạo đơn. Đơn qua lấy hiện ô **MANG VỀ** trên bếp/pha chế; đơn đi ship hiện ô **GIAO hh:mm** màu xanh ngọc kèm địa chỉ. Cần đăng nhập tài khoản chủ quán hoặc nhân viên.
 - **Doanh thu** có bảng **Tiền theo quầy**: mỗi quầy thu bao nhiêu tiền mặt, bao nhiêu chuyển khoản, để cuối ngày đối chiếu két.
 - **Nhân viên**: mở `quanly.html` trên điện thoại mình → **Chấm công** → chụp ảnh vào ca, cuối ca chụp ảnh ra ca.
@@ -82,6 +89,11 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
   - Trên **bếp / pha chế**, món thuộc ưu đãi nằm dưới dòng **COMBO …** hoặc **ƯU ĐÃI …**, món được tặng có nhãn **TẶNG** màu cam, món mua có nhãn **MUA**. Combo có cả đồ ăn và đồ uống thì mỗi nơi thấy phần của mình. **Sửa đơn**: món thuộc ưu đãi không đổi số lượng được, chỉ có nút **Bỏ cả phần**.
   - **Doanh thu**: hoá đơn ghi tên ưu đãi, tiền của phần đó và món nào được tặng; có thêm bảng **Ưu đãi đã bán** (số lần, số món tặng, tiền thu).
   - Giá ưu đãi luôn tính ở máy chủ. Giá combo được chia vào từng món theo tỉ lệ giá gốc (để thống kê món bán chạy vẫn đúng), tổng luôn bằng đúng giá combo.
+- **Kho hàng**: **Quản lý → Kho**. Chủ quán bấm **+ Thêm hàng**: đặt tên, nhóm, cách nhập và dùng (chọn nhanh *Thùng → gói*, *Thùng → can*, *Can*, *Bao → kg*… hoặc tự gõ, ví dụ 1 thùng = 24 gói), tồn hiện có, mức báo sắp hết, giá nhập.
+  - Mỗi mặt hàng có nút **Nhập** (mặc định theo thùng, đổi sang gói được, máy gợi ý tiền theo giá nhập) và **Lấy dùng** (mặc định theo gói). Bấm tên hàng để **Kiểm kho** (đếm số thùng nguyên + số gói lẻ, máy tự tính chênh lệch), **Hỏng / mất**, xem lịch sử, sửa mặt hàng.
+  - Tồn hiện dạng "2 thùng + 5 gói (53 gói)". Hàng còn ≤ mức báo nằm ở khung **Sắp hết · cần nhập thêm** trên cùng.
+  - **Quy cách nhập hàng** (giống Tuỳ chọn của menu): Kho → **Quy cách nhập hàng** → tạo / sửa / xoá các quy cách dùng chung như *Thùng 24 gói*, *Thùng 4 can*, *Can*, *Két 24 chai*. Khi thêm hàng chỉ cần bấm chọn quy cách (hoặc **Tự đặt**). Sửa một quy cách thì mọi mặt hàng đang dùng nó đổi theo, số tồn giữ nguyên.
+  - Nhân viên cũng mở được tab Kho để nhập hàng, lấy dùng, kiểm kho; chỉ chủ quán thêm/sửa/xoá mặt hàng và thấy tiền nhập (tổng tiền nhập tháng này hiện ở đầu trang).
 - **Tuỳ chọn món** (size M/L, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
 
 ## Lưu ý
@@ -109,6 +121,9 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-12-sap-xep-size-upsize.sql`: sắp xếp lại size đồ uống: **Nước uống** (menu Ăn vặt) có tuỳ chọn **Size XL +5k**; **Trà sữa, Trà hoa quả, Sốt khoai môn tươi, Món nên thử, Cà phê, Matcha · Cacao · Khoai môn** size nhỏ nhất là L, tuỳ chọn **Upsize +10k**; **Sốt cốm tươi** tuỳ chọn **Upsize +15k**. Không xoá món, không đổi giá món, không đụng đơn/hoá đơn. (Thay cho cập nhật 9 và 11.)
 - `sql/cap-nhat-13-uu-dai-combo-mua-tang.sql`: thêm **Ưu đãi** (combo giá ưu đãi, mua X tặng Y, hẹn giờ hiển thị). Chỉ thêm bảng/cột/hàm mới và cập nhật hàm đặt món, không xoá món, không đổi giá, không đụng đơn/hoá đơn cũ. Tự thêm cột tên khách trên hoá đơn nếu môi trường chưa chạy cập nhật 10. Chạy **trước** khi đưa giao diện mới lên.
 - `sql/cap-nhat-14-sua-loi-dat-uu-dai.sql`: sửa lỗi "UPDATE requires a WHERE clause" khi khách đặt ưu đãi. Chỉ thay hàm tính giá ưu đãi, không đụng dữ liệu. Chạy sau cập nhật 13.
+- `sql/cap-nhat-15-sua-don-tai-cho.sql`: sửa đơn ngay trên bếp/pha chế: đổi ăn tại quán ↔ mang về, đổi số bàn, đổi tuỳ chọn (topping, đường, đá, size) của món đã có. Thêm 1 cột và 2 hàm, không đụng dữ liệu.
+- `sql/cap-nhat-16-kho-hang.sql`: thêm lại **Kho hàng** (nhập theo thùng, dùng theo gói, quy đổi tuỳ từng mặt hàng; lịch sử nhập / dùng / kiểm kho). Chỉ thêm bảng và hàm mới.
+- `sql/cap-nhat-17-quy-cach-kho.sql`: thêm **Quy cách nhập hàng** dùng chung (Thùng 24 gói, Thùng 4 can, Can…). Chạy sau cập nhật 16.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 

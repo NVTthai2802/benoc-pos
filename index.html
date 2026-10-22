@@ -239,6 +239,11 @@
 .pp--tang { background: #E58A00; }
 .pp--mua { background: var(--ink-2); }
 .oc-items li.oc-pr { display: block; font-weight: 700; color: var(--red); font-size: 13px; padding-top: 4px; }
+.oc-qr { border: 1.5px dashed var(--line); border-radius: 12px; padding: 8px 12px; background: var(--card); }
+.oc-qr summary { cursor: pointer; font-weight: 600; }
+.oc-qr-box { text-align: center; padding-top: 8px; }
+.oc-qr-box img { width: min(70vw, 260px); height: auto; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: 10px; }
+.oc-qr-box p { margin: 6px 0 0; }
 </style>
 
 <div class="demo-note\" id="demoNote" hidden><div class="wrap">Bản xem thử, chưa nối với quán. Mở <a href="bep.html" target="_blank">màn hình bếp</a> ở tab khác để nhận đơn, hoặc vào <a href="quanly.html" target="_blank">trang quản lý</a>.</div></div>
@@ -956,9 +961,22 @@ function orderCard(o) {
       '<li><span>' + (PART_TAG[i.promo_part] || '') + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
       ((i.options && i.options.length) || i.note ? '<span class="line-sub">' + esc((i.options || []).map(x => x.choice).concat(i.note ? ['Ghi chú: ' + i.note] : []).join(' · ')) + '</span>' : '') + '</li>').join('') +
     '</ul></details>' +
-    (d.note ? '<p class="oc-note"><b>Ghi chú:</b> ' + esc(d.note) + '</p>' : '') +
+    (d.note ? '<p class="oc-note"><b>Ghi chú:</b> ' + esc(d.note) + '</p>' : '') + payQrHtml(o, d) +
     '<button class="btn btn-soft btn-block" type="button" data-call="' + esc(o.token) + '"' + (d.has_open_call ? ' disabled' : '') + '>' + (d.has_open_call ? 'Đã gọi, nhân viên đang tới' : 'Gọi nhân viên') + '</button></article>';
 }
+/* Chuyển khoản bằng VietQR: đúng số tiền còn phải trả, nội dung giống màn hình quầy */
+const qrOpen = new Set(), qrImgs = new Map();
+const custQrNote = (o, d) => 'BENOC ' + (d.dine_type === 'giao_hang' ? 'GIAO ' : d.dine_type === 'mang_ve' ? 'MV ' : 'SO ' + d.queue_number + ' ') + (d.dine_type !== 'tai_quan' ? (d.customer_name || '') + ' ' : '') + String(o.id || '').replace(/-/g, '').slice(0, 4);
+function payQrHtml(o, d) {
+  if (!BN.FEATURES.vietqr) return '';
+  const due = d.total - (d.paid_amount || 0); if (!(due > 0) || !o.id) return '';
+  const key = due + '|' + custQrNote(o, d), img = qrImgs.get(key), open = qrOpen.has(o.token);
+  if (open && !qrImgs.has(key)) { qrImgs.set(key, null); BN.qrDataUrl(BN.vietQR(due, custQrNote(o, d)), 360).then(u => { qrImgs.set(key, u); renderStatus(); }).catch(() => qrImgs.delete(key)); }
+  return '<details class="oc-qr" data-qr="' + esc(o.token) + '"' + (open ? ' open' : '') + '><summary>Chuyển khoản bằng mã QR · <span class="num">' + vnd(due) + '</span></summary>' +
+    '<div class="oc-qr-box">' + (img ? '<img src="' + img + '" alt="Mã VietQR chuyển khoản ' + vnd(due) + '">' : '<p class="loading">Đang tạo mã…</p>') +
+    '<p><b>' + esc(BN.BANK.bank) + '</b> · <b class="num">' + esc(BN.BANK.account) + '</b></p><p class="small muted">Mở app ngân hàng, quét mã: số tiền và nội dung tự điền. Chuyển xong báo nhân viên để xác nhận nhé.</p></div></details>';
+}
+document.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('.oc-qr')) return; if (d.open) { qrOpen.add(d.dataset.qr); renderStatus(); } else qrOpen.delete(d.dataset.qr); }, true);
 function renderStatus() {
   if (state.view !== 'status') return;
   $('#statusIn').innerHTML = '<div class="st-head"><h1>Đơn của bạn</h1><button class="btn btn-sm" type="button" id="stMore">Gọi thêm món</button></div>' +
