@@ -23,6 +23,7 @@ create table shop_settings (
   bank_name        text not null default 'MB Bank',
   bank_account     text not null default '0393247469',
   bank_holder      text not null default '',           -- tên chủ tài khoản (không bắt buộc)
+  bank_note        text not null default 'BENOC {ban} {ma}', -- mẫu nội dung chuyển khoản: {ban} {ten} {ma}
   updated_at       timestamptz not null default now()
 );
 insert into shop_settings default values;
@@ -1306,10 +1307,10 @@ grant select, insert, update, delete on stock_packs to authenticated;
 grant usage, select on sequence stock_packs_id_seq to authenticated;
 
 -- Tài khoản nhận chuyển khoản cho mã VietQR (cập nhật 18)
--- Khách (chưa đăng nhập) chỉ đọc được 4 thông tin này để tạo mã QR, không đọc được cài đặt khác
+-- Khách (chưa đăng nhập) chỉ đọc được 5 thông tin này để tạo mã QR, không đọc được cài đặt khác
 create or replace function get_payment_info() returns jsonb
 language sql stable security definer set search_path = public as $$
-  select jsonb_build_object('bin', bank_bin, 'bank', bank_name, 'account', bank_account, 'holder', bank_holder)
+  select jsonb_build_object('bin', bank_bin, 'bank', bank_name, 'account', bank_account, 'holder', bank_holder, 'note', bank_note)
     from shop_settings where id = 1
 $$;
 grant execute on function get_payment_info() to anon, authenticated;

@@ -114,6 +114,8 @@
 .bank-form { display: flex; flex-direction: column; gap: 10px; }
 .bank-prev { text-align: center; }
 .bank-qr { display: grid; place-items: center; min-height: 180px; background: #fff; border-radius: 12px; border: 1.5px solid var(--line); padding: 8px; }
+.bk-ex { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--card); font-size: 14px; }
+.bk-tokens .chipbtn { font-size: 13px; }
 .bank-qr img { width: 180px; height: 180px; image-rendering: pixelated; }
 @media (max-width: 560px) { .bank-set { grid-template-columns: 1fr; } }
 </style>
@@ -984,7 +986,7 @@ async function renderClock(main) {
    ===================================================================== */
 /* ---------- Tài khoản nhận chuyển khoản (mã VietQR) ---------- */
 function bankBoxHtml(cfg) {
-  const B = cfg.bank_account ? { bin: cfg.bank_bin, bank: cfg.bank_name, account: cfg.bank_account, holder: cfg.bank_holder || '' } : BN.BANK;
+  const B = cfg.bank_account ? { bin: cfg.bank_bin, bank: cfg.bank_name, account: cfg.bank_account, holder: cfg.bank_holder || '', note: cfg.bank_note || BN.NOTE_DEFAULT } : BN.BANK;
   const known = BN.BANKS.some(x => x[0] === B.bin);
   return '<section class="box cc-xanhduong"><h2 class="box-title"><span>Tài khoản nhận chuyển khoản (mã QR)</span></h2><div class="bank-set">' +
     '<div class="bank-form">' +
@@ -992,23 +994,40 @@ function bankBoxHtml(cfg) {
     '<div class="grid2" id="bkOther"' + (known ? ' hidden' : '') + '><label class="field" for="bkBin">Mã BIN (6 số)<input id="bkBin" class="num" inputmode="numeric" maxlength="6" value="' + esc(known ? '' : B.bin) + '"></label><label class="field" for="bkName">Tên ngân hàng<input id="bkName" maxlength="40" value="' + esc(known ? '' : B.bank) + '"></label></div>' +
     '<label class="field" for="bkAcc">Số tài khoản<input id="bkAcc" class="num" inputmode="numeric" maxlength="19" value="' + esc(B.account) + '"></label>' +
     '<label class="field" for="bkHolder">Tên chủ tài khoản (không bắt buộc)<input id="bkHolder" maxlength="50" value="' + esc(B.holder || '') + '" placeholder="Ví dụ: NGUYEN VAN A"></label>' +
+    '<label class="field" for="bkNote">Nội dung chuyển khoản<input id="bkNote" maxlength="60" value="' + esc(B.note || BN.NOTE_DEFAULT) + '"></label>' +
+    '<div class="chips bk-tokens">' + [['{ban}', 'Số bàn / MV / GIAO'], ['{ten}', 'Tên khách'], ['{ma}', 'Mã đơn']].map(([t, d]) => '<button class="chipbtn" type="button" data-tok="' + t + '">+ ' + d + '</button>').join('') + '<button class="chipbtn" type="button" data-tok="reset">Mặc định</button></div>' +
+    '<div class="bk-ex" id="bkEx"></div>' +
     '<p class="msg" id="bkMsg" hidden></p><div class="row"><button class="btn" type="button" id="bkSave">Lưu tài khoản</button></div></div>' +
-    '<div class="bank-prev"><div id="bkQr" class="bank-qr"><p class="loading">Đang tạo mã…</p></div><p class="small muted" style="margin:6px 0 0">Mã thử 10.000đ. Mở app ngân hàng quét thử để chắc đúng tên chủ tài khoản (không cần chuyển).</p></div></div>' +
+    '<div class="bank-prev"><div id="bkQr" class="bank-qr"><p class="loading">Đang tạo mã…</p></div><p class="small muted" style="margin:6px 0 0">Mã thử 10.000đ cho đơn bàn 15. Mở app ngân hàng quét thử để chắc đúng tên chủ tài khoản (không cần chuyển).</p></div></div>' +
     '<p class="small muted" style="margin:10px 0 0">Màn hình quầy (Thu tiền → QR chuyển khoản) và điện thoại khách dùng tài khoản này.' + (BN.FEATURES.vietqr ? '' : ' <b>Mã QR đang tắt ở quán thật</b>, lưu trước để khi bật là dùng được.') + '</p></section>';
 }
 function wireBankBox(main, cfg) {
   const read = () => { const sel = $('#bkBank', main).value, other = sel === 'other', bk = BN.BANKS.find(x => x[0] === sel);
-    return { bin: other ? $('#bkBin', main).value.replace(/\D/g, '') : sel, bank: other ? $('#bkName', main).value.trim() : bk[1], account: $('#bkAcc', main).value.replace(/[^0-9A-Za-z]/g, ''), holder: BN.qrInfo($('#bkHolder', main).value).slice(0, 50) }; };
+    return { bin: other ? $('#bkBin', main).value.replace(/\D/g, '') : sel, bank: other ? $('#bkName', main).value.trim() : bk[1], account: $('#bkAcc', main).value.replace(/[^0-9A-Za-z]/g, ''), holder: BN.qrInfo($('#bkHolder', main).value).slice(0, 50), note: $('#bkNote', main).value.trim() || BN.NOTE_DEFAULT }; };
+  /* Ví dụ nội dung thật cho 3 kiểu đơn; ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự */
+  const EX = [['Ăn tại quán', { dine_type: 'tai_quan', queue_number: 15, customer_name: 'Minh', id: 'a1b2c3d4' }], ['Mang về', { dine_type: 'mang_ve', customer_name: 'Thảo Vy', id: '9f3e77aa' }], ['Giao hàng', { dine_type: 'giao_hang', customer_name: 'Lan', id: '5c0d1e2f' }]];
+  const paintEx = () => { const tpl = $('#bkNote', main).value.trim() || BN.NOTE_DEFAULT, raw = t => BN.fold(t).toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    $('#bkEx', main).innerHTML = EX.map(([k, o]) => { const full = raw(tpl.replace(/\{ban\}/gi, o.dine_type === 'giao_hang' ? 'GIAO' : o.dine_type === 'mang_ve' ? 'MV' : 'SO ' + o.queue_number).replace(/\{ten\}/gi, o.customer_name).replace(/\{ma\}/gi, o.id.slice(0, 4))), cut = full.length > 25;
+      return '<div><span class="small muted">' + k + ':</span> <b class="num">' + esc(BN.qrNoteFor(o, tpl)) + '</b>' + (cut ? ' <span class="pill pill-red">dài quá, bị cắt ' + (full.length - 25) + ' ký tự</span>' : '') + '</div>'; }).join('') +
+      '<p class="small muted" style="margin:2px 0 0">App ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự. <b>{ma}</b> giúp đối chiếu đúng đơn trong sao kê.</p>'; };
   let t = null;
   const draw = () => { clearTimeout(t); t = setTimeout(async () => {
     const b = read(), box = $('#bkQr', main); if (!box) return;
     if (!/^\d{6}$/.test(b.bin) || b.account.length < 4) { box.innerHTML = '<p class="small muted">Nhập đủ ngân hàng và số tài khoản để xem mã.</p>'; return; }
     const keep = Object.assign({}, BN.BANK); Object.assign(BN.BANK, b);
-    try { const u = await BN.qrDataUrl(BN.vietQR(10000, 'BENOC THU'), 300); box.innerHTML = '<img src="' + u + '" alt="Mã VietQR thử">'; }
+    try { const u = await BN.qrDataUrl(BN.vietQR(10000, BN.qrNoteFor({ dine_type: 'tai_quan', queue_number: 15, customer_name: 'Minh', id: 'a1b2c3d4' }, b.note)), 300); box.innerHTML = '<img src="' + u + '" alt="Mã VietQR thử">'; }
     catch (e) { box.innerHTML = '<p class="small muted">Không tạo được mã, kiểm tra mạng.</p>'; }
     finally { Object.assign(BN.BANK, keep); }
   }, 300); };
   $('#bkBank', main).onchange = () => { $('#bkOther', main).hidden = $('#bkBank', main).value !== 'other'; draw(); };
+  $('#bkNote', main).oninput = () => { paintEx(); draw(); };
+  $$('[data-tok]', main).forEach(b => b.onclick = () => {
+    const inp = $('#bkNote', main);
+    if (b.dataset.tok === 'reset') inp.value = BN.NOTE_DEFAULT;
+    else { const a = inp.selectionStart != null && document.activeElement === inp ? inp.selectionStart : inp.value.length, v = inp.value; inp.value = (v.slice(0, a) + (a && v[a - 1] !== ' ' ? ' ' : '') + b.dataset.tok + ' ' + v.slice(a)).replace(/\s+/g, ' ').trim(); }
+    paintEx(); draw();
+  });
+  paintEx();
   ['#bkBin', '#bkName', '#bkAcc', '#bkHolder'].forEach(id => { $(id, main).oninput = draw; });
   draw();
   $('#bkSave', main).onclick = async e => {
@@ -1017,7 +1036,7 @@ function wireBankBox(main, cfg) {
     if (!b.bank) { m.textContent = 'Nhập tên ngân hàng.'; m.hidden = false; return; }
     if (b.account.length < 4) { m.textContent = 'Số tài khoản chưa đúng.'; m.hidden = false; return; }
     e.target.disabled = true;
-    try { await api.saveBank(b); Object.assign(BN.BANK, b); $('#bkHolder', main).value = b.holder; ui.toast('Đã lưu tài khoản ' + b.bank + ' · ' + b.account); }
+    try { await api.saveBank(b); Object.assign(BN.BANK, b); $('#bkHolder', main).value = b.holder; $('#bkNote', main).value = b.note; ui.toast('Đã lưu tài khoản ' + b.bank + ' · ' + b.account); }
     catch (err) { m.textContent = /column|bank_/i.test(err.message || '') ? 'Cần chạy file SQL cập nhật 18 trên Supabase trước.' : errText(err); m.hidden = false; }
     e.target.disabled = false;
   };
