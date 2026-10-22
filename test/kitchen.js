@@ -518,8 +518,8 @@ function myItems(o) {
   const out = [], by = new Map();
   promoSort(o.items.filter(i => i.station === STATION)).forEach(i => {
     const key = [i.promo_group || '', i.promo_part || '', i.item_name, JSON.stringify((i.options || []).map(x => x.choice)), i.note || ''].join('|');
-    const ex = by.get(key); if (ex) { ex.qty += i.qty; return; }
-    const c = Object.assign({}, i); by.set(key, c); out.push(c);
+    const ex = by.get(key); if (ex) { ex.qty += i.qty; ex.amount += (i.unit_price || 0) * i.qty; return; }
+    const c = Object.assign({}, i, { amount: (i.unit_price || 0) * i.qty }); by.set(key, c); out.push(c);
   });
   return out;
 }
