@@ -84,11 +84,11 @@ $('#pick').onclick = async () => {
 const enc = s => new TextEncoder().encode(s);
 const cat = (...a) => { const n = a.reduce((t, x) => t + x.length, 0), o = new Uint8Array(n); let i = 0; a.forEach(x => { o.set(x, i); i += x.length; }); return o; };
 async function send(u8) {
-  const size = 100, nr = ch.properties.writeWithoutResponse;
+  const size = 180, nr = false; // ghi có phản hồi: chậm hơn nhưng không mất dữ liệu
   for (let i = 0; i < u8.length; i += size) {
     const part = u8.subarray(i, i + size);
     if (nr) await ch.writeValueWithoutResponse(part); else await ch.writeValueWithResponse(part);
-    await new Promise(r => setTimeout(r, nr ? 15 : 2));
+    await new Promise(r => setTimeout(r, 5));
   }
 }
 function canvas(label) {
@@ -108,14 +108,17 @@ const TESTS = {
   escpos: () => { const b = bits(canvas('Thử 3: ESC/POS'), true); return cat(new Uint8Array([0x1b, 0x40, 0x1d, 0x76, 0x30, 0, b.bw, 0, b.H & 255, b.H >> 8]), b.o, new Uint8Array([0x1d, 0x0c, 0x1b, 0x64, 2])); },
   cpcl: () => enc('! 0 200 200 240 1\r\nPAGE-WIDTH 320\r\nTEXT 4 0 20 30 TEST 4 CPCL\r\nBOX 8 8 312 232 3\r\nFORM\r\nPRINT\r\n')
 };
+let busy = false;
 document.querySelectorAll('[data-t]').forEach(b => b.onclick = async () => {
-  b.disabled = true;
+  if (busy) { log('Đang gửi lệnh trước, đợi xong rồi bấm tiếp'); return; }
+  busy = true; document.querySelectorAll('[data-t]').forEach(x => { x.disabled = true; });
   try {
     if (!dev.gatt.connected) { await dev.gatt.connect(); log('Kết nối lại'); }
     const data = TESTS[b.dataset.t](); log('→ ' + b.textContent + ' (' + data.length + ' byte)…');
     await send(data); log('  đã gửi xong. Máy có ra tem không?', 'ok');
   } catch (e) { log('  lỗi gửi: ' + e.message, 'bad'); }
-  b.disabled = false;
+  await new Promise(r => setTimeout(r, 1500));
+  busy = false; document.querySelectorAll('[data-t]').forEach(x => { x.disabled = false; });
 });
 })();
 </script>
