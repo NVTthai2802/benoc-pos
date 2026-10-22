@@ -13,6 +13,9 @@
 const CONFIG = Object.assign({ SUPABASE_URL: '', SUPABASE_ANON_KEY: '', POLL_SECONDS: 15, LOGIN_DOMAIN: 'benoc.app', STORE_PREFIX: 'benoc.' }, window.BENOC_CONFIG || {});
 const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa product và test
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+/* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
+const ON_TEST = DEMO || window.BENOC_ENV === 'test';
+const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
 /* =====================================================================
@@ -79,6 +82,9 @@ const ERR = {
   PROMO_ENDED: 'Ưu đãi này vừa hết giờ. Giỏ đã được cập nhật, bạn xem lại nhé.',
   PROMO_INVALID: 'Ưu đãi chưa chọn đủ món. Mở lại ưu đãi để chọn.',
   PROMO_OPTION: 'Món trong ưu đãi không chọn được tuỳ chọn có phí.',
+  DELIVERY_LOCKED: 'Đơn giao hàng không đổi sang ăn tại quán / mang về ở đây.',
+  BAD_KIND: 'Thao tác kho không hợp lệ.',
+  BAD_DINE: 'Chọn ăn tại quán hoặc mang về.',
   PROMO_LOCKED: 'Món thuộc ưu đãi không đổi được số lượng. Muốn bớt thì bỏ cả phần ưu đãi rồi thêm lại.'
 };
 const errText = e => ERR[e && e.code] || (e && e.hint) || (e && e.code && !/^[A-Z_]+$/.test(e.code) ? e.code : '') || 'Không thực hiện được. Kiểm tra mạng rồi thử lại.';
@@ -268,6 +274,8 @@ function supabaseApi() {
     completePayment: (id, method) => rpc('complete_payment', { p_order_id: id, p_method: method }),
     staffAddItems: (id, items) => rpc('staff_add_items', { p_order_id: id, p_items: items }),
     staffSetItemQty: (itemId, qty) => rpc('staff_set_item_qty', { p_item_id: itemId, p_qty: qty }),
+    staffUpdateOrder: (id, dine, queue) => rpc('staff_update_order', { p_order_id: id, p_dine_type: dine, p_queue_number: dine === 'tai_quan' ? queue : null }),
+    staffSetItemOptions: (itemId, choiceIds) => rpc('staff_set_item_options', { p_item_id: itemId, p_choice_ids: choiceIds }),
     async resolveCall(id) { const c = await cl(); await q(c.from('staff_calls').update({ resolved_at: new Date().toISOString() }).eq('id', id)); },
 
     /* ---------- Menu (quản lý) ---------- */
@@ -344,6 +352,28 @@ function supabaseApi() {
     },
     async setPromotionActive(id, on) { const c = await cl(); await q(c.from('promotions').update({ is_active: on }).eq('id', id)); },
     async deletePromotion(id) { const c = await cl(); await q(c.from('promotions').delete().eq('id', id)); },
+
+    /* ---------- Kho hàng ---------- */
+    async stockItems() { const c = await cl(); return await q(c.from('stock_items').select('*').order('sort_order').order('name')); },
+    async saveStockItem(it) {
+      const c = await cl(); const row = stockRow(it); if (!row.pack_id && !it.had_pack) delete row.pack_id; // chưa chạy cập nhật 17 vẫn lưu được
+      if (it.id) { await q(c.from('stock_items').update(row).eq('id', it.id)); return it.id; }
+      const id = (await q(c.from('stock_items').insert(row).select('id').single())).id;
+      if (Number(it.qty) > 0) await api.stockMove(id, 'kiem', Number(it.qty), false, 'Tồn ban đầu');
+      return id;
+    },
+    async deleteStockItem(id) { const c = await cl(); await q(c.from('stock_items').delete().eq('id', id)); },
+    /* Quy cách nhập hàng (chưa chạy cập nhật 17 thì trả về rỗng) */
+    async stockPacks() { try { const c = await cl(); return await q(c.from('stock_packs').select('*').order('sort_order').order('name')); } catch (e) { return null; } },
+    async saveStockPack(pk) { const c = await cl(); const row = packRow(pk); if (pk.id) { await q(c.from('stock_packs').update(row).eq('id', pk.id)); return pk.id; } return (await q(c.from('stock_packs').insert(row).select('id').single())).id; },
+    async deleteStockPack(id) { const c = await cl(); await q(c.from('stock_packs').delete().eq('id', id)); },
+    stockMove: (itemId, kind, amount, inBuy, note, cost) => rpc('stock_move', { p_item: itemId, p_kind: kind, p_amount: amount, p_in_buy_unit: !!inBuy, p_note: note || null, p_cost: cost == null || cost === '' ? null : Number(cost) }),
+    async stockMoves(f) {
+      const c = await cl(); let b = c.from('stock_moves').select('*').order('created_at', { ascending: false }).limit((f && f.limit) || 100);
+      if (f && f.itemId) b = b.eq('item_id', f.itemId);
+      if (f && f.from) b = b.gte('created_at', new Date(f.from).toISOString());
+      return await q(b);
+    },
 
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { const c = await cl(); return await q(c.from('employees').select('*').order('is_active', { ascending: false }).order('full_name')); },
@@ -499,6 +529,13 @@ function promoRow(p) {
     time_from: p.time_from || null, time_to: p.time_to || null, is_active: p.is_active !== false, sort_order: Number(p.sort_order) || 0
   };
 }
+/* Dòng ghi vào bảng stock_items (kho hàng) */
+function stockRow(it) {
+  return { name: String(it.name || '').trim(), grp: (it.grp || '').trim() || null, use_unit: (it.use_unit || 'gói').trim(), buy_unit: (it.buy_unit || it.use_unit || 'thùng').trim(),
+    per_buy: Math.max(0.001, Number(it.per_buy) || 1), min_qty: Math.max(0, Number(it.min_qty) || 0), cost_per_buy: it.cost_per_buy === '' || it.cost_per_buy == null ? null : Math.max(0, Number(it.cost_per_buy) || 0),
+    note: (it.note || '').trim() || null, is_active: it.is_active !== false, sort_order: Number(it.sort_order) || 0, pack_id: it.pack_id || null };
+}
+const packRow = p => ({ name: String(p.name || '').trim(), buy_unit: String(p.buy_unit || '').trim(), use_unit: String(p.use_unit || '').trim(), per_buy: Math.max(0.001, Number(p.per_buy) || 1), sort_order: Number(p.sort_order) || 0 });
 /* Ưu đãi đang chạy cho khách — cùng hình dạng với hàm get_promotions() trong SQL */
 function buildPublicPromos(db) {
   const ok = id => db.menu_items.some(m => m.id === id && m.is_available);
@@ -709,7 +746,7 @@ function demoSeed() {
   mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size L', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
   mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Đường', choice: 'Ít đường', price: 0 }]]]);
   mk(null, 'Hà', 3, [['Cơm gà viên', 1], ['Trà quất', 1, [{ group: 'Đá', choice: 'Ít đá', price: 0 }]]]); // đơn mang về (không có số thẻ)
-  demoPromoSeed(db);
+  demoPromoSeed(db); demoStockSeed(db); demoPackSeed(db);
   return db;
 }
 
@@ -725,6 +762,20 @@ function demoPromoSeed(db) {
   if (kim && cat(/^nước uống/i)[0]) add({ name: 'Mua 2 kimbap tặng 1 nước', kind: 'mua_tang', description: 'Giờ vàng buổi chiều', buy_qty: 2, get_qty: 1, option_mode: 'cong_them', time_from: '14:00', time_to: '17:00', sort_order: 3 }, [{ part: 'mua', m: kim }].concat(cat(/^nước uống/i).slice(0, 3).map(m => ({ part: 'tang', m }))));
   return db;
 }
+/* Kho mẫu của bản xem thử */
+function demoPackSeed(db) {
+  db.stock_packs = [['Thùng 24 gói', 'thùng', 'gói', 24], ['Thùng 4 can', 'thùng', 'can', 4], ['Can (nhập, dùng theo can)', 'can', 'can', 1], ['Bao 25 kg', 'bao', 'kg', 25], ['Thùng 48 hộp', 'thùng', 'hộp', 48], ['Thùng 20 cây', 'thùng', 'cây', 20]].map(([name, b, u, n], k) => ({ id: k + 1, name, buy_unit: b, use_unit: u, per_buy: n, sort_order: k + 1 }));
+  db.seq.stock_packs = 7;
+  (db.stock_items || []).forEach(it => { const pk = db.stock_packs.find(p => p.buy_unit === it.buy_unit && p.use_unit === it.use_unit && Number(p.per_buy) === Number(it.per_buy)); it.pack_id = pk ? pk.id : null; });
+  return db;
+}
+function demoStockSeed(db) {
+  db.stock_items = []; db.stock_moves = []; db.seq.stock_moves = 1;
+  [['Mì Hàn Quốc', 'Đồ khô', 'gói', 'thùng', 24, 30, 10, 312000], ['Đường pha chế', 'Nguyên liệu pha chế', 'can', 'can', 1, 3, 2, 95000], ['Dầu ăn', 'Gia vị', 'can', 'thùng', 4, 2, 1, 420000],
+   ['Trân châu đen', 'Nguyên liệu pha chế', 'gói', 'thùng', 20, 8, 5, 560000], ['Sữa đặc', 'Nguyên liệu pha chế', 'hộp', 'thùng', 48, 60, 12, 1150000], ['Ly nhựa 700ml', 'Bao bì', 'cây', 'thùng', 20, 4, 5, 380000]]
+    .forEach(([name, grp, use, buy, per, qty, min, cost], k) => db.stock_items.push({ id: uuid(), name, grp, use_unit: use, buy_unit: buy, per_buy: per, qty, min_qty: min, cost_per_buy: cost, note: null, is_active: true, sort_order: k, created_at: new Date().toISOString() }));
+  return db;
+}
 function demoApi() {
   let cache = null;
   const load = () => {
@@ -732,6 +783,8 @@ function demoApi() {
     cache = store.get(DEMO_KEY, null);
     if (!cache || !cache.menu_items) { cache = demoSeed(); store.set(DEMO_KEY, cache); }
     if (!cache.promotions) { demoPromoSeed(cache); store.set(DEMO_KEY, cache); } // dữ liệu xem thử cũ: thêm ưu đãi mẫu
+    if (!cache.stock_items) { demoStockSeed(cache); store.set(DEMO_KEY, cache); } // thêm kho mẫu
+    if (!cache.stock_packs) { demoPackSeed(cache); store.set(DEMO_KEY, cache); } // thêm quy cách mẫu
     return cache;
   };
   const save = () => {
@@ -859,6 +912,35 @@ function demoApi() {
         return db.orders.some(x => x.id === id) ? o.total : null;
       });
     },
+    async staffUpdateOrder(id, dine, queue) {
+      need();
+      return tx(db => {
+        const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
+        if (o.dine_type === 'giao_hang') fail('DELIVERY_LOCKED');
+        if (dine !== 'tai_quan' && dine !== 'mang_ve') fail('BAD_DINE');
+        if (dine === 'tai_quan' && !(queue > 0)) fail('MISSING_QUEUE_NUMBER');
+        o.dine_type = dine; o.queue_number = dine === 'tai_quan' ? queue : null;
+        const dup = dine === 'tai_quan' && db.orders.find(x => x.id !== id && x.queue_number === queue);
+        return { duplicate_with: dup ? dup.customer_name : null };
+      });
+    },
+    async staffSetItemOptions(itemId, choiceIds) {
+      need();
+      return tx(db => {
+        const it = db.order_items.find(i => i.id === itemId); if (!it) fail('ITEM_NOT_FOUND');
+        const m = db.menu_items.find(x => x.id === it.menu_item_id); if (!m) fail('ITEM_UNAVAILABLE', it.item_name);
+        let { extra, opts } = demoOptions(db, m, choiceIds || []);
+        const base = it.unit_price - (it.options || []).reduce((s, x) => s + (x.price || 0), 0);
+        const p = it.promo_group && it.promo_part !== 'mua' && (db.promotions || []).find(x => x.id === it.promo_id);
+        if (p && p.option_mode === 'khong_phi' && opts.some(x => x.price > 0)) fail('PROMO_OPTION', it.item_name + ' trong ưu đãi không chọn được tuỳ chọn có phí');
+        if (p && p.option_mode === 'mien_phi') { extra = 0; opts = opts.map(x => Object.assign({}, x, { price: 0 })); }
+        Object.assign(it, { options: opts, unit_price: base + extra, edited_at: iso() });
+        const st = db.order_stations.find(x => x.order_id === it.order_id && x.station === it.station);
+        if (st && st.status === 'da_ra_mon') Object.assign(st, { status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
+        const o = db.orders.find(x => x.id === it.order_id); o.total = demoTotal(db, o.id); refreshOrder(db, o.id);
+        return o.total;
+      });
+    },
     async resolveCall(id) { need(); tx(db => { const c = db.staff_calls.find(x => x.id === id); if (c) c.resolved_at = iso(); }); },
 
     /* ---------- Menu (quản lý) ---------- */
@@ -916,6 +998,40 @@ function demoApi() {
     },
     async setPromotionActive(id, on) { need('owner'); tx(db => { db.promotions.find(p => p.id === id).is_active = on; }); },
     async deletePromotion(id) { need('owner'); tx(db => { db.promotions = db.promotions.filter(p => p.id !== id); db.promotion_items = db.promotion_items.filter(i => i.promotion_id !== id); db.order_items.forEach(i => { if (i.promo_id === id) i.promo_id = null; }); }); },
+
+    /* ---------- Kho hàng ---------- */
+    async stockItems() { need(); return load().stock_items.slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi')).map(x => Object.assign({}, x)); },
+    async saveStockItem(it) {
+      need('owner');
+      const id = tx(db => { const row = stockRow(it); if (it.id) { Object.assign(db.stock_items.find(x => x.id === it.id), row); return it.id; } const nid = uuid(); db.stock_items.push(Object.assign({ id: nid, qty: 0, created_at: iso() }, row)); return nid; });
+      if (!it.id && Number(it.qty) > 0) await api.stockMove(id, 'kiem', Number(it.qty), false, 'Tồn ban đầu');
+      return id;
+    },
+    async stockPacks() { need(); return load().stock_packs.slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi')).map(x => Object.assign({}, x)); },
+    async saveStockPack(pk) {
+      need('owner');
+      return tx(db => {
+        const row = packRow(pk);
+        if (db.stock_packs.some(x => x.name === row.name && x.id !== pk.id)) fail('Đã có quy cách tên này.');
+        if (pk.id) { Object.assign(db.stock_packs.find(x => x.id === pk.id), row); db.stock_items.forEach(it => { if (it.pack_id === pk.id) Object.assign(it, { buy_unit: row.buy_unit, use_unit: row.use_unit, per_buy: row.per_buy }); }); return pk.id; }
+        const id = db.seq.stock_packs++; db.stock_packs.push(Object.assign({ id }, row)); return id;
+      });
+    },
+    async deleteStockPack(id) { need('owner'); tx(db => { db.stock_packs = db.stock_packs.filter(x => x.id !== id); db.stock_items.forEach(it => { if (it.pack_id === id) it.pack_id = null; }); }); },
+    async deleteStockItem(id) { need('owner'); tx(db => { db.stock_items = db.stock_items.filter(x => x.id !== id); db.stock_moves = db.stock_moves.filter(m => m.item_id !== id); }); },
+    async stockMove(itemId, kind, amount, inBuy, note, cost) {
+      const e = need();
+      return tx(db => {
+        if (['nhap', 'dung', 'hong', 'kiem'].indexOf(kind) < 0) fail('BAD_KIND');
+        amount = Number(amount); if (!(amount >= 0) || (kind !== 'kiem' && amount === 0)) fail('BAD_QTY');
+        const it = db.stock_items.find(x => x.id === itemId); if (!it) fail('ITEM_NOT_FOUND');
+        const use = amount * (inBuy ? it.per_buy : 1), delta = kind === 'nhap' ? use : kind === 'kiem' ? use - it.qty : -use;
+        it.qty = Math.round((it.qty + delta) * 1000) / 1000;
+        db.stock_moves.push({ id: db.seq.stock_moves++, item_id: it.id, kind, delta, qty_after: it.qty, amount, unit: inBuy ? it.buy_unit : it.use_unit, cost: kind === 'nhap' && cost !== '' && cost != null ? Number(cost) : null, note: note ? String(note).trim().slice(0, 200) || null : null, employee_id: e.id, employee_name: e.full_name, created_at: iso() });
+        return { qty: it.qty, delta };
+      });
+    },
+    async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
 
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { return load().employees.slice().sort((a, b) => (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name, 'vi')); },
@@ -989,6 +1105,42 @@ function demoApi() {
 
 const api = DEMO ? demoApi() : supabaseApi();
 
+/* =====================================================================
+   VIETQR ĐỘNG — mã chuyển khoản theo chuẩn NAPAS (EMVCo), có sẵn số tiền và nội dung.
+   Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
+   ===================================================================== */
+const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '' }, CONFIG.BANK || {});
+const tlv = (id, v) => id + String(v.length).padStart(2, '0') + v;
+function crc16(str) { // CRC-16/CCITT-FALSE
+  let c = 0xFFFF;
+  for (let i = 0; i < str.length; i++) { c ^= str.charCodeAt(i) << 8; for (let k = 0; k < 8; k++) c = (c & 0x8000) ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; }
+  return c.toString(16).toUpperCase().padStart(4, '0');
+}
+/* Nội dung chuyển khoản: chữ không dấu, viết hoa, tối đa 25 ký tự */
+const qrInfo = s => fold(s).toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 25);
+function vietQR(amount, info) {
+  const acc = tlv('00', 'A000000727') + tlv('01', tlv('00', BANK.bin) + tlv('01', BANK.account)) + tlv('02', 'QRIBFTTA');
+  const amt = Math.round(Number(amount) || 0), note = qrInfo(info || '');
+  const body = tlv('00', '01') + tlv('01', amt > 0 ? '12' : '11') + tlv('38', acc) + tlv('53', '704') + (amt > 0 ? tlv('54', String(amt)) : '') + tlv('58', 'VN') + (note ? tlv('62', tlv('08', note)) : '') + '6304';
+  return body + crc16(body);
+}
+/* Vẽ mã QR thành ảnh (data URL). Tải thư viện qrcodejs lần đầu. */
+const loadScript = src => new Promise((res, rej) => {
+  const ex = document.querySelector('script[data-src="' + src + '"]');
+  if (ex) { if (ex.dataset.ok) res(); else { ex.addEventListener('load', res); ex.addEventListener('error', rej); } return; }
+  const sc = document.createElement('script'); sc.src = src; sc.dataset.src = src;
+  sc.onload = () => { sc.dataset.ok = '1'; res(); }; sc.onerror = () => rej(new Error('Không tải được thư viện, kiểm tra mạng')); document.head.appendChild(sc);
+});
+async function qrDataUrl(text, size) {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
+  const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-9999px;top:0';
+  document.body.appendChild(box);
+  try {
+    new window.QRCode(box, { text, width: size || 320, height: size || 320, colorDark: '#000000', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+    const cv = box.querySelector('canvas'); return cv ? cv.toDataURL('image/png') : (box.querySelector('img') || {}).src;
+  } finally { box.remove(); }
+}
+
 /* Size đồ uống: nhóm có 2 lựa chọn "Size M" và "Size L" */
 const SIZE_RE = /^size\s*(xl|m|l)$/i;
 const sizeGroup = it => (it.option_groups || []).find(g => g.choices.length >= 2 && g.choices.some(c => /^size m$/i.test(c.name)) && g.choices.some(c => /^size l$/i.test(c.name))) || null;
@@ -1001,8 +1153,8 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW,
-  CONFIG, DEMO, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, vietQR, qrInfo, qrDataUrl, loadScript,
+  CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };

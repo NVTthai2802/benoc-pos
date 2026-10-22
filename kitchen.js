@@ -46,12 +46,14 @@ function start() {
     '<header class="topbar"><div class="topbar-in"><div class="brand"><b>' + SHORT[STATION] + '</b><span>Bé Nốc</span></div>' +
     '<span class="clock num" id="clock"></span>' +
     '<button class="btn btn-sm btn-line" type="button" id="soundBtn" aria-pressed="false">Bật chuông báo</button>' +
+    (BN.FEATURES.print ? '<button class="btn btn-sm btn-line" type="button" id="printBtn"></button>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm" href="index.html?dat=giao' + (DEMO ? '&slot=' + encodeURIComponent(BN.SLOT) : '') + '">+ Đơn giao hàng</a>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm btn-line" href="' + (IS_BEP ? 'phache.html' : 'bep.html') + '">' + (IS_BEP ? 'Pha chế' : 'Bếp') + '</a><a class="btn btn-sm btn-line" href="quanly.html">Quản lý</a>' : '') +
     BN.staff.whoChip(state.session) + '</div></header>' +
     '<div class="wrap" style="max-width:none"><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
     '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2><div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
+  if (BN.FEATURES.print) { paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); }); }
   $('#cols').addEventListener('click', onAction);
   $('#calls').addEventListener('click', onCall);
   $('#seg').addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) { state.col = b.dataset.seg; render(); } });
@@ -97,6 +99,7 @@ function timerHtml(o, col) {
   return done ? '<div class="timer">Ra món<b class="num">' + hhmm(done) + '</b></div>' : '<div class="timer">Đặt lúc<b class="num">' + hhmm(o.created_at) + '</b></div>';
 }
 /* Món thêm sau khi nơi làm đã nhận đơn → nhãn MỚI để người làm không bỏ sót */
+function isEdited(o, i) { const p = part(o, i.station); return !!(p && p.accepted_at && i.edited_at && new Date(i.edited_at) > new Date(p.accepted_at)); }
 function isNew(o, i) { const p = part(o, i.station); return !!(p && p.accepted_at && i.added_at && new Date(i.added_at) > new Date(p.accepted_at)); }
 const isTopping = x => /topping/i.test(x.group || '');
 /* Ưu đãi: dòng tiêu đề trước các món cùng 1 phần ưu đãi; món tặng / món mua có nhãn */
@@ -109,9 +112,9 @@ function promoSort(items) {
 }
 function itemsHtml(items, tagStation, o) {
   items = promoSort(items);
-  return '<ul class="kc-items">' + items.map((i, k) => { const sz = sizeOf(i.options), rest = (i.options || []).filter(x => !isSizeOpt(x)); return promoHead(items, k) + '<li class="' + [o && isNew(o, i) ? 'new' : '', i.promo_group ? 'in-pr' : '', i.promo_part === 'tang' ? 'is-gift' : ''].filter(Boolean).join(' ') + '"><span class="q num">' + i.qty + '×</span><span>' + (PM_TAG[i.promo_part] || '') + '<span class="nm">' + esc(i.item_name) + '</span>' +
+  return '<ul class="kc-items">' + items.map((i, k) => { const sz = sizeOf(i.options), rest = (i.options || []).filter(x => !isSizeOpt(x)); return promoHead(items, k) + '<li class="' + [o && (isNew(o, i) || isEdited(o, i)) ? 'new' : '', i.promo_group ? 'in-pr' : '', i.promo_part === 'tang' ? 'is-gift' : ''].filter(Boolean).join(' ') + '"><span class="q num">' + i.qty + '×</span><span>' + (PM_TAG[i.promo_part] || '') + '<span class="nm">' + esc(i.item_name) + '</span>' +
     (sz ? '<span class="sz sz-' + sz + '">' + sizeText(sz) + '</span>' : '') +
-    (o && isNew(o, i) ? '<span class="new-tag">MỚI</span>' : '') +
+    (o && isNew(o, i) ? '<span class="new-tag">MỚI</span>' : o && isEdited(o, i) ? '<span class="new-tag">ĐÃ SỬA</span>' : '') +
     (tagStation && i.station !== 'bep' ? '<span class="stn">' + SHORT[i.station] + '</span>' : '') +
     (rest.filter(x => !isTopping(x)).length ? '<span class="op">' + esc(rest.filter(x => !isTopping(x)).map(x => x.choice).join(' · ')) + '</span>' : '') +
     (rest.some(isTopping) ? '<span class="tp">' + rest.filter(isTopping).map(x => '<b>+ ' + esc(x.choice) + '</b>').join('') + '</span>' : '') +
@@ -132,6 +135,28 @@ function otherHtml(o) {
   if (!items.length || !p) return '';
   const n = items.reduce((s, i) => s + i.qty, 0);
   return '<p class="kc-other"><b>' + STATIONS[OTHER] + ':</b> ' + n + ' món (' + esc(items.map(i => i.item_name + (i.promo_part === 'tang' ? ' (tặng)' : '')).join(', ')) + ') ' + partStatus(p) + '</p>';
+}
+/* ---------- VietQR: mã chuyển khoản đúng số tiền của đơn ---------- */
+const qrNote = o => 'BENOC ' + (isDelivery(o) ? 'GIAO ' : isTakeaway(o) ? 'MV ' : 'SO ' + o.queue_number + ' ') + (isTakeaway(o) ? (o.customer_name || '') + ' ' : '') + String(o.id).replace(/-/g, '').slice(0, 4);
+const qrCache = new Map(); // khoá "số tiền|nội dung" → ảnh
+function qrImg(o, due) {
+  const key = due + '|' + qrNote(o);
+  if (qrCache.has(key)) return qrCache.get(key);
+  qrCache.set(key, null);
+  BN.qrDataUrl(BN.vietQR(due, qrNote(o)), 360).then(u => { qrCache.set(key, u); render(); }).catch(() => { qrCache.delete(key); ui.toast('Không tạo được mã QR, kiểm tra mạng'); });
+  return null;
+}
+function qrPanelHtml(o, due) {
+  const img = qrImg(o, due), B = BN.BANK;
+  return '<div class="vqr"><button class="vqr-img" type="button" data-act="qr-big" data-id="' + o.id + '" aria-label="Mở to mã QR">' + (img ? '<img src="' + img + '" alt="Mã VietQR chuyển khoản ' + vnd(due) + '">' : '<span class="small muted">Đang tạo mã…</span>') + '</button>' +
+    '<div class="vqr-info"><b class="num">' + vnd(due) + '</b><span>' + esc(B.bank) + ' · <span class="num">' + esc(B.account) + '</span>' + (B.holder ? '<br>' + esc(B.holder) : '') + '</span><span class="small muted">Nội dung: ' + esc(BN.qrInfo(qrNote(o))) + '</span>' +
+    '<span class="small muted">Khách quét bằng app ngân hàng, số tiền tự điền. Thấy tiền về rồi bấm <b>Đã nhận chuyển khoản</b>.</span><button class="link small" type="button" data-act="qr-big" data-id="' + o.id + '">Mở to cho khách quét ›</button></div></div>';
+}
+function openQrBig(o) {
+  const due = dueOf(o), img = qrImg(o, due), B = BN.BANK;
+  ui.sheet(ui.head('Chuyển khoản ' + vnd(due), 'Đơn ' + esc(orderLabel(o))) + '<div class="sh-body vqr-big">' + (img ? '<img src="' + img + '" alt="Mã VietQR">' : '<p class="loading">Đang tạo mã…</p>') +
+    '<p><b>' + esc(B.bank) + '</b> · <b class="num">' + esc(B.account) + '</b>' + (B.holder ? '<br>' + esc(B.holder) : '') + '</p><p class="small muted">Nội dung: ' + esc(BN.qrInfo(qrNote(o))) + '</p></div>' +
+    '<div class="sh-foot"><button class="btn btn-line btn-block" type="button" data-close>Đóng</button></div>');
 }
 function panelHtml(o) {
   const p = state.panels[o.id]; if (!p) return '';
@@ -155,22 +180,38 @@ function panelHtml(o) {
     return '<div class="panel"><p class="panel-title">' + (o.paid_amount != null ? 'Thu thêm ' : 'Thu ') + vnd(due) + '</p>' +
       (o.paid_amount != null ? '<p class="small muted" style="margin:0">Đã thu ' + vnd(o.paid_amount) + ', đơn sau khi sửa là ' + vnd(o.total) + '.</p>' : '') +
       (st && o.paid_amount == null ? '<p class="small muted" style="margin:0">Thu trước: đơn vẫn làm tiếp, ra món xong tự hoàn tất.</p>' : '') +
-      '<div class="chips">' + [due, 50000, 100000, 200000, 500000].filter((v, i, a) => v >= due && a.indexOf(v) === i).map(v => '<button class="chipbtn" type="button" data-act="given" data-v="' + v + '" data-id="' + o.id + '" aria-pressed="' + (given === v) + '">' + (v === due ? 'Vừa đủ' : vnd(v)) + '</button>').join('') + '</div>' +
-      (given ? '<div class="change"><span>Tiền thối</span><b class="num">' + (change >= 0 ? vnd(change) : 'Thiếu ' + vnd(-change)) + '</b></div>' : '') +
+      (p.qr ? '' :       '<div class="chips">' + [due, 50000, 100000, 200000, 500000].filter((v, i, a) => v >= due && a.indexOf(v) === i).map(v => '<button class="chipbtn" type="button" data-act="given" data-v="' + v + '" data-id="' + o.id + '" aria-pressed="' + (given === v) + '">' + (v === due ? 'Vừa đủ' : vnd(v)) + '</button>').join('') + '</div>' +
+      (given ? '<div class="change"><span>Tiền thối</span><b class="num">' + (change >= 0 ? vnd(change) : 'Thiếu ' + vnd(-change)) + '</b></div>' : '')) +
+      (p.qr ? qrPanelHtml(o, due) : '') +
       '<div class="row"><button class="btn btn-ok grow" type="button" data-act="pay-ok" data-m="tien_mat" data-id="' + o.id + '">Tiền mặt</button>' +
-      '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Chuyển khoản</button>' +
+      (p.qr ? '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Đã nhận chuyển khoản</button>'
+            : BN.FEATURES.vietqr ? '<button class="btn grow" type="button" data-act="qr" data-id="' + o.id + '">QR chuyển khoản</button>'
+            : '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Chuyển khoản</button>') +
       '<button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
   }
   if (p.kind === 'edit') {
     const items = promoSort(editableItems(o));
-    const edRow = (i, k) => i.promo_group
-      ? (k > 0 && items[k - 1].promo_group === i.promo_group ? '' : '<li class="ed-pr"><span class="ed-nm"><b>' + (i.promo_kind === 'combo' ? '' : 'Ưu đãi ') + esc(BN.promoTitle(i.promo_kind, i.promo_name)) + '</b><small>' + esc(o.items.filter(x => x.promo_group === i.promo_group).map(x => x.qty + '× ' + x.item_name + (x.promo_part === 'tang' ? ' (tặng)' : '')).join(' · ')) + '</small></span>' +
-        '<button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="0" data-id="' + o.id + '">Bỏ cả phần</button></li>')
-      : null;
-    return '<div class="panel"><p class="panel-title">Sửa đơn ' + esc(orderLabel(o)) + '</p>' +
-      '<ul class="ed-list">' + items.map((i, k) => edRow(i, k) != null ? edRow(i, k) : '<li><span class="ed-nm"><b>' + esc(i.item_name) + '</b>' + ((i.options || []).length ? '<small>' + esc(i.options.map(x => x.choice).join(' · ')) + '</small>' : '') + (i.note ? '<small class="in">' + esc(i.note) + '</small>' : '') + '</span>' +
-        '<span class="ed-q"><button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="' + (i.qty - 1) + '" data-id="' + o.id + '" aria-label="Bớt 1 ' + esc(i.item_name) + '">' + (i.qty > 1 ? '−' : '×') + '</button>' +
-        '<output class="num">' + i.qty + '</output><button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="' + (i.qty + 1) + '" data-id="' + o.id + '" aria-label="Thêm 1 ' + esc(i.item_name) + '"' + (i.qty >= 50 ? ' disabled' : '') + '>+</button></span></li>').join('') + '</ul>' +
+    const optBtn = i => i.menu_item_id ? '<button class="btn btn-line btn-sm" type="button" data-act="opts" data-item="' + i.id + '" data-id="' + o.id + '" aria-label="Đổi topping, tuỳ chọn ' + esc(i.item_name) + '">Tuỳ chọn</button>' : '';
+    const nmHtml = i => '<span class="ed-nm"><b>' + (i.promo_part === 'tang' ? '<span class="pm pm-tang">TẶNG</span>' : '') + esc(i.item_name) + '</b>' + ((i.options || []).length ? '<small>' + esc(i.options.map(x => x.choice).join(' · ')) + '</small>' : '') + (i.note ? '<small class="in">' + esc(i.note) + '</small>' : '') + '</span>';
+    const edRow = (i, k) => {
+      if (i.promo_group) {
+        // Món thuộc ưu đãi: bỏ cả phần; từng món vẫn đổi được tuỳ chọn
+        const head = k > 0 && items[k - 1].promo_group === i.promo_group ? '' : '<li class="ed-pr"><span class="ed-nm"><b>' + (i.promo_kind === 'combo' ? '' : 'Ưu đãi ') + esc(BN.promoTitle(i.promo_kind, i.promo_name)) + '</b></span>' +
+          '<button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="0" data-id="' + o.id + '">Bỏ cả phần</button></li>';
+        return head + '<li class="ed-sub">' + nmHtml(i) + '<span class="ed-q"><span class="num small">' + i.qty + '×</span>' + optBtn(i) + '</span></li>';
+      }
+      return '<li>' + nmHtml(i) + '<span class="ed-q">' + optBtn(i) + '<button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="' + (i.qty - 1) + '" data-id="' + o.id + '" aria-label="Bớt 1 ' + esc(i.item_name) + '">' + (i.qty > 1 ? '−' : '×') + '</button>' +
+        '<output class="num">' + i.qty + '</output><button class="btn btn-line btn-sm" type="button" data-act="qty" data-item="' + i.id + '" data-q="' + (i.qty + 1) + '" data-id="' + o.id + '" aria-label="Thêm 1 ' + esc(i.item_name) + '"' + (i.qty >= 50 ? ' disabled' : '') + '>+</button></span></li>';
+    };
+    // Đổi ăn tại quán / mang về và số bàn (đơn giao hàng không đổi ở đây)
+    const dine = p.dine || o.dine_type, q = p.queue != null ? p.queue : (o.queue_number || '');
+    const dineBox = isDelivery(o) ? '' : '<div class="ed-dine"><div class="seg2" role="group" aria-label="Ăn tại quán hay mang về">' +
+      [['tai_quan', 'Ăn tại quán'], ['mang_ve', 'Mang về']].map(([k, t]) => '<button type="button" data-act="dine" data-v="' + k + '" data-id="' + o.id + '" aria-pressed="' + (dine === k) + '">' + t + '</button>').join('') + '</div>' +
+      (dine === 'tai_quan' ? '<label class="ed-ql">Số bàn<input class="num" data-eq="' + o.id + '" inputmode="numeric" pattern="[0-9]*" maxlength="3" enterkeyhint="done" value="' + esc(q) + '" aria-label="Số bàn"></label>' +
+        (o.dine_type !== 'tai_quan' ? '<span class="small muted ed-hint">Nhập số bàn, xong là tự lưu</span>' : '') : '') + '</div>';
+    return '<div class="panel"><p class="panel-title">Sửa đơn ' + esc(orderLabel(o)) + '</p>' + dineBox +
+      '<ul class="ed-list">' + items.map(edRow).join('') + '</ul>' +
+      '<p class="small muted" style="margin:0">Bấm <b>Tuỳ chọn</b> để thêm/bớt topping, đổi đường, đá, size của món đã có. <b>+ Thêm món</b> là để khách gọi món mới.</p>' +
       '<div class="row"><button class="btn grow" type="button" data-act="add-item" data-id="' + o.id + '">+ Thêm món</button><button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Xong</button></div></div>';
   }
   if (p.kind === 'cancel') {
@@ -198,7 +239,7 @@ function actionsHtml(o, col) {
   const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
   const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
   if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
-  if (col === 'dang_lam') return edit + pay + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
+  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại phiếu</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
   return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + cancel;
 }
 function cardHtml(o, col) {
@@ -219,7 +260,28 @@ function grouped() {
   state.orders.forEach(o => { const c = colOf(o); if (c && by[c]) by[c].push(o); });
   return by;
 }
+document.addEventListener('input', e => { const q = e.target.closest && e.target.closest('[data-eq]'); if (!q) return; q.value = q.value.replace(/\D/g, ''); const p = state.panels[q.dataset.eq]; if (p) p.queue = q.value; });
+/* Số bàn: gõ xong (Enter hoặc bấm ra ngoài) là lưu */
+document.addEventListener('change', e => {
+  const q = e.target.closest && e.target.closest('[data-eq]'); if (!q) return;
+  const o = state.orders.find(x => x.id === q.dataset.eq), n = parseInt(q.value, 10); if (!o) return;
+  if (!(n > 0)) { if (o.dine_type === 'tai_quan') { q.value = o.queue_number || ''; ui.toast('Số bàn phải lớn hơn 0'); } return; }
+  if (o.dine_type === 'tai_quan' && n === o.queue_number) return;
+  saveDine(o, 'tai_quan', n, null);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('[data-eq]')) e.target.blur(); });
+async function saveDine(o, dine, q, btn) {
+  const p = state.panels[o.id];
+  await run(btn, async () => {
+    const r = await api.staffUpdateOrder(o.id, dine, q);
+    if (p) { delete p.dine; delete p.queue; }
+    ui.toast((dine === 'tai_quan' ? 'Đã lưu: ăn tại quán, bàn số ' + q : 'Đã lưu: mang về') + (r && r.duplicate_with ? ' · lưu ý: số ' + q + ' cũng đang có đơn của ' + r.duplicate_with : ''));
+  });
+}
+document.addEventListener('focusout', e => { if (e.target.closest && e.target.closest('[data-eq]') && state.renderLater) { state.renderLater = false; setTimeout(render, 0); } });
 function render() {
+  const ae = document.activeElement; // đang gõ số bàn thì để gõ xong mới vẽ lại (không mất chữ đang gõ)
+  if (ae && ae.matches && ae.matches('[data-eq]')) { state.renderLater = true; return; }
   const by = grouped();
   if (!state.col) state.col = by.cho_nhan.length || !by.dang_lam.length ? 'cho_nhan' : 'dang_lam';
   COLS.forEach(([k]) => {
@@ -258,10 +320,18 @@ async function onAction(e) {
       try { state.panels[id].minutes = await api.suggestWait(id, STATION); } catch (err) { state.panels[id].minutes = IS_BEP ? 15 : 5; }
       render(); break;
     case 'min': { const p = state.panels[id]; p.minutes = Math.max(5, Math.min(90, (p.minutes || 15) + Number(b.dataset.d))); render(); break; }
-    case 'accept-ok': { const m = state.panels[id].minutes; delete state.panels[id]; run(b, () => api.acceptOrder(id, m, STATION), 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút', 'dang_lam'); break; }
+    case 'accept-ok': {
+      const m = state.panels[id].minutes; delete state.panels[id];
+      // In phiếu chỉ khi người làm bấm Nhận đơn (đơn ảo không bị in)
+      run(b, async () => { await api.acceptOrder(id, m, STATION); printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? ' · đang in phiếu' : ''), 'dang_lam');
+      break;
+    }
+    case 'reprint': if (!printFor(o, { reprint: true })) ui.toast('Chưa cài máy in. Bấm nút Máy in ở trên.'); break;
     case 'extend': run(b, () => api.extendWait(id, 5, STATION), 'Đã báo khách thêm 5 phút'); break;
     case 'served': run(b, () => api.markServed(id, STATION), 'Đơn ' + orderLabel(o) + ' đã ra món', isMinePay(o) ? 'thanh_toan' : null); break;
     case 'pay': state.panels[id] = { kind: 'pay', given: 0 }; render(); break;
+    case 'qr': state.panels[id] = Object.assign(state.panels[id] || { kind: 'pay', given: 0 }, { qr: true }); render(); break;
+    case 'qr-big': openQrBig(o); break;
     case 'given': state.panels[id].given = Number(b.dataset.v); render(); break;
     case 'pay-ok': {
       delete state.panels[id]; const due = dueOf(o);
@@ -269,6 +339,17 @@ async function onAction(e) {
       run(b, () => api.completePayment(id, b.dataset.m), msg, 'cho_nhan'); break;
     }
     case 'edit': state.panels[id] = { kind: 'edit' }; render(); break;
+    case 'dine': {
+      // Bấm là lưu: mang về lưu ngay; ăn tại quán cần số bàn (đơn đã có số thì lưu ngay, chưa có thì nhập số xong tự lưu)
+      const p = state.panels[id], v = b.dataset.v;
+      if (v === 'mang_ve') { if (o.dine_type !== 'mang_ve') saveDine(o, 'mang_ve', null, b); else { p.dine = 'mang_ve'; render(); } break; }
+      p.dine = 'tai_quan';
+      if (o.dine_type === 'tai_quan') { render(); break; }
+      if (o.queue_number > 0) { saveDine(o, 'tai_quan', o.queue_number, b); break; }
+      p.queue = ''; render(); const inp = document.querySelector('[data-eq="' + id + '"]'); if (inp) inp.focus();
+      break;
+    }
+    case 'opts': { const it = o.items.find(x => String(x.id) === b.dataset.item); if (it) openOptEdit(o, it); break; }
     case 'detail': openDetail(o); break;
     case 'qty': {
       const q = Number(b.dataset.q), it = o.items.find(x => String(x.id) === b.dataset.item);
@@ -309,6 +390,41 @@ function promoSummary(o) {
   const gs = new Map(); o.items.forEach(i => { if (!i.promo_group) return; const g = gs.get(i.promo_group) || { name: i.promo_name, kind: i.promo_kind, sum: 0, gift: 0 }; g.sum += i.unit_price * i.qty; if (i.promo_part === 'tang') g.gift += i.qty; gs.set(i.promo_group, g); });
   if (!gs.size) return '';
   return '<section class="dt-grp"><h3>Ưu đãi trong đơn</h3><ul>' + [...gs.values()].map(g => '<li class="dt-row dt-sub"><span>' + (g.kind === 'combo' ? '' : 'Ưu đãi ') + '<b>' + esc(BN.promoTitle(g.kind, g.name)) + '</b>' + (g.gift ? ' · tặng ' + g.gift + ' món' : '') + '</span><span class="num">' + vnd(g.sum) + '</span></li>').join('') + '</ul></section>';
+}
+/* ---------- Đổi tuỳ chọn của món đã có trong đơn (topping, đường, đá, size) ---------- */
+async function openOptEdit(o, line) {
+  let menu; try { menu = await getMenu(); } catch (e) { ui.toast(errText(e)); return; }
+  const it = menu.flatMap(c => c.items).find(x => x.id === line.menu_item_id);
+  if (!it) { ui.toast(line.item_name + ' đang hết món, không đổi tuỳ chọn được'); return; }
+  if (!it.option_groups.length) { ui.toast(line.item_name + ' không có tuỳ chọn để đổi'); return; }
+  // Đơn lưu tên lựa chọn → tìm lại lựa chọn trong menu theo tên nhóm + tên lựa chọn
+  const had = line.options || [];
+  const sel = new Map(it.option_groups.map(g => [g.id, new Set(g.choices.filter(c => had.some(x => x.group === g.title && x.choice === c.name)).map(c => c.id))]));
+  const baseNow = line.unit_price - had.reduce((t, x) => t + (x.price || 0), 0), promo = !!line.promo_group && line.promo_part !== 'mua';
+  const extra = () => it.option_groups.reduce((s, g) => s + g.choices.filter(c => sel.get(g.id).has(c.id)).reduce((t, c) => t + c.price, 0), 0);
+  const priceText = () => promo ? 'Món trong ưu đãi: tiền tuỳ chọn tính theo cài đặt của ưu đãi' : 'Mỗi phần ' + vnd(baseNow + extra()) + (line.qty > 1 ? ' × ' + line.qty + ' = ' + vnd((baseNow + extra()) * line.qty) : '');
+  ui.sheet(ui.head('Đổi tuỳ chọn · ' + esc(line.item_name), 'Đơn ' + esc(orderLabel(o)) + ' · ' + line.qty + ' phần') + '<div class="sh-body">' +
+    it.option_groups.map(g => '<fieldset class="pk-og' + (/topping/i.test(g.title) ? ' pk-og--tp' : '') + '"><legend>' + esc(g.title) + (g.min > 0 ? ' <span class="small" style="color:var(--red)">bắt buộc</span>' : g.max > 1 ? ' <span class="small muted">chọn tối đa ' + g.max + '</span>' : '') + '</legend>' +
+      g.choices.map(c => '<label class="pk-ch"><input type="' + (g.max === 1 ? 'radio' : 'checkbox') + '" name="g' + g.id + '" value="' + c.id + '"' + (sel.get(g.id).has(c.id) ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' + (c.price ? '<span class="small muted">+' + K(c.price) + '</span>' : '') + '</label>').join('') +
+      (g.min === 0 && g.max === 1 ? '<button class="link small" type="button" data-clear="' + g.id + '" style="align-self:flex-start">Bỏ chọn</button>' : '') + '</fieldset>').join('') +
+    '<p class="msg" id="oeMsg" hidden></p></div><div class="sh-foot" style="flex-direction:column;align-items:stretch;gap:6px"><span class="small muted" id="oePrice">' + priceText() + '</span><button class="btn btn-block" type="button" id="oeSave">Lưu tuỳ chọn</button></div>', sh => {
+    const paint = () => { $('#oePrice', sh).textContent = priceText(); };
+    sh.addEventListener('change', e => {
+      const inp = e.target.closest('input[name^="g"]'); if (!inp) return;
+      const g = it.option_groups.find(x => 'g' + x.id === inp.name), set = sel.get(g.id), cid = Number(inp.value);
+      if (g.max === 1) { set.clear(); if (inp.checked) set.add(cid); }
+      else if (inp.checked) { if (set.size >= g.max) { inp.checked = false; ui.toast('Chọn tối đa ' + g.max); return; } set.add(cid); } else set.delete(cid);
+      paint();
+    });
+    sh.addEventListener('click', e => { const c = e.target.closest('[data-clear]'); if (!c) return; const gid = Number(c.dataset.clear); sel.get(gid).clear(); sh.querySelectorAll('input[name="g' + gid + '"]').forEach(x => { x.checked = false; }); paint(); });
+    $('#oeSave', sh).onclick = async () => {
+      const bad = it.option_groups.find(g => sel.get(g.id).size < g.min), m = $('#oeMsg', sh);
+      if (bad) { m.textContent = 'Chọn "' + bad.title + '"'; m.hidden = false; return; }
+      const btn = $('#oeSave', sh); btn.disabled = true;
+      try { await api.staffSetItemOptions(line.id, [...sel.values()].flatMap(x => [...x])); ui.close(); ui.toast('Đã đổi tuỳ chọn ' + line.item_name); refresh(); }
+      catch (err) { m.textContent = errText(err); m.hidden = false; btn.disabled = false; }
+    };
+  });
 }
 /* ---------- Thêm món vào đơn: chọn món, tuỳ chọn, số lượng ---------- */
 function priceLabel(it) { const g = sizeGroup(it), L = g && g.choices.find(c => /^size l$/i.test(c.name)); return L ? 'M ' + K(it.price) + ' · L ' + K(it.price + L.price) : K(it.price); }
@@ -360,6 +476,20 @@ function pickOptions(o, it) {
 }
 function onCall(e) { const b = e.target.closest('[data-call]'); if (b) run(b, () => api.resolveCall(Number(b.dataset.call))); }
 
+/* ---------- In phiếu (print.js) ---------- */
+function paintPrintBtn() { const m = BNPrint.get().mode, b = $('#printBtn'); if (!b) return; b.textContent = m === 'off' ? 'Cài máy in' : 'Máy in: ' + (m === 'rawbt' ? 'RawBT' : 'trình duyệt'); b.className = 'btn btn-sm ' + (m === 'off' ? 'btn-line' : 'btn-ok'); }
+/* Phiếu của nơi này: chỉ món của bếp (hoặc pha chế), đúng thứ tự trên thẻ */
+function printFor(o, extra) {
+  if (!BN.FEATURES.print || !window.BNPrint) return false;
+  // Gộp các dòng giống hệt nhau (combo chia giá thành nhiều dòng) để phiếu gọn: 2 x Cơm heo
+  const out = [], by = new Map();
+  promoSort(o.items.filter(i => i.station === STATION)).forEach(i => {
+    const key = [i.promo_group || '', i.promo_part || '', i.item_name, JSON.stringify((i.options || []).map(x => x.choice)), i.note || ''].join('|');
+    const ex = by.get(key); if (ex) { ex.qty += i.qty; return; }
+    const c = Object.assign({}, i); by.set(key, c); out.push(c);
+  });
+  return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra));
+}
 /* ---------- Chuông báo ---------- */
 function toggleSound() {
   state.sound = !state.sound;
