@@ -19,7 +19,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Dò máy in tem (CLABEL)</h1>
+  <h1>Dò máy in Bluetooth</h1>
   <p class="small muted">Trang thử: xem máy in tem có nối thẳng với Chrome được không, và máy nhận lệnh kiểu nào.</p>
 
   <div class="step">
@@ -53,7 +53,7 @@ const SERVICES = [0xff00, 0xffe0, 0xfff0, 0x18f0, 0xae30, 0xae00, 0xff10, 0xfee7
   '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '0000ff00-0000-1000-8000-00805f9b34fb',
   '6e400001-b5a3-f393-e0a9-e50e24dcca9e', '000018f0-0000-1000-8000-00805f9b34fb'];
 let dev = null, ch = null;
-$('#support').textContent = navigator.bluetooth ? 'Chrome này hỗ trợ Bluetooth trên web ✓' : 'Trình duyệt này KHÔNG hỗ trợ Bluetooth trên web. Mở bằng Chrome.';
+$('#support').textContent = navigator.bluetooth ? 'Chrome này hỗ trợ Bluetooth trên web ✓' : (/iPhone|iPad/.test(navigator.userAgent) ? 'iPhone: Safari / Chrome không nối Bluetooth được. Cài app Bluefy (App Store) rồi mở trang này bằng Bluefy.' : 'Trình duyệt này KHÔNG hỗ trợ Bluetooth trên web. Mở bằng Chrome.');
 if (!navigator.bluetooth) $('#pick').disabled = true;
 
 $('#pick').onclick = async () => {
