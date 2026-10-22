@@ -353,13 +353,17 @@ function supabaseApi() {
     /* ---------- Kho hàng ---------- */
     async stockItems() { const c = await cl(); return await q(c.from('stock_items').select('*').order('sort_order').order('name')); },
     async saveStockItem(it) {
-      const c = await cl(); const row = stockRow(it);
+      const c = await cl(); const row = stockRow(it); if (!row.pack_id && !it.had_pack) delete row.pack_id; // chưa chạy cập nhật 17 vẫn lưu được
       if (it.id) { await q(c.from('stock_items').update(row).eq('id', it.id)); return it.id; }
       const id = (await q(c.from('stock_items').insert(row).select('id').single())).id;
       if (Number(it.qty) > 0) await api.stockMove(id, 'kiem', Number(it.qty), false, 'Tồn ban đầu');
       return id;
     },
     async deleteStockItem(id) { const c = await cl(); await q(c.from('stock_items').delete().eq('id', id)); },
+    /* Quy cách nhập hàng (chưa chạy cập nhật 17 thì trả về rỗng) */
+    async stockPacks() { try { const c = await cl(); return await q(c.from('stock_packs').select('*').order('sort_order').order('name')); } catch (e) { return null; } },
+    async saveStockPack(pk) { const c = await cl(); const row = packRow(pk); if (pk.id) { await q(c.from('stock_packs').update(row).eq('id', pk.id)); return pk.id; } return (await q(c.from('stock_packs').insert(row).select('id').single())).id; },
+    async deleteStockPack(id) { const c = await cl(); await q(c.from('stock_packs').delete().eq('id', id)); },
     stockMove: (itemId, kind, amount, inBuy, note, cost) => rpc('stock_move', { p_item: itemId, p_kind: kind, p_amount: amount, p_in_buy_unit: !!inBuy, p_note: note || null, p_cost: cost == null || cost === '' ? null : Number(cost) }),
     async stockMoves(f) {
       const c = await cl(); let b = c.from('stock_moves').select('*').order('created_at', { ascending: false }).limit((f && f.limit) || 100);
@@ -526,8 +530,9 @@ function promoRow(p) {
 function stockRow(it) {
   return { name: String(it.name || '').trim(), grp: (it.grp || '').trim() || null, use_unit: (it.use_unit || 'gói').trim(), buy_unit: (it.buy_unit || it.use_unit || 'thùng').trim(),
     per_buy: Math.max(0.001, Number(it.per_buy) || 1), min_qty: Math.max(0, Number(it.min_qty) || 0), cost_per_buy: it.cost_per_buy === '' || it.cost_per_buy == null ? null : Math.max(0, Number(it.cost_per_buy) || 0),
-    note: (it.note || '').trim() || null, is_active: it.is_active !== false, sort_order: Number(it.sort_order) || 0 };
+    note: (it.note || '').trim() || null, is_active: it.is_active !== false, sort_order: Number(it.sort_order) || 0, pack_id: it.pack_id || null };
 }
+const packRow = p => ({ name: String(p.name || '').trim(), buy_unit: String(p.buy_unit || '').trim(), use_unit: String(p.use_unit || '').trim(), per_buy: Math.max(0.001, Number(p.per_buy) || 1), sort_order: Number(p.sort_order) || 0 });
 /* Ưu đãi đang chạy cho khách — cùng hình dạng với hàm get_promotions() trong SQL */
 function buildPublicPromos(db) {
   const ok = id => db.menu_items.some(m => m.id === id && m.is_available);
@@ -738,7 +743,7 @@ function demoSeed() {
   mk(15, 'Thảo', 1, [['Kimbap chiên', 1], ['Tokbokki', 1], ['Trà đào', 2, [{ group: 'Size', choice: 'Size L', price: 5000 }]]], 'Mang ra cùng lúc giúp mình');
   mk(22, 'Vy', 2, [['Trà sữa trân châu đường đen', 1, null, 'ít đá'], ['Matcha latte', 1, [{ group: 'Đường', choice: 'Ít đường', price: 0 }]]]);
   mk(null, 'Hà', 3, [['Cơm gà viên', 1], ['Trà quất', 1, [{ group: 'Đá', choice: 'Ít đá', price: 0 }]]]); // đơn mang về (không có số thẻ)
-  demoPromoSeed(db); demoStockSeed(db);
+  demoPromoSeed(db); demoStockSeed(db); demoPackSeed(db);
   return db;
 }
 
@@ -755,6 +760,12 @@ function demoPromoSeed(db) {
   return db;
 }
 /* Kho mẫu của bản xem thử */
+function demoPackSeed(db) {
+  db.stock_packs = [['Thùng 24 gói', 'thùng', 'gói', 24], ['Thùng 4 can', 'thùng', 'can', 4], ['Can (nhập, dùng theo can)', 'can', 'can', 1], ['Bao 25 kg', 'bao', 'kg', 25], ['Thùng 48 hộp', 'thùng', 'hộp', 48], ['Thùng 20 cây', 'thùng', 'cây', 20]].map(([name, b, u, n], k) => ({ id: k + 1, name, buy_unit: b, use_unit: u, per_buy: n, sort_order: k + 1 }));
+  db.seq.stock_packs = 7;
+  (db.stock_items || []).forEach(it => { const pk = db.stock_packs.find(p => p.buy_unit === it.buy_unit && p.use_unit === it.use_unit && Number(p.per_buy) === Number(it.per_buy)); it.pack_id = pk ? pk.id : null; });
+  return db;
+}
 function demoStockSeed(db) {
   db.stock_items = []; db.stock_moves = []; db.seq.stock_moves = 1;
   [['Mì Hàn Quốc', 'Đồ khô', 'gói', 'thùng', 24, 30, 10, 312000], ['Đường pha chế', 'Nguyên liệu pha chế', 'can', 'can', 1, 3, 2, 95000], ['Dầu ăn', 'Gia vị', 'can', 'thùng', 4, 2, 1, 420000],
@@ -770,6 +781,7 @@ function demoApi() {
     if (!cache || !cache.menu_items) { cache = demoSeed(); store.set(DEMO_KEY, cache); }
     if (!cache.promotions) { demoPromoSeed(cache); store.set(DEMO_KEY, cache); } // dữ liệu xem thử cũ: thêm ưu đãi mẫu
     if (!cache.stock_items) { demoStockSeed(cache); store.set(DEMO_KEY, cache); } // thêm kho mẫu
+    if (!cache.stock_packs) { demoPackSeed(cache); store.set(DEMO_KEY, cache); } // thêm quy cách mẫu
     return cache;
   };
   const save = () => {
@@ -992,6 +1004,17 @@ function demoApi() {
       if (!it.id && Number(it.qty) > 0) await api.stockMove(id, 'kiem', Number(it.qty), false, 'Tồn ban đầu');
       return id;
     },
+    async stockPacks() { need(); return load().stock_packs.slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi')).map(x => Object.assign({}, x)); },
+    async saveStockPack(pk) {
+      need('owner');
+      return tx(db => {
+        const row = packRow(pk);
+        if (db.stock_packs.some(x => x.name === row.name && x.id !== pk.id)) fail('Đã có quy cách tên này.');
+        if (pk.id) { Object.assign(db.stock_packs.find(x => x.id === pk.id), row); db.stock_items.forEach(it => { if (it.pack_id === pk.id) Object.assign(it, { buy_unit: row.buy_unit, use_unit: row.use_unit, per_buy: row.per_buy }); }); return pk.id; }
+        const id = db.seq.stock_packs++; db.stock_packs.push(Object.assign({ id }, row)); return id;
+      });
+    },
+    async deleteStockPack(id) { need('owner'); tx(db => { db.stock_packs = db.stock_packs.filter(x => x.id !== id); db.stock_items.forEach(it => { if (it.pack_id === id) it.pack_id = null; }); }); },
     async deleteStockItem(id) { need('owner'); tx(db => { db.stock_items = db.stock_items.filter(x => x.id !== id); db.stock_moves = db.stock_moves.filter(m => m.item_id !== id); }); },
     async stockMove(itemId, kind, amount, inBuy, note, cost) {
       const e = need();
