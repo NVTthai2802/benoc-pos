@@ -138,10 +138,10 @@ function otherHtml(o) {
   return '<p class="kc-other"><b>' + STATIONS[OTHER] + ':</b> ' + n + ' món (' + esc(items.map(i => i.item_name + (i.promo_part === 'tang' ? ' (tặng)' : '')).join(', ')) + ') ' + partStatus(p) + '</p>';
 }
 /* ---------- VietQR: mã chuyển khoản đúng số tiền của đơn ---------- */
-const qrNote = o => 'BENOC ' + (isDelivery(o) ? 'GIAO ' : isTakeaway(o) ? 'MV ' : 'SO ' + o.queue_number + ' ') + (isTakeaway(o) ? (o.customer_name || '') + ' ' : '') + String(o.id).replace(/-/g, '').slice(0, 4);
+const qrNote = o => BN.qrNoteFor(o); // theo mẫu nội dung chủ quán đặt trong Cài đặt
 const qrCache = new Map(); // khoá "số tiền|nội dung" → ảnh
 function qrImg(o, due) {
-  const key = due + '|' + qrNote(o) + '|' + BN.BANK.bin + BN.BANK.account;
+  const key = due + '|' + qrNote(o) + '|' + BN.BANK.bin + BN.BANK.account + BN.BANK.note;
   if (qrCache.has(key)) return qrCache.get(key);
   qrCache.set(key, null);
   BN.qrDataUrl(BN.vietQR(due, qrNote(o)), 360).then(u => { qrCache.set(key, u); render(); }).catch(() => { qrCache.delete(key); ui.toast('Không tạo được mã QR, kiểm tra mạng'); });

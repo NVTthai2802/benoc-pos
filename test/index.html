@@ -966,7 +966,7 @@ function orderCard(o) {
 }
 /* Chuyển khoản bằng VietQR: đúng số tiền còn phải trả, nội dung giống màn hình quầy */
 const qrOpen = new Set(), qrImgs = new Map();
-const custQrNote = (o, d) => 'BENOC ' + (d.dine_type === 'giao_hang' ? 'GIAO ' : d.dine_type === 'mang_ve' ? 'MV ' : 'SO ' + d.queue_number + ' ') + (d.dine_type !== 'tai_quan' ? (d.customer_name || '') + ' ' : '') + String(o.id || '').replace(/-/g, '').slice(0, 4);
+const custQrNote = (o, d) => BN.qrNoteFor({ dine_type: d.dine_type, queue_number: d.queue_number, customer_name: d.customer_name, id: o.id });
 function payQrHtml(o, d) {
   if (!BN.FEATURES.vietqr) return '';
   const due = d.total - (d.paid_amount || 0); if (!(due > 0) || !o.id) return '';
