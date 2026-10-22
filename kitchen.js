@@ -40,6 +40,7 @@ function colOf(o) {
 }
 
 function start() {
+  if (BN.FEATURES.vietqr) BN.loadBank().then(() => { qrCache.clear(); render(); }); // tài khoản nhận tiền chủ quán đã cài
   const role = state.session.employee.role;
   document.documentElement.style.setProperty('--ncol', COLS.length);
   $('#app').innerHTML =
@@ -140,7 +141,7 @@ function otherHtml(o) {
 const qrNote = o => 'BENOC ' + (isDelivery(o) ? 'GIAO ' : isTakeaway(o) ? 'MV ' : 'SO ' + o.queue_number + ' ') + (isTakeaway(o) ? (o.customer_name || '') + ' ' : '') + String(o.id).replace(/-/g, '').slice(0, 4);
 const qrCache = new Map(); // khoá "số tiền|nội dung" → ảnh
 function qrImg(o, due) {
-  const key = due + '|' + qrNote(o);
+  const key = due + '|' + qrNote(o) + '|' + BN.BANK.bin + BN.BANK.account;
   if (qrCache.has(key)) return qrCache.get(key);
   qrCache.set(key, null);
   BN.qrDataUrl(BN.vietQR(due, qrNote(o)), 360).then(u => { qrCache.set(key, u); render(); }).catch(() => { qrCache.delete(key); ui.toast('Không tạo được mã QR, kiểm tra mạng'); });
