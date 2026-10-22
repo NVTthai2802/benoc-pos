@@ -1,14 +1,15 @@
 /* =====================================================================
-   IN PHIẾU / TEM DÁN LY (máy in nhiệt Bluetooth trên Android)
-   - Mỗi máy (điện thoại) chọn một việc: in PHIẾU MÓN hoặc in TEM DÁN LY.
-     Ví dụ: bếp 1 máy in phiếu; quầy pha chế 1 máy in phiếu + 1 máy in tem.
+   IN PHIẾU MÓN + TEM DÁN LY (máy in nhiệt Bluetooth trên Android)
+   - Mỗi điện thoại cài 2 việc độc lập: PHIẾU MÓN và TEM DÁN LY (mỗi việc bật / tắt riêng).
+     Ví dụ quầy pha chế 1 điện thoại: phiếu qua RawBT (máy MPT-II) + tem Bluetooth
+     trực tiếp (máy CLABEL CT221B) → bấm Nhận đơn là cả hai máy cùng in.
    - Chỉ in khi có người bấm "Nhận đơn" (không in đơn ảo khách vừa gửi).
      Máy bấm Nhận đơn in ngay; các máy khác của cùng nơi tự in khi thấy đơn
      vừa được nhận (mỗi máy chỉ in một lần cho mỗi lần nhận).
    - Phiếu / tem vẽ thành ảnh (tiếng Việt có dấu luôn đúng), gửi sang máy in bằng:
-       * RawBT (khuyên dùng): app miễn phí trên Android, nối Bluetooth với máy in.
-         Phiếu: lệnh ESC/POS. Tem: lệnh TSPL (máy in tem) hoặc ESC/POS.
-       * Trình duyệt: hộp thoại in của Android (máy in có dịch vụ in riêng).
+       * RawBT: app trên Android, nối Bluetooth với MỘT máy in mặc định.
+       * Bluetooth trực tiếp: Chrome nối thẳng máy in tem (BLE), lệnh TSPL.
+       * Trình duyệt: hộp thoại in của Android.
    - Cài đặt lưu riêng trên từng máy.
    ===================================================================== */
 (function () {
@@ -16,13 +17,19 @@
 const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery } = BN; // (không in mã đơn, không in giá)
 const STATION = window.BENOC_STATION || 'bep';
 const KEY = 'printer.' + STATION;
-const DEF = { mode: 'off', job: 'phieu', width: 58, copies: 1, big: true, label: '40x30', lang: 'tspl', inv: false, auto: true };
-const get = () => Object.assign({}, DEF, store.get(KEY, {}));
+/* mode = cách in phiếu món, tmode = cách in tem dán ly ('off' | 'rawbt' | 'ble' | 'browser') */
+const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, auto: true };
+function get() {
+  const raw = store.get(KEY, {}), s = Object.assign({}, DEF, raw);
+  if (raw.job) { if (raw.job === 'tem') { s.tmode = raw.mode || 'off'; s.mode = 'off'; } delete s.job; } // cài đặt bản trước (1 việc / máy)
+  return s;
+}
 const save = s => store.set(KEY, s);
 const DOTS = { 58: 384, 80: 576 };   // số chấm in mỗi dòng
 /* Khổ tem (máy 203 dpi = 8 chấm/mm). "58" = cuộn giấy dán liên tục 58 mm, mỗi tem cao 30 mm */
-const LABELS = { '40x30': { w: 40, h: 30, gap: 2 }, '50x30': { w: 50, h: 30, gap: 2 }, '58': { w: 48, h: 30, gap: 0, roll: true } };
+const LABELS = { '40x30': { w: 40, h: 30, gap: 2 }, '50x30': { w: 50, h: 30, gap: 2 }, '50x40': { w: 50, h: 40, gap: 2 }, '58': { w: 48, h: 30, gap: 0, roll: true } };
 const labelOf = set => LABELS[set.label] || LABELS['40x30'];
+const jobs = set => [set.mode !== 'off' && 'phieu', set.tmode !== 'off' && 'tem'].filter(Boolean);
 
 /* ---------- Vẽ phiếu ---------- */
 function wrap(ctx, text, maxW) {
@@ -126,6 +133,7 @@ function labelCanvas(o, cup, set) {
     if (!fits && k > 0.61) continue;
     ops.push({ t: hhmm(Date.now()), font: F(16, false), y: H - pad, right: true });
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
+    if (set.offx < 0) ctx.translate(Math.round(set.offx * 8), 0); // căn lề sang trái
     ops.forEach(op => {
       if (op.rule) { ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); return; }
       ctx.font = op.font; ctx.textBaseline = 'alphabetic'; ctx.textAlign = op.right ? 'right' : 'left';
@@ -145,9 +153,10 @@ const ascii = s => Array.from(s, c => c.charCodeAt(0));
 /* Lệnh TSPL cho máy in tem (Xprinter, TSC, Gprinter…): mỗi tem một lần CLS / BITMAP / PRINT */
 function tspl(cvs, set) {
   const L = labelOf(set), out = ascii('SIZE ' + L.w + ' mm,' + L.h + ' mm\r\nGAP ' + L.gap + ' mm,0 mm\r\nDIRECTION 1\r\nREFERENCE 0,0\r\n');
+  const x = Math.max(0, Math.round((set.offx || 0) * 8)); // căn lề: dịch tem (mm)
   cvs.forEach(cv => {
     const b = bits(cv);
-    out.push(...ascii('CLS\r\nBITMAP 0,0,' + b.bw + ',' + b.H + ',0,'));
+    out.push(...ascii('CLS\r\nBITMAP ' + x + ',0,' + b.bw + ',' + b.H + ',0,'));
     // TSPL: bit 0 = in đen (ngược với ESC/POS). "Đảo màu" cho máy in ngược.
     for (let j = 0; j < b.data.length; j++) out.push(set.inv ? b.data[j] : (~b.data[j]) & 255);
     out.push(...ascii('\r\nPRINT 1,1\r\n'));
@@ -180,36 +189,104 @@ function browserPrint(imgs, page) {
   setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { ui.toast('Không mở được hộp thoại in'); } setTimeout(() => f.remove(), 60000); }, 300);
 }
 
-/* Lệnh in cho một đơn theo việc của máy này. Trả về null nếu không có gì để in. */
-function job(o, items, extra, set) {
-  set = set || get();
-  if (set.mode === 'off' || !items.length) return null;
-  if (set.job === 'tem') {
-    const cvs = cups(items).map(c => labelCanvas(o, c, set));
-    const L = labelOf(set);
-    return set.mode === 'rawbt' ? { url: rawbtUrl(set.lang === 'escpos' || L.roll ? escposLabels(cvs, set) : tspl(cvs, set)) }
-      : { imgs: cvs.map(c => c.toDataURL('image/png')), page: { w: L.w, h: L.h } };
+/* ---------- Bluetooth trực tiếp (Chrome nối thẳng máy in tem BLE) ---------- */
+const BLE_SVCS = ['49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '6e400001-b5a3-f393-e0a9-e50e24dcca9e', 0xff00, 0xffe0, 0xfff0, 0x18f0, 0xae30, 0xae00];
+const ble = { dev: null, ch: null, q: Promise.resolve(), subs: [], busy: false };
+const bleOk = () => !!(ble.ch && ble.dev && ble.dev.gatt.connected);
+const bleName = () => (ble.dev && ble.dev.name) || store.get('ble.' + STATION, '') || '';
+const bleEmit = () => ble.subs.forEach(f => { try { f(bleOk()); } catch (e) { /* bỏ qua */ } });
+async function bleOpen() {
+  const g = await ble.dev.gatt.connect();
+  const writable = [];
+  for (const sv of await g.getPrimaryServices()) {
+    let cs = []; try { cs = await sv.getCharacteristics(); } catch (e) { continue; }
+    cs.forEach(c => { if (c.properties.write || c.properties.writeWithoutResponse) writable.push(c); });
   }
+  ble.ch = writable.find(c => /49535343-8841|ff02|ae01|2af1|fff2|ffe1|bef8d6c9/i.test(c.uuid)) || writable[0] || null;
+  if (!ble.ch) throw new Error('Máy này không nhận lệnh in qua Bluetooth');
+  store.set('ble.' + STATION, ble.dev.name || ''); bleEmit();
+}
+async function bleAttach(dev) {
+  if (ble.dev !== dev) { ble.dev = dev; dev.addEventListener('gattserverdisconnected', () => { ble.ch = null; bleEmit(); }); }
+  await bleOpen();
+}
+/* Chọn máy in tem (Chrome bắt buộc người dùng bấm) */
+async function bleConnect() {
+  if (!navigator.bluetooth) throw new Error('Trình duyệt này không nối Bluetooth được. Mở bằng Chrome.');
+  const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: BLE_SVCS });
+  await bleAttach(dev); return dev.name;
+}
+/* Mở lại trang: nối lại máy đã chọn trước (nếu Chrome cho), không thì phải bấm Kết nối */
+async function bleRestore() {
+  try {
+    if (bleOk()) return true;
+    if (ble.dev) { await bleOpen(); return true; }
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return false;
+    const ds = await navigator.bluetooth.getDevices(), name = bleName();
+    const d = ds.find(x => x.name === name) || (ds.length === 1 ? ds[0] : null); if (!d) return false;
+    await Promise.race([bleAttach(d), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
+    return true;
+  } catch (e) { return false; }
+}
+/* Gửi lệnh theo hàng đợi, từng gói nhỏ có xác nhận (không mất dữ liệu) */
+function bleSend(u8) {
+  const run = async () => {
+    if (window.BENOC_BLE_HOOK) return window.BENOC_BLE_HOOK(u8);
+    if (!bleOk()) { if (!ble.dev) throw Object.assign(new Error('Máy tem chưa kết nối'), { code: 'NO_BLE' }); await bleOpen(); }
+    ble.busy = true;
+    try { for (let i = 0; i < u8.length; i += 180) await ble.ch.writeValueWithResponse(u8.subarray(i, i + 180)); }
+    finally { ble.busy = false; }
+  };
+  const p = ble.q.then(run, run); ble.q = p.catch(() => {}); return p;
+}
+
+/* Lệnh in của một việc (phiếu / tem) cho một đơn. null = không có gì để in. */
+function build(kind, o, items, extra, set) {
+  if (!items.length) return null;
+  if (kind === 'tem') {
+    if (set.tmode === 'off') return null;
+    const cvs = cups(items).map(c => labelCanvas(o, c, set)), L = labelOf(set);
+    if (set.tmode === 'ble') return { ble: tspl(cvs, set) };
+    if (set.tmode === 'rawbt') return { url: rawbtUrl(set.lang === 'escpos' || L.roll ? escposLabels(cvs, set) : tspl(cvs, set)) };
+    return { imgs: cvs.map(c => c.toDataURL('image/png')), page: { w: L.w, h: L.h } };
+  }
+  if (set.mode === 'off') return null;
   const cv = ticketCanvas(o, items, extra, set);
   return set.mode === 'rawbt' ? { url: rawbtUrl(escpos(cv, set.copies)) }
+    : set.mode === 'ble' ? { ble: escpos(cv, set.copies) }
     : { imgs: Array.from({ length: set.copies || 1 }, () => cv.toDataURL('image/png')), page: { w: set.width } };
 }
-function send(j) { if (!j) return false; if (j.url) go(j.url); else browserPrint(j.imgs, j.page); return true; }
-function printTicket(o, items, extra, set) { return send(job(o, items, extra, set)); }
-/* Máy khác bấm Nhận đơn: thử in luôn (không có thao tác bấm, Chrome có thể chặn mở app RawBT).
-   Mở được RawBT thì trang bị ẩn đi trong chốc lát → coi như đã in. Không thì báo để người làm bấm in. */
-function tryAuto(o, items, extra, set) {
+function bleOut(j, kind) { return bleSend(j.ble).catch(e => { ui.toast((kind === 'tem' ? 'Chưa in được tem: ' : 'Chưa in được phiếu: ') + (e.code === 'NO_BLE' ? 'bấm Kết nối máy tem' : e.message)); if (window.BNPrintFail) window.BNPrintFail(kind, e); throw e; }); }
+/* In các việc đang bật (hoặc chỉ các việc trong only). Bluetooth gửi trước (chạy nền),
+   rồi mới mở RawBT / hộp thoại in. Trả về số việc đã gửi. */
+function printTicket(o, items, extra, set, only) {
   set = set || get();
-  const j = job(o, items, extra, set);
-  if (!j) return Promise.resolve('none');
-  if (!j.url || !set.auto) return Promise.resolve('manual');
-  return new Promise(ok => {
-    let done = false;
-    const hid = () => { if (document.hidden && !done) { done = true; ok('printed'); } };
-    document.addEventListener('visibilitychange', hid);
-    try { go(j.url); } catch (e) { /* bị chặn */ }
-    setTimeout(() => { document.removeEventListener('visibilitychange', hid); if (!done) { done = true; ok(window.BENOC_PRINT_HOOK ? 'printed' : 'manual'); } }, 1800);
-  });
+  const list = (only || jobs(set)).map(k => ({ k, j: build(k, o, items, extra, set) })).filter(x => x.j);
+  list.filter(x => x.j.ble).forEach(x => { bleOut(x.j, x.k).catch(() => {}); });
+  list.filter(x => !x.j.ble).forEach(x => { if (x.j.url) go(x.j.url); else browserPrint(x.j.imgs, x.j.page); });
+  return list.length;
+}
+/* Máy khác bấm Nhận đơn: tự in. Bluetooth trực tiếp in được ngay. RawBT có thể bị Chrome chặn
+   (không có thao tác bấm): mở được RawBT thì trang bị ẩn đi chốc lát → coi như đã in.
+   Trả về danh sách việc còn phải bấm in tay. */
+async function tryAuto(o, items, extra, set) {
+  set = set || get();
+  const manual = [];
+  if (!set.auto) return jobs(set);
+  for (const k of jobs(set)) {
+    const j = build(k, o, items, extra, set); if (!j) continue;
+    if (j.ble) { try { await bleOut(j, k); } catch (e) { manual.push(k); } continue; }
+    if (!j.url) { manual.push(k); continue; }
+    const ok = await new Promise(res => {
+      let done = false;
+      const hid = () => { if (document.hidden && !done) { done = true; res(true); } };
+      document.addEventListener('visibilitychange', hid);
+      try { go(j.url); } catch (e) { /* bị chặn */ }
+      setTimeout(() => { document.removeEventListener('visibilitychange', hid); if (!done) { done = true; res(!!window.BENOC_PRINT_HOOK); } }, 1800);
+    });
+    if (!ok) manual.push(k);
+  }
+  return manual;
 }
 
 /* ---------- Cài đặt máy in (từng máy) ---------- */
@@ -221,41 +298,68 @@ function sample() {
 function openSettings(onChange) {
   let s = get();
   const PLACE = STATION === 'pha_che' ? 'quầy pha chế' : 'bếp';
-  const preview = () => { const x = sample(); if (s.job === 'tem') return cups(x.items).slice(0, 2).map(c => labelCanvas(x.o, c, s).toDataURL('image/png')); return [ticketCanvas(x.o, x.items, { minutes: 10 }, s).toDataURL('image/png')]; };
   const seg = (attr, cur, list) => '<div class="seg2" style="grid-template-columns:repeat(' + list.length + ',1fr)">' + list.map(([v, t]) => '<button type="button" data-' + attr + '="' + v + '" aria-pressed="' + (String(cur) === String(v)) + '">' + t + '</button>').join('') + '</div>';
   const radios = (name, cur, list) => '<div class="pr-modes">' + list.map(([k, t, d]) => '<label class="check"><input type="radio" name="' + name + '" value="' + k + '"' + (cur === k ? ' checked' : '') + '><span><b>' + t + '</b><small>' + d + '</small></span></label>').join('') + '</div>';
+  const prevT = () => { const x = sample(); return '<div class="pr-prev"><img src="' + ticketCanvas(x.o, x.items, { minutes: 10 }, s).toDataURL('image/png') + '" alt="Phiếu mẫu" style="width:' + (s.width === 80 ? 288 : 220) + 'px"></div>'; };
+  const prevL = () => { const x = sample(); return '<div class="pr-prev">' + cups(x.items).slice(0, 2).map(c => '<img src="' + labelCanvas(x.o, c, s).toDataURL('image/png') + '" alt="Tem mẫu" style="width:' + labelOf(s).w * 4.4 + 'px">').join('') + '</div>'; };
+  const bleBox = () => '<div class="pr-ble"><span class="grow">' + (bleOk() ? '<b class="ok">● Đã nối</b> ' + esc(bleName()) : bleName() ? '<b class="bad">● Chưa nối</b> ' + esc(bleName()) : 'Chưa chọn máy in tem') + '</span><button class="btn btn-sm" type="button" id="prBle">' + (bleName() ? 'Kết nối lại' : 'Chọn máy in tem') + '</button></div>' +
+    '<p class="small muted" style="margin:0">Tắt app CLABEL trước (máy tem chỉ nối được một nơi). Bật Bluetooth và Vị trí, dùng Chrome.</p>';
   const body = () => '' +
-    '<div class="field">Máy in này in gì</div>' + seg('job', s.job, [['phieu', 'Phiếu món'], ['tem', 'Tem dán ly']]) +
-    '<p class="small muted" style="margin:0">' + (s.job === 'tem' ? 'Mỗi ly một tem: bàn / mang về, tên khách, tên món, size, đường, đá, topping, ghi chú.' : 'Phiếu các món của ' + PLACE + ' trong đơn (không in giá, không in mã đơn).') + '</p>' +
-    '<div class="field">Cách in</div>' + radios('prm', s.mode,
-      [['rawbt', 'Qua app RawBT (khuyên dùng)', 'Máy in nhiệt Bluetooth trên Android. Cài app RawBT từ Play Store, mở app chọn máy in Bluetooth một lần.'],
-       ['browser', 'Hộp thoại in của trình duyệt', 'Khi máy in có dịch vụ in riêng trên Android (ứng dụng của hãng máy in).'],
-       ['off', 'Không in', 'Máy này không in.']]) +
-    (s.job === 'tem'
-      ? '<div class="field">Khổ tem</div>' + seg('lb', s.label, [['40x30', '40 × 30 mm'], ['50x30', '50 × 30 mm'], ['58', 'Cuộn 58 mm']]) +
-        (s.mode === 'rawbt' && s.label !== '58'
-          ? '<div class="field">Lệnh máy in</div>' + seg('lang', s.lang, [['tspl', 'TSPL (máy in tem)'], ['escpos', 'ESC/POS']]) +
-            (s.lang === 'tspl' ? '<label class="check"><input type="checkbox" id="prInv"' + (s.inv ? ' checked' : '') + '><span><b>Đảo màu</b><small>Bật nếu in thử ra tem đen kín, chữ trắng</small></span></label>' : '')
-          : '')
-      : '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
-        '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
-        '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng bếp</small></span></label></div>') +
-    '<label class="check"><input type="checkbox" id="prAuto"' + (s.auto ? ' checked' : '') + '><span><b>Tự in khi máy khác bấm Nhận đơn</b><small>Mở sẵn màn hình ' + PLACE + ' trên máy này. Nếu điện thoại chặn tự in, màn hình hiện nút để bấm in.</small></span></label>' +
-    '<div class="field">Xem trước</div><div class="pr-prev">' + preview().map(u => '<img src="' + u + '" alt="Mẫu" style="width:' + (s.job === 'tem' ? labelOf(s).w * 4.4 : s.width === 80 ? 288 : 220) + 'px">').join('') + '</div>';
-  ui.sheet(ui.head('Máy in ' + PLACE, 'Cài riêng trên máy này') + '<div class="sh-body pr-set" id="prBody">' + body() + '</div>' +
-    '<div class="sh-foot"><button class="btn btn-line" type="button" id="prTest">In thử</button><button class="btn grow" type="button" id="prSave">Lưu</button></div>', sh => {
+    '<section class="pr-sec"><h3>Phiếu món</h3><p class="small muted" style="margin:0 0 6px">Phiếu các món của ' + PLACE + ' (không in giá, không in mã đơn) để người làm xem.</p>' +
+    radios('prm', s.mode, [['rawbt', 'Qua app RawBT', 'Máy in mặc định trong RawBT (ví dụ MPT-II). Mở RawBT chọn máy một lần.'], ['browser', 'Hộp thoại in của trình duyệt', 'Máy in có ứng dụng in riêng của hãng.'], ['off', 'Không in phiếu', 'Máy này không in phiếu.']]) +
+    (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
+      '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
+      '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' + prevT() +
+      '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="phieu">In thử phiếu</button></div>' : '') + '</section>' +
+    '<section class="pr-sec"><h3>Tem dán ly</h3><p class="small muted" style="margin:0 0 6px">Mỗi ly một tem: bàn / mang về, tên khách, món, size, đường, đá, topping, ghi chú.</p>' +
+    radios('prt', s.tmode, [['ble', 'Bluetooth trực tiếp (khuyên dùng cho máy tem)', 'Chrome nối thẳng máy in tem (CLABEL CT221B…). Dùng được cùng lúc với RawBT in phiếu.'], ['rawbt', 'Qua app RawBT', 'Chỉ khi điện thoại này không dùng RawBT để in phiếu.'], ['off', 'Không in tem', 'Máy này không in tem.']]) +
+    (s.tmode !== 'off'
+      ? (s.tmode === 'ble' ? bleBox() : '') +
+        '<div class="field">Khổ tem</div>' + seg('lb', s.label, [['40x30', '40×30'], ['50x30', '50×30'], ['50x40', '50×40'], ['58', 'Cuộn 58']]) +
+        (s.tmode === 'rawbt' && s.label !== '58' ? '<div class="field">Lệnh máy in</div>' + seg('lang', s.lang, [['tspl', 'TSPL (máy in tem)'], ['escpos', 'ESC/POS']]) : '') +
+        (s.label !== '58' ? '<div class="field">Căn lề ngang</div><div class="pr-off"><button class="btn btn-line btn-sm" type="button" data-off="-1" aria-label="Dịch sang trái">◀ Trái</button><b class="num">' + (s.offx > 0 ? '+' : '') + s.offx + ' mm</b><button class="btn btn-line btn-sm" type="button" data-off="1" aria-label="Dịch sang phải">Phải ▶</button></div>' +
+          '<p class="small muted" style="margin:0">In thử thấy chữ lệch khỏi tem thì dịch về phía ngược lại, mỗi lần 1 mm, rồi in thử lại.</p>' +
+          '<label class="check"><input type="checkbox" id="prInv"' + (s.inv ? ' checked' : '') + '><span><b>Đảo màu</b><small>Bật nếu in ra tem đen kín, chữ trắng</small></span></label>' : '') +
+        prevL() + '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="tem">In thử tem</button></div>'
+      : '') + '</section>' +
+    '<label class="check"><input type="checkbox" id="prAuto"' + (s.auto ? ' checked' : '') + '><span><b>Tự in khi máy khác bấm Nhận đơn</b><small>Mở sẵn màn hình ' + PLACE + ' trên máy này.</small></span></label>';
+  ui.sheet(ui.head('Máy in ' + PLACE, 'Cài riêng trên điện thoại này') + '<div class="sh-body pr-set" id="prBody">' + body() + '</div>' +
+    '<div class="sh-foot"><button class="btn btn-block" type="button" id="prSave">Lưu</button></div>', sh => {
     const q = id => sh.querySelector(id);
     const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; };
     const redraw = () => { read(); const top = q('#prBody').scrollTop; q('#prBody').innerHTML = body(); q('#prBody').scrollTop = top; };
-    sh.addEventListener('change', e => { if (e.target.name === 'prm') s.mode = e.target.value; redraw(); });
-    sh.addEventListener('click', e => {
-      const t = e.target.closest('[data-job],[data-w],[data-lb],[data-lang]');
-      if (t) { if (t.dataset.job) s.job = t.dataset.job; if (t.dataset.w) s.width = Number(t.dataset.w); if (t.dataset.lb) s.label = t.dataset.lb; if (t.dataset.lang) s.lang = t.dataset.lang; redraw(); return; }
-      if (e.target.closest('#prTest')) { read(); const x = sample(); if (s.mode === 'off') { ui.toast('Chọn cách in trước'); return; } printTicket(x.o, s.job === 'tem' ? x.items.slice(0, 1).map(i => Object.assign({}, i, { qty: 1 })) : x.items, { minutes: 10 }, s); }
-      if (e.target.closest('#prSave')) { read(); save(s); ui.close(); ui.toast(s.mode === 'off' ? 'Máy này không in' : 'Đã lưu. Có người bấm Nhận đơn là máy này in ' + (s.job === 'tem' ? 'tem dán ly.' : 'phiếu.')); if (onChange) onChange(s); }
+    const unsub = () => { ble.subs = ble.subs.filter(f => f !== onBle); };
+    const onBle = () => { if (!document.body.contains(sh)) { unsub(); return; } redraw(); };
+    ble.subs.push(onBle);
+    sh.addEventListener('change', e => { if (e.target.name === 'prm') s.mode = e.target.value; if (e.target.name === 'prt') s.tmode = e.target.value; redraw(); });
+    sh.addEventListener('click', async e => {
+      const t = e.target.closest('[data-w],[data-lb],[data-lang],[data-off]');
+      if (t) { if (t.dataset.w) s.width = Number(t.dataset.w); if (t.dataset.lb) s.label = t.dataset.lb; if (t.dataset.lang) s.lang = t.dataset.lang; if (t.dataset.off) s.offx = Math.max(-10, Math.min(10, (s.offx || 0) + Number(t.dataset.off))); redraw(); return; }
+      if (e.target.closest('#prBle')) {
+        const b = e.target.closest('#prBle'); b.disabled = true;
+        try { const n = await bleConnect(); ui.toast('Đã nối máy in tem ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
+        redraw(); return;
+      }
+      const tb = e.target.closest('[data-test]');
+      if (tb) { read(); const x = sample(), k = tb.dataset.test; printTicket(x.o, k === 'tem' ? x.items.slice(0, 1).map(i => Object.assign({}, i, { qty: 1 })) : x.items, { minutes: 10 }, s, [k]); return; }
+      if (e.target.closest('#prSave')) {
+        read(); save(s); unsub(); ui.close();
+        const on = jobs(s);
+        ui.toast(!on.length ? 'Máy này không in' : 'Đã lưu. Bấm Nhận đơn là máy này in ' + on.map(k => k === 'tem' ? 'tem dán ly' : 'phiếu').join(' + ') + '.');
+        if (onChange) onChange(s);
+      }
     });
   });
 }
 
-window.BNPrint = { get, save, ticketCanvas, labelCanvas, cups, escpos, tspl, rawbtUrl, job, printTicket, tryAuto, openSettings };
+/* Chữ trên nút Máy in */
+function label(set) {
+  set = set || get();
+  const on = jobs(set);
+  if (!on.length) return '';
+  return on.map(k => k === 'tem' ? 'tem' : 'phiếu').join(' + ');
+}
+
+window.BNPrint = { get, save, jobs, label, ticketCanvas, labelCanvas, cups, escpos, tspl, rawbtUrl, build, printTicket, tryAuto, openSettings,
+  ble: { ok: bleOk, has: () => !!ble.dev || !!window.BENOC_BLE_HOOK, name: bleName, connect: bleConnect, restore: bleRestore, send: bleSend, on: f => { ble.subs.push(f); } } };
 })();
