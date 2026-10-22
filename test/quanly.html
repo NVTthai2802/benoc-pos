@@ -128,6 +128,7 @@
 <script src="config.js"></script>
 <script src="seed.js"></script>
 <script src="core.js"></script>
+<script src="report.js"></script>
 <script src="staff.js"></script>
 <script>
 (function () {
@@ -280,6 +281,29 @@ async function renderInvoices(box) {
   box.innerHTML = head(list.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th>Số</th><th>Khách</th><th>Món</th><th class="r">Tổng</th><th>Trả bằng</th></tr></thead><tbody>' + list.map(invRow).join('') + '</tbody></table></div>' : '<p class="empty">Không có hoá đơn nào trong ngày này.</p>', list);
   wire();
 }
+/* Xuất báo cáo Excel 1 tháng (doanh thu, món, hoá đơn, kho, nhân viên, lương) */
+function openExport() {
+  const now = new Date(), ym = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  let pick = ym(now);
+  ui.sheet(ui.head('Xuất báo cáo Excel', 'Báo cáo 1 tháng để tổng hợp cuối tháng') + '<div class="sh-body">' +
+    '<div class="chips">' + [[ym(now), 'Tháng này'], [ym(new Date(now.getFullYear(), now.getMonth() - 1, 1)), 'Tháng trước']].map(([v, t]) => '<button class="chipbtn" type="button" data-ym="' + v + '" aria-pressed="' + (v === pick) + '">' + t + ' (' + v.slice(5) + '/' + v.slice(0, 4) + ')</button>').join('') + '</div>' +
+    '<label class="field" for="xlsMonth">Hoặc chọn tháng<input id="xlsMonth" type="month" value="' + pick + '" max="' + ym(now) + '"></label>' +
+    '<p class="small muted" style="margin:0">File gồm: Tổng quan · Theo ngày · Theo tuần · Theo giờ · Món bán chạy · Ưu đãi · Hoá đơn · Kho hàng · Nhập xuất kho · Nhân viên & lương · Ca làm. Mở được bằng Excel, Google Trang tính, WPS trên điện thoại.</p>' +
+    '<p class="msg" id="xlsMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="xlsGo">Tạo file Excel</button></div>', sh => {
+    const setPick = v => { pick = v; $('#xlsMonth', sh).value = v; $$('[data-ym]', sh).forEach(b => b.setAttribute('aria-pressed', b.dataset.ym === v)); };
+    sh.addEventListener('click', e => { const b = e.target.closest('[data-ym]'); if (b) setPick(b.dataset.ym); });
+    $('#xlsMonth', sh).onchange = e => { if (e.target.value) setPick(e.target.value); };
+    $('#xlsGo', sh).onclick = async () => {
+      const btn = $('#xlsGo', sh), m = $('#xlsMsg', sh); btn.disabled = true; m.hidden = true;
+      try {
+        const [y, mo] = pick.split('-').map(Number);
+        const r = await BNReport.build(new Date(y, mo - 1, 1), t => { btn.textContent = t; });
+        BNReport.download(r.blob, r.name); btn.textContent = 'Đã tạo ' + r.name; ui.toast('Đã tải file báo cáo (' + r.count + ' hoá đơn)');
+      } catch (err) { m.textContent = 'Không tạo được file: ' + errText(err); m.hidden = false; btn.textContent = 'Tạo file Excel'; }
+      btn.disabled = false;
+    };
+  });
+}
 async function renderRevenue(main) {
   const r = rangeOf(state.range);
   const sales = await api.sales(r);
@@ -313,7 +337,7 @@ async function renderRevenue(main) {
   const topBox = (st, title, cc) => { const top = topOf(st), max = top.length ? top[0].qty : 1, sum = [...items[st].values()].reduce((a, t) => ({ q: a.q + t.qty, r: a.r + t.rev }), { q: 0, r: 0 });
     return '<section class="box ' + cc + '"><h2 class="box-title"><span>' + title + '</span></h2>' + (top.length ? '<p class="small muted" style="margin:0 0 8px">Tổng ' + sum.q + ' phần · ' + vnd(sum.r) + '</p>' + top.map((t, k) => '<div class="hbar"><span class="nm">' + (k + 1) + '. ' + esc(t.name) + '</span><span class="track"><span class="fill" style="width:' + (t.qty / max * 100) + '%;display:block"></span></span><span class="num small"><b>' + t.qty + '</b> phần · ' + short(t.rev) + '</span></div>').join('') : '<p class="empty">Chưa có món nào bán ra.</p>') + '</section>'; };
   main.innerHTML =
-    '<div class="ptitle"><h1>Doanh thu</h1><div class="chips">' + [['today', 'Hôm nay'], ['7d', '7 ngày'], ['30d', '30 ngày'], ['month', 'Tháng này']].map(([k, t]) => '<button class="chipbtn" type="button" data-range="' + k + '" aria-pressed="' + (state.range === k) + '">' + t + '</button>').join('') + '</div></div>' +
+    '<div class="ptitle"><h1>Doanh thu</h1>' + (BN.FEATURES.report ? '<button class="btn btn-sm" type="button" id="xlsBtn">Xuất Excel tháng</button>' : '') + '<div class="chips">' + [['today', 'Hôm nay'], ['7d', '7 ngày'], ['30d', '30 ngày'], ['month', 'Tháng này']].map(([k, t]) => '<button class="chipbtn" type="button" data-range="' + k + '" aria-pressed="' + (state.range === k) + '">' + t + '</button>').join('') + '</div></div>' +
     '<div class="stats">' +
     '<div class="stat"><span>Doanh thu</span><b class="num">' + vnd(total) + '</b><small>' + esc(r.label) + '</small></div>' +
     '<div class="stat"><span>Số đơn</span><b class="num">' + count + '</b><small>đã thanh toán</small></div>' +
@@ -330,6 +354,7 @@ async function renderRevenue(main) {
   $$('[data-range]', main).forEach(b => b.onclick = () => { state.range = b.dataset.range; rerender(); });
   wireChart($('#chart'), buckets);
   renderInvoices($('#invBox', main));
+  const xb = $('#xlsBtn', main); if (xb) xb.onclick = openExport;
 }
 
 /* Món trên hoá đơn: món thuộc ưu đãi gom dưới tên ưu đãi, món tặng ghi rõ */
@@ -1015,7 +1040,7 @@ function bankBoxHtml(cfg) {
     '<label class="field" for="bkAcc">Số tài khoản<input id="bkAcc" class="num" inputmode="numeric" maxlength="19" value="' + esc(B.account) + '"></label>' +
     '<label class="field" for="bkHolder">Tên chủ tài khoản (không bắt buộc)<input id="bkHolder" maxlength="50" value="' + esc(B.holder || '') + '" placeholder="Ví dụ: NGUYEN VAN A"></label>' +
     '<label class="field" for="bkNote">Nội dung chuyển khoản<input id="bkNote" maxlength="60" value="' + esc(B.note || BN.NOTE_DEFAULT) + '"></label>' +
-    '<div class="chips bk-tokens">' + [['{ban}', 'Số bàn / MV / GIAO'], ['{ten}', 'Tên khách'], ['{ma}', 'Mã đơn']].map(([t, d]) => '<button class="chipbtn" type="button" data-tok="' + t + '">+ ' + d + '</button>').join('') + '<button class="chipbtn" type="button" data-tok="reset">Mặc định</button></div>' +
+    '<div class="chips bk-tokens">' + [['{ban}', 'Số bàn / MV / GIAO'], ['{ten}', 'Tên khách']].map(([t, d]) => '<button class="chipbtn" type="button" data-tok="' + t + '">+ ' + d + '</button>').join('') + '<button class="chipbtn" type="button" data-tok="reset">Mặc định</button></div>' +
     '<div class="bk-ex" id="bkEx"></div>' +
     '<p class="msg" id="bkMsg" hidden></p><div class="row"><button class="btn" type="button" id="bkSave">Lưu tài khoản</button></div></div>' +
     '<div class="bank-prev"><div id="bkQr" class="bank-qr"><p class="loading">Đang tạo mã…</p></div><p class="small muted" style="margin:6px 0 0">Mã thử 10.000đ cho đơn bàn 15. Mở app ngân hàng quét thử để chắc đúng tên chủ tài khoản (không cần chuyển).</p></div></div>' +
@@ -1029,7 +1054,7 @@ function wireBankBox(main, cfg) {
   const paintEx = () => { const tpl = $('#bkNote', main).value.trim() || BN.NOTE_DEFAULT, raw = t => BN.fold(t).toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
     $('#bkEx', main).innerHTML = EX.map(([k, o]) => { const full = raw(tpl.replace(/\{ban\}/gi, o.dine_type === 'giao_hang' ? 'GIAO' : o.dine_type === 'mang_ve' ? 'MV' : 'SO ' + o.queue_number).replace(/\{ten\}/gi, o.customer_name).replace(/\{ma\}/gi, o.id.slice(0, 4))), cut = full.length > 25;
       return '<div><span class="small muted">' + k + ':</span> <b class="num">' + esc(BN.qrNoteFor(o, tpl)) + '</b>' + (cut ? ' <span class="pill pill-red">dài quá, bị cắt ' + (full.length - 25) + ' ký tự</span>' : '') + '</div>'; }).join('') +
-      '<p class="small muted" style="margin:2px 0 0">App ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự. <b>{ma}</b> giúp đối chiếu đúng đơn trong sao kê.</p>'; };
+      '<p class="small muted" style="margin:2px 0 0">App ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự. Tên khách giúp đối chiếu đúng đơn trong sao kê.</p>'; };
   let t = null;
   const draw = () => { clearTimeout(t); t = setTimeout(async () => {
     const b = read(), box = $('#bkQr', main); if (!box) return;
