@@ -968,6 +968,7 @@ function orderCard(o) {
 const qrOpen = new Set(), qrImgs = new Map();
 const custQrNote = (o, d) => 'BENOC ' + (d.dine_type === 'giao_hang' ? 'GIAO ' : d.dine_type === 'mang_ve' ? 'MV ' : 'SO ' + d.queue_number + ' ') + (d.dine_type !== 'tai_quan' ? (d.customer_name || '') + ' ' : '') + String(o.id || '').replace(/-/g, '').slice(0, 4);
 function payQrHtml(o, d) {
+  if (!BN.FEATURES.vietqr) return '';
   const due = d.total - (d.paid_amount || 0); if (!(due > 0) || !o.id) return '';
   const key = due + '|' + custQrNote(o, d), img = qrImgs.get(key), open = qrOpen.has(o.token);
   if (open && !qrImgs.has(key)) { qrImgs.set(key, null); BN.qrDataUrl(BN.vietQR(due, custQrNote(o, d)), 360).then(u => { qrImgs.set(key, u); renderStatus(); }).catch(() => qrImgs.delete(key)); }

@@ -46,14 +46,14 @@ function start() {
     '<header class="topbar"><div class="topbar-in"><div class="brand"><b>' + SHORT[STATION] + '</b><span>Bé Nốc</span></div>' +
     '<span class="clock num" id="clock"></span>' +
     '<button class="btn btn-sm btn-line" type="button" id="soundBtn" aria-pressed="false">Bật chuông báo</button>' +
-    '<button class="btn btn-sm btn-line" type="button" id="printBtn"></button>' +
+    (BN.FEATURES.print ? '<button class="btn btn-sm btn-line" type="button" id="printBtn"></button>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm" href="index.html?dat=giao' + (DEMO ? '&slot=' + encodeURIComponent(BN.SLOT) : '') + '">+ Đơn giao hàng</a>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm btn-line" href="' + (IS_BEP ? 'phache.html' : 'bep.html') + '">' + (IS_BEP ? 'Pha chế' : 'Bếp') + '</a><a class="btn btn-sm btn-line" href="quanly.html">Quản lý</a>' : '') +
     BN.staff.whoChip(state.session) + '</div></header>' +
     '<div class="wrap" style="max-width:none"><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
     '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2><div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
-  paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); });
+  if (BN.FEATURES.print) { paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); }); }
   $('#cols').addEventListener('click', onAction);
   $('#calls').addEventListener('click', onCall);
   $('#seg').addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) { state.col = b.dataset.seg; render(); } });
@@ -185,7 +185,8 @@ function panelHtml(o) {
       (p.qr ? qrPanelHtml(o, due) : '') +
       '<div class="row"><button class="btn btn-ok grow" type="button" data-act="pay-ok" data-m="tien_mat" data-id="' + o.id + '">Tiền mặt</button>' +
       (p.qr ? '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Đã nhận chuyển khoản</button>'
-            : '<button class="btn grow" type="button" data-act="qr" data-id="' + o.id + '">QR chuyển khoản</button>') +
+            : BN.FEATURES.vietqr ? '<button class="btn grow" type="button" data-act="qr" data-id="' + o.id + '">QR chuyển khoản</button>'
+            : '<button class="btn grow" type="button" data-act="pay-ok" data-m="chuyen_khoan" data-id="' + o.id + '">Chuyển khoản</button>') +
       '<button class="btn btn-line" type="button" data-act="close" data-id="' + o.id + '">Thôi</button></div></div>';
   }
   if (p.kind === 'edit') {
@@ -238,7 +239,7 @@ function actionsHtml(o, col) {
   const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
   const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
   if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
-  if (col === 'dang_lam') return edit + pay + (BNPrint.get().mode !== 'off' ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại phiếu</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
+  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại phiếu</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
   return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + cancel;
 }
 function cardHtml(o, col) {
@@ -322,7 +323,7 @@ async function onAction(e) {
     case 'accept-ok': {
       const m = state.panels[id].minutes; delete state.panels[id];
       // In phiếu chỉ khi người làm bấm Nhận đơn (đơn ảo không bị in)
-      run(b, async () => { await api.acceptOrder(id, m, STATION); printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BNPrint.get().mode !== 'off' ? ' · đang in phiếu' : ''), 'dang_lam');
+      run(b, async () => { await api.acceptOrder(id, m, STATION); printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? ' · đang in phiếu' : ''), 'dang_lam');
       break;
     }
     case 'reprint': if (!printFor(o, { reprint: true })) ui.toast('Chưa cài máy in. Bấm nút Máy in ở trên.'); break;
@@ -479,6 +480,7 @@ function onCall(e) { const b = e.target.closest('[data-call]'); if (b) run(b, ()
 function paintPrintBtn() { const m = BNPrint.get().mode, b = $('#printBtn'); if (!b) return; b.textContent = m === 'off' ? 'Cài máy in' : 'Máy in: ' + (m === 'rawbt' ? 'RawBT' : 'trình duyệt'); b.className = 'btn btn-sm ' + (m === 'off' ? 'btn-line' : 'btn-ok'); }
 /* Phiếu của nơi này: chỉ món của bếp (hoặc pha chế), đúng thứ tự trên thẻ */
 function printFor(o, extra) {
+  if (!BN.FEATURES.print || !window.BNPrint) return false;
   // Gộp các dòng giống hệt nhau (combo chia giá thành nhiều dòng) để phiếu gọn: 2 x Cơm heo
   const out = [], by = new Map();
   promoSort(o.items.filter(i => i.station === STATION)).forEach(i => {
