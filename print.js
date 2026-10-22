@@ -192,53 +192,59 @@ function browserPrint(imgs, page) {
 
 /* ---------- Bluetooth trực tiếp (Chrome nối thẳng máy in tem BLE) ---------- */
 const BLE_SVCS = ['49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '6e400001-b5a3-f393-e0a9-e50e24dcca9e', 0xff00, 0xffe0, 0xfff0, 0x18f0, 0xae30, 0xae00];
-const ble = { dev: null, ch: null, q: Promise.resolve(), subs: [], busy: false };
-const bleOk = () => !!(ble.ch && ble.dev && ble.dev.gatt.connected);
-const bleName = () => (ble.dev && ble.dev.name) || store.get('ble.' + STATION, '') || '';
-const bleEmit = () => ble.subs.forEach(f => { try { f(bleOk()); } catch (e) { /* bỏ qua */ } });
-async function bleOpen() {
-  const g = await ble.dev.gatt.connect();
+/* Mỗi việc một máy Bluetooth riêng: slot 'phieu' (máy in phiếu) và 'tem' (máy in tem) */
+const SLOT_NAME = { phieu: 'máy in phiếu', tem: 'máy in tem' };
+const slots = { phieu: { dev: null, ch: null, q: Promise.resolve() }, tem: { dev: null, ch: null, q: Promise.resolve() } };
+const bleSubs = [];
+const nameKey = k => 'ble.' + STATION + (k === 'tem' ? '' : '.' + k); // (tem giữ khoá cũ)
+const bleOk = k => { const b = slots[k]; return !!(b.ch && b.dev && b.dev.gatt.connected); };
+const bleName = k => (slots[k].dev && slots[k].dev.name) || store.get(nameKey(k), '') || '';
+const bleEmit = () => bleSubs.forEach(f => { try { f(); } catch (e) { /* bỏ qua */ } });
+const canBle = () => !!navigator.bluetooth;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+async function bleOpen(k) {
+  const b = slots[k], g = await b.dev.gatt.connect();
   const writable = [];
   for (const sv of await g.getPrimaryServices()) {
     let cs = []; try { cs = await sv.getCharacteristics(); } catch (e) { continue; }
     cs.forEach(c => { if (c.properties.write || c.properties.writeWithoutResponse) writable.push(c); });
   }
-  ble.ch = writable.find(c => /49535343-8841|ff02|ae01|2af1|fff2|ffe1|bef8d6c9/i.test(c.uuid)) || writable[0] || null;
-  if (!ble.ch) throw new Error('Máy này không nhận lệnh in qua Bluetooth');
-  store.set('ble.' + STATION, ble.dev.name || ''); bleEmit();
+  b.ch = writable.find(c => /49535343-8841|bef8d6c9|ff02|ae01|2af1|fff2|ffe1/i.test(c.uuid)) || writable[0] || null;
+  if (!b.ch) throw new Error('Máy này không nhận lệnh in qua Bluetooth');
+  store.set(nameKey(k), b.dev.name || ''); bleEmit();
 }
-async function bleAttach(dev) {
-  if (ble.dev !== dev) { ble.dev = dev; dev.addEventListener('gattserverdisconnected', () => { ble.ch = null; bleEmit(); }); }
-  await bleOpen();
+async function bleAttach(k, dev) {
+  const b = slots[k];
+  if (b.dev !== dev) { b.dev = dev; dev.addEventListener('gattserverdisconnected', () => { if (b.dev === dev) { b.ch = null; bleEmit(); } }); }
+  await bleOpen(k);
 }
-/* Chọn máy in tem (Chrome bắt buộc người dùng bấm) */
-async function bleConnect() {
-  if (!navigator.bluetooth) throw new Error('Trình duyệt này không nối Bluetooth được. Mở bằng Chrome.');
+/* Chọn máy in (trình duyệt bắt buộc người dùng bấm) */
+async function bleConnect(k) {
+  if (!canBle()) throw new Error(isIOS() ? 'Trên iPhone, mở trang bằng app Bluefy (App Store) để nối Bluetooth.' : 'Trình duyệt này không nối Bluetooth được. Mở bằng Chrome.');
   const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: BLE_SVCS });
-  await bleAttach(dev); return dev.name;
+  await bleAttach(k, dev); return dev.name;
 }
-/* Mở lại trang: nối lại máy đã chọn trước (nếu Chrome cho), không thì phải bấm Kết nối */
-async function bleRestore() {
+/* Mở lại trang: nối lại máy đã chọn trước (nếu trình duyệt cho), không thì phải bấm Kết nối */
+async function bleRestore(k) {
   try {
-    if (bleOk()) return true;
-    if (ble.dev) { await bleOpen(); return true; }
-    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return false;
-    const ds = await navigator.bluetooth.getDevices(), name = bleName();
-    const d = ds.find(x => x.name === name) || (ds.length === 1 ? ds[0] : null); if (!d) return false;
-    await Promise.race([bleAttach(d), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
+    if (bleOk(k)) return true;
+    if (slots[k].dev) { await bleOpen(k); return true; }
+    if (!canBle() || !navigator.bluetooth.getDevices) return false;
+    const ds = await navigator.bluetooth.getDevices(), name = bleName(k);
+    const d = ds.find(x => x.name === name); if (!d) return false;
+    await Promise.race([bleAttach(k, d), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
     return true;
   } catch (e) { return false; }
 }
 /* Gửi lệnh theo hàng đợi, từng gói nhỏ có xác nhận (không mất dữ liệu) */
-function bleSend(u8) {
+function bleSend(k, u8) {
+  const b = slots[k];
   const run = async () => {
-    if (window.BENOC_BLE_HOOK) return window.BENOC_BLE_HOOK(u8);
-    if (!bleOk()) { if (!ble.dev) throw Object.assign(new Error('Máy tem chưa kết nối'), { code: 'NO_BLE' }); await bleOpen(); }
-    ble.busy = true;
-    try { for (let i = 0; i < u8.length; i += 180) await ble.ch.writeValueWithResponse(u8.subarray(i, i + 180)); }
-    finally { ble.busy = false; }
+    if (window.BENOC_BLE_HOOK) return window.BENOC_BLE_HOOK(u8, k);
+    if (!bleOk(k)) { if (!b.dev) throw Object.assign(new Error(SLOT_NAME[k] + ' chưa kết nối'), { code: 'NO_BLE' }); await bleOpen(k); }
+    for (let i = 0; i < u8.length; i += 180) await b.ch.writeValueWithResponse(u8.subarray(i, i + 180));
   };
-  const p = ble.q.then(run, run); ble.q = p.catch(() => {}); return p;
+  const p = b.q.then(run, run); b.q = p.catch(() => {}); return p;
 }
 
 /* Lệnh in của một việc (phiếu / tem) cho một đơn. null = không có gì để in. */
@@ -257,7 +263,7 @@ function build(kind, o, items, extra, set) {
     : set.mode === 'ble' ? { ble: escpos(cv, set.copies) }
     : { imgs: Array.from({ length: set.copies || 1 }, () => cv.toDataURL('image/png')), page: { w: set.width } };
 }
-function bleOut(j, kind) { return bleSend(j.ble).catch(e => { ui.toast((kind === 'tem' ? 'Chưa in được tem: ' : 'Chưa in được phiếu: ') + (e.code === 'NO_BLE' ? 'bấm Kết nối máy tem' : e.message)); if (window.BNPrintFail) window.BNPrintFail(kind, e); throw e; }); }
+function bleOut(j, kind) { return bleSend(kind, j.ble).catch(e => { ui.toast((kind === 'tem' ? 'Chưa in được tem: ' : 'Chưa in được phiếu: ') + (e.code === 'NO_BLE' ? 'bấm Kết nối ' + SLOT_NAME[kind] : e.message)); if (window.BNPrintFail) window.BNPrintFail(kind, e); throw e; }); }
 /* In các việc đang bật (hoặc chỉ các việc trong only). Bluetooth gửi trước (chạy nền),
    rồi mới mở RawBT / hộp thoại in. Trả về số việc đã gửi. */
 function printTicket(o, items, extra, set, only) {
@@ -303,19 +309,21 @@ function openSettings(onChange) {
   const radios = (name, cur, list) => '<div class="pr-modes">' + list.map(([k, t, d]) => '<label class="check"><input type="radio" name="' + name + '" value="' + k + '"' + (cur === k ? ' checked' : '') + '><span><b>' + t + '</b><small>' + d + '</small></span></label>').join('') + '</div>';
   const prevT = () => { const x = sample(); return '<div class="pr-prev"><img src="' + ticketCanvas(x.o, x.items, { minutes: 10 }, s).toDataURL('image/png') + '" alt="Phiếu mẫu" style="width:' + (s.width === 80 ? 288 : 220) + 'px"></div>'; };
   const prevL = () => { const x = sample(); return '<div class="pr-prev">' + cups(x.items).slice(0, 2).map(c => '<img src="' + labelCanvas(x.o, c, s).toDataURL('image/png') + '" alt="Tem mẫu" style="width:' + labelOf(s).w * 4.4 + 'px">').join('') + '</div>'; };
-  const bleBox = () => '<div class="pr-ble"><span class="grow">' + (bleOk() ? '<b class="ok">● Đã nối</b> ' + esc(bleName()) : bleName() ? '<b class="bad">● Chưa nối</b> ' + esc(bleName()) : 'Chưa chọn máy in tem') + '</span><button class="btn btn-sm" type="button" id="prBle">' + (bleName() ? 'Kết nối lại' : 'Chọn máy in tem') + '</button></div>' +
-    '<p class="small muted" style="margin:0">Tắt app CLABEL trước (máy tem chỉ nối được một nơi). Bật Bluetooth và Vị trí, dùng Chrome.</p>';
+  const bleBox = k => '<div class="pr-ble"><span class="grow">' + (bleOk(k) ? '<b class="ok">● Đã nối</b> ' + esc(bleName(k)) : bleName(k) ? '<b class="bad">● Chưa nối</b> ' + esc(bleName(k)) : 'Chưa chọn ' + SLOT_NAME[k]) + '</span><button class="btn btn-sm" type="button" data-ble="' + k + '">' + (bleName(k) ? 'Kết nối lại' : 'Chọn ' + SLOT_NAME[k]) + '</button></div>' +
+    '<p class="small muted" style="margin:0">' + (canBle() ? 'Tắt app riêng của máy in trước (máy chỉ nối được một nơi). Bật Bluetooth' + (isIOS() ? '.' : ' và Vị trí.') : isIOS() ? '<b>iPhone:</b> Safari / Chrome không nối Bluetooth được. Cài app <b>Bluefy</b> (App Store) rồi mở trang này bằng Bluefy.' : 'Trình duyệt này không nối Bluetooth được, mở bằng Chrome.') + '</p>';
+  const IOS = isIOS();
   const body = () => '' +
     '<section class="pr-sec"><h3>Phiếu món</h3><p class="small muted" style="margin:0 0 6px">Phiếu các món của ' + PLACE + ' (không in giá, không in mã đơn) để người làm xem.</p>' +
-    radios('prm', s.mode, [['rawbt', 'Qua app RawBT', 'Máy in mặc định trong RawBT (ví dụ MPT-II). Mở RawBT chọn máy một lần.'], ['browser', 'Hộp thoại in của trình duyệt', 'Máy in có ứng dụng in riêng của hãng.'], ['off', 'Không in phiếu', 'Máy này không in phiếu.']]) +
+    radios('prm', s.mode, [IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Máy in mặc định trong RawBT (ví dụ MPT-II). Mở RawBT chọn máy một lần.'], ['ble', 'Bluetooth trực tiếp', 'Trang nối thẳng máy in phiếu. Dùng trên iPhone (qua app Bluefy) hoặc khi RawBT đã dùng cho máy khác.'], IOS ? null : ['browser', 'Hộp thoại in của trình duyệt', 'Máy in có ứng dụng in riêng của hãng.'], ['off', 'Không in phiếu', 'Máy này không in phiếu.']].filter(Boolean)) +
+    (s.mode === 'ble' ? bleBox('phieu') : '') +
     (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
       '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
       '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' + prevT() +
       '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="phieu">In thử phiếu</button></div>' : '') + '</section>' +
     '<section class="pr-sec"><h3>Tem dán ly</h3><p class="small muted" style="margin:0 0 6px">Mỗi ly một tem: bàn / mang về, tên khách, món, size, đường, đá, topping, ghi chú.</p>' +
-    radios('prt', s.tmode, [['ble', 'Bluetooth trực tiếp (khuyên dùng cho máy tem)', 'Chrome nối thẳng máy in tem (CLABEL CT221B…). Dùng được cùng lúc với RawBT in phiếu.'], ['rawbt', 'Qua app RawBT', 'Chỉ khi điện thoại này không dùng RawBT để in phiếu.'], ['off', 'Không in tem', 'Máy này không in tem.']]) +
+    radios('prt', s.tmode, [['ble', 'Bluetooth trực tiếp (khuyên dùng cho máy tem)', 'Trang nối thẳng máy in tem (CLABEL CT221B…). Dùng được cùng lúc với máy in phiếu.'], IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Chỉ khi điện thoại này không dùng RawBT để in phiếu.'], ['off', 'Không in tem', 'Máy này không in tem.']].filter(Boolean)) +
     (s.tmode !== 'off'
-      ? (s.tmode === 'ble' ? bleBox() : '') +
+      ? (s.tmode === 'ble' ? bleBox('tem') : '') +
         '<div class="field">Khổ tem</div>' + seg('lb', s.label, [['40x30', '40×30'], ['50x30', '50×30'], ['50x40', '50×40'], ['58', 'Cuộn 58']]) +
         (s.tmode === 'rawbt' && s.label !== '58' ? '<div class="field">Lệnh máy in</div>' + seg('lang', s.lang, [['tspl', 'TSPL (máy in tem)'], ['escpos', 'ESC/POS']]) : '') +
         (s.label !== '58' ? '<div class="field">Căn lề ngang</div><div class="pr-off"><button class="btn btn-line btn-sm" type="button" data-off="-1" aria-label="Dịch sang trái">◀ Trái</button><b class="num">' + (s.offx > 0 ? '+' : '') + s.offx + ' mm</b><button class="btn btn-line btn-sm" type="button" data-off="1" aria-label="Dịch sang phải">Phải ▶</button></div>' +
@@ -330,16 +338,16 @@ function openSettings(onChange) {
     const q = id => sh.querySelector(id);
     const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; };
     const redraw = () => { read(); const top = q('#prBody').scrollTop; q('#prBody').innerHTML = body(); q('#prBody').scrollTop = top; };
-    const unsub = () => { ble.subs = ble.subs.filter(f => f !== onBle); };
+    const unsub = () => { const i = bleSubs.indexOf(onBle); if (i >= 0) bleSubs.splice(i, 1); };
     const onBle = () => { if (!document.body.contains(sh)) { unsub(); return; } redraw(); };
-    ble.subs.push(onBle);
+    bleSubs.push(onBle);
     sh.addEventListener('change', e => { if (e.target.name === 'prm') s.mode = e.target.value; if (e.target.name === 'prt') s.tmode = e.target.value; redraw(); });
     sh.addEventListener('click', async e => {
       const t = e.target.closest('[data-w],[data-lb],[data-lang],[data-off],[data-offy]');
       if (t) { if (t.dataset.w) s.width = Number(t.dataset.w); if (t.dataset.lb) s.label = t.dataset.lb; if (t.dataset.lang) s.lang = t.dataset.lang; if (t.dataset.off) s.offx = Math.max(-10, Math.min(10, (s.offx || 0) + Number(t.dataset.off))); if (t.dataset.offy) s.offy = Math.max(-10, Math.min(10, (s.offy || 0) + Number(t.dataset.offy))); redraw(); return; }
-      if (e.target.closest('#prBle')) {
-        const b = e.target.closest('#prBle'); b.disabled = true;
-        try { const n = await bleConnect(); ui.toast('Đã nối máy in tem ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
+      if (e.target.closest('[data-ble]')) {
+        const b = e.target.closest('[data-ble]'), k = b.dataset.ble; b.disabled = true;
+        try { const n = await bleConnect(k); ui.toast('Đã nối ' + SLOT_NAME[k] + ' ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
         redraw(); return;
       }
       const tb = e.target.closest('[data-test]');
@@ -363,5 +371,5 @@ function label(set) {
 }
 
 window.BNPrint = { get, save, jobs, label, ticketCanvas, labelCanvas, cups, escpos, tspl, rawbtUrl, build, printTicket, tryAuto, openSettings,
-  ble: { ok: bleOk, has: () => !!ble.dev || !!window.BENOC_BLE_HOOK, name: bleName, connect: bleConnect, restore: bleRestore, send: bleSend, on: f => { ble.subs.push(f); } } };
+  ble: { ok: bleOk, has: k => !!slots[k].dev || !!window.BENOC_BLE_HOOK, name: bleName, label: k => SLOT_NAME[k], connect: bleConnect, restore: bleRestore, send: bleSend, on: f => { bleSubs.push(f); } } };
 })();

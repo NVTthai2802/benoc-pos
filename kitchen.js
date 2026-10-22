@@ -57,7 +57,7 @@ function start() {
   if (BN.FEATURES.print) {
     paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); });
     BNPrint.ble.on(() => render()); // nối / mất nối máy tem → vẽ lại thanh nhắc
-    if (BNPrint.get().tmode === 'ble') BNPrint.ble.restore().then(ok => { if (ok) ui.toast('Đã nối máy in tem ' + BNPrint.ble.name()); render(); });
+    bleSlots().forEach(k => BNPrint.ble.restore(k).then(ok => { if (ok) ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + BNPrint.ble.name(k)); render(); }));
   }
   $('#cols').addEventListener('click', onAction);
   $('#calls').addEventListener('click', onCall);
@@ -495,11 +495,12 @@ function printFor(o, extra) {
   const out = myItems(o), set = BNPrint.get();
   markPrinted(o);
   let only = BNPrint.jobs(set);
-  // Máy tem Bluetooth chưa nối (vừa mở lại trang): in phiếu trước, tem để chờ nối xong bấm in
-  if (only.includes('tem') && set.tmode === 'ble' && !BNPrint.ble.has()) {
-    only = only.filter(k => k !== 'tem');
-    if (!state.prq.some(x => x.id === o.id)) state.prq.push({ id: o.id, jobs: ['tem'] });
-    ui.toast('Máy tem chưa kết nối: bấm "Kết nối máy tem" rồi bấm in tem');
+  // Máy Bluetooth chưa nối (vừa mở lại trang): in việc khác trước, việc này chờ nối xong bấm in
+  const wait = bleSlots(set).filter(k => only.includes(k) && !BNPrint.ble.has(k));
+  if (wait.length) {
+    only = only.filter(k => !wait.includes(k));
+    if (!state.prq.some(x => x.id === o.id)) state.prq.push({ id: o.id, jobs: wait });
+    ui.toast(wait.map(k => BNPrint.ble.label(k)).join(', ') + ' chưa kết nối: bấm "Kết nối" rồi bấm in');
   }
   return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra), set, only) || (only.length === 0 && state.prq.some(x => x.id === o.id));
 }
@@ -541,10 +542,12 @@ async function autoPrint() {
     }
   } finally { autoBusy = false; render(); }
 }
+/* Các việc in đang dùng Bluetooth trực tiếp */
+const bleSlots = set => { set = set || BNPrint.get(); return [set.mode === 'ble' && 'phieu', set.tmode === 'ble' && 'tem'].filter(Boolean); };
 function prqHtml() {
   const set = BNPrint.get(), parts = [];
   // Máy tem Bluetooth: mở lại trang thì Chrome bắt bấm nối lại
-  if (set.tmode === 'ble' && !BNPrint.ble.ok()) parts.push('<div class="prq-in" role="alert"><span class="grow">Máy in tem ' + esc(BNPrint.ble.name()) + ' chưa kết nối. Bấm để nối (tắt app CLABEL trước).</span><button class="btn btn-sm" type="button" data-ble="1">Kết nối máy tem</button></div>');
+  bleSlots(set).filter(k => !BNPrint.ble.ok(k)).forEach(k => parts.push('<div class="prq-in" role="alert"><span class="grow">' + (k === 'tem' ? 'Máy in tem' : 'Máy in phiếu') + ' ' + esc(BNPrint.ble.name(k)) + ' chưa kết nối. Bấm để nối (tắt app riêng của máy in trước).</span><button class="btn btn-sm" type="button" data-ble="' + k + '">Kết nối ' + (k === 'tem' ? 'máy tem' : 'máy phiếu') + '</button></div>'));
   if (state.prq.length) parts.push('<div class="prq-in" role="alert"><span class="grow">Đơn vừa được nhận, máy này chưa in:</span>' + state.prq.map(x => {
     const o = state.orders.find(y => y.id === x.id); if (!o) return '';
     const n = myItems(o).reduce((t, i) => t + i.qty, 0);
@@ -554,7 +557,8 @@ function prqHtml() {
 }
 async function onPrq(e) {
   if (e.target.closest('[data-ble]')) {
-    try { const n = await BNPrint.ble.connect(); ui.toast('Đã nối máy in tem ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
+    const k = e.target.closest('[data-ble]').dataset.ble;
+    try { const n = await BNPrint.ble.connect(k); ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
     render(); return;
   }
   const b = e.target.closest('[data-prq]'); if (!b) return;
