@@ -132,3 +132,18 @@
 .dt-in-pr { border-left: 4px solid #F2B33D; }
 .dt-gift { background: #FFF6E5; }
 .ed-pr { background: #FFF6E5; border-radius: 8px; padding-inline: 8px !important; }
+
+/* Sửa đơn: đổi ăn tại quán / mang về, số bàn; đổi tuỳ chọn món đã có */
+.ed-dine { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; padding: 8px; border-radius: 10px; background: var(--card); }
+.ed-dine .seg2 { flex: 1 1 200px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--line); margin: 0; }
+.ed-dine .seg2 button { padding: 8px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font: 700 14px/1.2 var(--f-body); cursor: pointer; }
+.ed-dine .seg2 button[aria-pressed="true"] { background: #fff; color: var(--red); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.ed-ql { display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.ed-ql input { width: 72px; height: 38px; border: 1.5px solid var(--line); border-radius: 10px; text-align: center; font: 800 18px/1 var(--f-head); color: var(--red); background: #fff; }
+.ed-sub { padding-left: 14px !important; border-left: 3px solid #F2B33D; }
+.ed-q .btn { min-height: 34px; }
+.pk-og--tp { padding: 8px; border-radius: 12px; background: #FFF4D6; }
+.ed-dine .seg2 { flex: 1 1 150px; }
+.ed-list li { flex-wrap: wrap; }
+.ed-list .ed-nm { flex: 1 1 150px; }
+.ed-list .ed-q { margin-left: auto; }
