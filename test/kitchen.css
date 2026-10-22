@@ -180,3 +180,9 @@
 .pr-ble .ok { color: #1b7f3b; } .pr-ble .bad { color: #b3261e; }
 .pr-off { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pr-off b { font-size: 18px; }
+
+/* Trang khác (Quản lý, Đơn giao hàng…) mở đè lên màn hình bếp / pha chế */
+.ovl { position: fixed; inset: 0; z-index: 900; display: flex; flex-direction: column; background: var(--bg, #fdf6ec); }
+.ovl-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: #2b211c; color: #f6efe6; }
+.ovl-f { flex: 1; width: 100%; border: 0; background: #fff; }
+html.ovl-on, html.ovl-on body { overflow: hidden; }

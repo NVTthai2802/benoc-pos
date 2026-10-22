@@ -237,9 +237,22 @@ async function bleOpen(k) {
 }
 async function bleAttach(k, dev) {
   const b = slots[k];
-  if (b.dev !== dev) { b.dev = dev; dev.addEventListener('gattserverdisconnected', () => { if (b.dev === dev) { b.ch = null; bleEmit(); } }); }
+  if (b.dev !== dev) { b.dev = dev; dev.addEventListener('gattserverdisconnected', () => { if (b.dev === dev) { b.ch = null; bleEmit(); autoReconnect(k); } }); }
   await bleOpen(k);
 }
+/* Mất kết nối (tắt màn hình, ra ngoài, máy in tắt…): tự nối lại, không cần chọn lại máy.
+   Trang đang ẩn thì đợi hiện lại mới nối. */
+const retry = { phieu: 0, tem: 0 };
+function autoReconnect(k) {
+  const b = slots[k];
+  if (!b.dev || bleOk(k) || b.reconnecting) return;
+  if (document.hidden) return; // visibilitychange sẽ gọi lại
+  b.reconnecting = true;
+  bleOpen(k).then(() => { retry[k] = 0; }, () => { retry[k]++; })
+    .finally(() => { b.reconnecting = false; if (!bleOk(k) && retry[k] < 20) setTimeout(() => autoReconnect(k), Math.min(15000, 2000 * retry[k])); });
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) Object.keys(slots).forEach(k => { retry[k] = 0; autoReconnect(k); }); });
+window.addEventListener('pageshow', () => Object.keys(slots).forEach(k => autoReconnect(k)));
 /* Chọn máy in (trình duyệt bắt buộc người dùng bấm) */
 async function bleConnect(k) {
   if (!canBle()) throw new Error(isIOS() ? 'Trên iPhone, mở trang bằng app Bluefy (App Store) để nối Bluetooth.' : 'Trình duyệt này không nối Bluetooth được. Mở bằng Chrome.');
