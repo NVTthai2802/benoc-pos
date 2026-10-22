@@ -62,19 +62,37 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Máy bếp**: mở `bep.html`, đăng nhập tài khoản máy bếp, bấm **Bật chuông báo** (trình duyệt chỉ cho phát âm thanh sau khi bấm). Nên chọn "Thêm vào màn hình chính" để mở như app.
 - **Máy pha chế**: mở `phache.html`, đăng nhập tài khoản máy pha chế, cũng bấm **Bật chuông báo**.
 - **Tiếng chuông khi có đơn mới**: chuông 2 nốt (bếp và pha chế khác giai điệu) rồi giọng đọc **"Bé Nốc ơi, bé Nốc ơi"** (file `sound/be-noc.mp3`, tạo bằng giọng đọc tiếng Việt của Google). Khách gọi nhân viên thì chỉ kêu chuông, không có giọng. Muốn đổi giọng khác, thay file `sound/be-noc.mp3` bằng file mp3 mới cùng tên. Nhớ tăng âm lượng và tắt chế độ im lặng trên điện thoại.
-- **In phiếu bếp / pha chế (máy in nhiệt Bluetooth, Android)**: mỗi nơi một máy in, cài riêng trên từng điện thoại/máy tính bảng.
-  1. Cài app **RawBT** (miễn phí) từ Play Store, mở app → chọn máy in Bluetooth của quán (ghép đôi Bluetooth trước trong Cài đặt Android nếu cần) → bấm in thử trong app.
-  2. Trên màn hình bếp (hoặc pha chế) bấm **Cài máy in** → chọn **Qua app RawBT**, khổ giấy **58 mm** hoặc **80 mm**, số bản, chữ to → **In thử** → **Lưu**. Lần đầu Android hỏi mở bằng RawBT thì chọn **Luôn luôn**.
-  3. Từ đó **chỉ khi bấm Nhận đơn** máy mới in phiếu (khách gửi đơn ảo không bị in). Phiếu có số bàn / MANG VỀ / GIAO, tên khách, giờ nhận và số phút hẹn, từng món chữ to kèm size, đường, đá, topping, ghi chú, combo / món tặng. Không in giá. Bếp chỉ in món của bếp, pha chế chỉ in món của pha chế.
-  4. Cần in lại: bấm **In lại phiếu** trên thẻ đơn ở cột Đang làm.
+- **In phiếu và tem dán ly (máy in nhiệt Bluetooth, Android)**: mỗi điện thoại cài **2 việc riêng**: **Phiếu món** và **Tem dán ly** (bật / tắt từng việc). Cách quán đang dùng:
+  | Điện thoại | Màn hình | Phiếu món | Tem dán ly |
+  |---|---|---|---|
+  | Máy bếp | Bếp | Qua app RawBT | Không in tem |
+  | Máy quầy pha chế | Pha chế | Qua app RawBT (máy MPT-II) | **Bluetooth trực tiếp** (máy CLABEL CT221B) |
+  1. **RawBT** (cho phiếu): cài từ Play Store → ADD PRINTER → chọn máy in phiếu (MPT-II) làm máy mặc định (dấu tích xanh) → bật "Start printing automatically on the default printer". RawBT chỉ in ra **một** máy mặc định, nên máy tem không đi qua RawBT.
+  2. Trên màn hình bấm **Cài máy in**:
+     - **Phiếu món**: chọn **Qua app RawBT**, khổ 58 / 80 mm → **In thử phiếu**. (Đừng chọn "Hộp thoại in của trình duyệt": RawBT bản miễn phí sẽ in thêm dòng "free version".)
+     - **Tem dán ly**: chọn **Bluetooth trực tiếp** → **tắt app CLABEL** → bấm **Chọn máy in tem** → chọn **CT221B-…** → khổ tem (40×30…) → **In thử tem**. Chữ lệch khỏi tem thì bấm **◀ Trái / Phải ▶** (mỗi lần 1 mm) rồi in thử lại cho tới khi vừa.
+     - Bấm **Lưu**. Nút trên cùng hiện **Máy in: phiếu + tem**.
+  3. **Chỉ khi có người bấm Nhận đơn** mới in (khách gửi đơn ảo không bị in). Bấm Nhận đơn → máy MPT-II in phiếu, máy CLABEL in tem **cùng lúc**. Bấm Nhận đơn ở máy khác (ví dụ điện thoại chủ quán) thì máy ở quầy cũng tự in. Mỗi máy chỉ in một lần mỗi lần nhận đơn.
+     - Phiếu món gọn: **Ở ĐÂY · BÀN 12** / **MANG VỀ** / **ĐẾN LẤY** / **ĐI SHIP · giờ giao** (kèm địa chỉ), tên khách, số điện thoại, giờ đặt, giờ nhận, từng món kèm size, đường, đá, topping, ghi chú. Không in giá, không in mã đơn.
+     - Tem dán ly: **mỗi ly một tem** (3 trà sữa → 3 tem 1/3, 2/3, 3/3): bàn / mang về / đến lấy / ship, tên khách, món + size, đường, đá, topping, ghi chú món, giờ in.
+  4. **Mỗi lần mở lại màn hình Pha chế** (tải lại trang, tắt Chrome), Chrome bắt nối lại máy tem: màn hình hiện khung vàng **"Máy in tem … chưa kết nối"** → bấm **Kết nối máy tem** → chọn CT221B. Lỡ nhận đơn khi chưa nối: phiếu vẫn in, tem hiện nút **In 2 tem · số 12** để bấm sau khi nối.
+  5. Điện thoại không ai bấm mà phải tự in, Android có thể chặn mở RawBT → khung vàng hiện nút **In phiếu · số 12** để bấm. Nên bật **Chuông báo** để màn hình luôn sáng.
+  6. In lại: thẻ đơn ở cột **Đang làm** có nút **In lại phiếu + tem**.
+  - **iPhone / iPad**: không có RawBT, Safari và Chrome trên iPhone cũng không nối Bluetooth được. Cài app **Bluefy – Web BLE Browser** (miễn phí, App Store), mở trang Bếp / Pha chế bằng Bluefy → **Cài máy in** → Phiếu món chọn **Bluetooth trực tiếp** → **Chọn máy in phiếu**; Tem dán ly chọn **Bluetooth trực tiếp** → **Chọn máy in tem**. Máy in phải có Bluetooth BLE (máy chỉ có Bluetooth thường thì iPhone không nối được) — thử trước bằng trang dò.
+  - Trang dò máy in Bluetooth (máy mới, hoặc thử trên iPhone): `/test/maytem.html`.
   - Máy in có ứng dụng in riêng của hãng thì có thể chọn **Hộp thoại in của trình duyệt** thay cho RawBT.
 - **Ăn tại quán / Mang về**: khách chọn trước khi chọn món. Ăn tại quán thì nhập số trên thẻ, tên và số điện thoại; mang về thì nhập tên và số điện thoại. Số điện thoại bắt buộc (10 số) để quán liên hệ khi có việc. Trên màn hình bếp và pha chế, đơn mang về có ô **MANG VỀ** màu vàng thay cho số thẻ. Món xong thì gọi tên khách ra quầy nhận.
 - Mỗi màn hình có 3 cột: **Chờ nhận → Đang làm → Chờ thanh toán**. Bấm **Nhận đơn** (chọn số phút chờ, có gợi ý sẵn), làm xong bấm **Ra món**, khách trả tiền thì bấm **Thu tiền** (có tính tiền thối).
-- **Chuyển khoản bằng VietQR**: bấm **Thu tiền** → **QR chuyển khoản**: màn hình hiện mã VietQR của tài khoản **MB Bank 0393247469** với **đúng số tiền của đơn** và nội dung (ví dụ `BENOC SO 15 A1B2`). Khách quét bằng app ngân hàng là số tiền, nội dung tự điền. Bấm **Mở to cho khách quét** để phóng to. Thấy tiền về thì bấm **Đã nhận chuyển khoản**. Khách cũng tự mở được mã này trên điện thoại ở thẻ đơn (**Chuyển khoản bằng mã QR**). Đổi tài khoản nhận tiền: **Quản lý → Cài đặt → Tài khoản nhận chuyển khoản (mã QR)** → chọn ngân hàng (hoặc *Ngân hàng khác* rồi nhập mã BIN 6 số), số tài khoản, tên chủ tài khoản → **Nội dung chuyển khoản**: gõ mẫu, bấm chèn nhanh `{ban}` (SO 15 / MV / GIAO), `{ten}` (tên khách), `{ma}` (mã đơn 4 ký tự) — mặc định `BENOC {ban} {ma}`; bên dưới hiện ví dụ thật cho đơn ăn tại quán, mang về, giao hàng và báo nếu dài quá 25 ký tự (ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự) → xem mã thử 10.000đ, quét thử bằng app ngân hàng cho chắc → **Lưu tài khoản**. Mọi máy quầy và điện thoại khách dùng ngay tài khoản mới.
+- **Chuyển khoản bằng VietQR**: bấm **Thu tiền** → **QR chuyển khoản**: màn hình hiện mã VietQR của tài khoản **MB Bank 0393247469** với **đúng số tiền của đơn** và nội dung (ví dụ `BENOC SO 15 A1B2`). Khách quét bằng app ngân hàng là số tiền, nội dung tự điền. Bấm **Mở to cho khách quét** để phóng to. Thấy tiền về thì bấm **Đã nhận chuyển khoản**. Khách cũng tự mở được mã này trên điện thoại ở thẻ đơn (**Chuyển khoản bằng mã QR**). Đổi tài khoản nhận tiền: **Quản lý → Cài đặt → Tài khoản nhận chuyển khoản (mã QR)** → chọn ngân hàng (hoặc *Ngân hàng khác* rồi nhập mã BIN 6 số), số tài khoản, tên chủ tài khoản → **Nội dung chuyển khoản**: gõ mẫu, bấm chèn nhanh `{ban}` (SO 15 / MV / GIAO), `{ten}` (tên khách) — mặc định `BENOC {ban} {ten}`; bên dưới hiện ví dụ thật cho đơn ăn tại quán, mang về, giao hàng và báo nếu dài quá 25 ký tự (ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự) → xem mã thử 10.000đ, quét thử bằng app ngân hàng cho chắc → **Lưu tài khoản**. Mọi máy quầy và điện thoại khách dùng ngay tài khoản mới.
 - **Khách trả tiền trước**: bấm **Thu tiền** ngay trên thẻ đơn ở cột nào cũng được. Thẻ hiện **Đã thu …**, đơn vẫn làm tiếp; ra món xong đơn tự hoàn tất, không phải thu lại. Khách cũng thấy "Đã thanh toán trước" trên điện thoại.
 - **Xem chi tiết đơn**: bấm vào phần món trên thẻ đơn (hoặc dòng **Xem chi tiết đơn**) để xem toàn bộ đơn, gồm cả món của bếp và pha chế: size, đường, đá, topping, ghi chú và giá từng món.
 - **Sửa đơn sau khi đã nhận**: bấm **Sửa đơn** trên thẻ → đổi **Ăn tại quán / Mang về** và **số bàn** rồi bấm **Lưu**; bấm **Tuỳ chọn** ở món đã có để thêm/bớt topping, đổi đường, đá, size (giá tự tính lại, món có nhãn **ĐÃ SỬA**); **−/+** để đổi số lượng (bấm **×** để bỏ món); **+ Thêm món** chỉ dùng khi khách gọi món mới. Bếp và pha chế sửa món của mình, chủ quán sửa được cả đơn. Món thêm sau có nhãn **MỚI**. Nếu đơn đã thu tiền mà sửa làm đổi tổng, thẻ hiện **thu thêm** hoặc **trả lại** bao nhiêu.
 - **Đơn giao hàng (khách nhắn Facebook)**: chủ quán bấm **+ Đơn giao hàng** (trang Quản lý hoặc màn hình bếp) → chọn **Qua lấy** (khách tới quán lấy, chỉ cần tên) hoặc **Đơn đi ship** (cần địa chỉ, giờ giao) → tích món → **Xem giỏ** → nhập thông tin, tích **Khách đã chuyển khoản** nếu đã nhận tiền → tạo đơn. Đơn qua lấy hiện ô **MANG VỀ** trên bếp/pha chế; đơn đi ship hiện ô **GIAO hh:mm** màu xanh ngọc kèm địa chỉ. Cần đăng nhập tài khoản chủ quán hoặc nhân viên.
+- **Báo cáo Excel tháng** (đang thử ở Test): Doanh thu → **Xuất Excel tháng** → chọn tháng này / tháng trước / tháng bất kỳ → **Tạo file Excel**. File `BaoCao_BeNoc_2026-10.xlsx` gồm các trang:
+  - **Tổng quan**: doanh thu, số hoá đơn, trung bình / hoá đơn và / ngày, tiền mặt, chuyển khoản, so với tháng trước, ngày bán cao nhất, tiền nhập hàng, tiền lương, **còn lại tạm tính** (chưa trừ mặt bằng, điện nước…), hàng sắp hết, món bán chạy nhất; có đường dẫn sang các trang.
+  - **Theo ngày** (cuối tuần tô đỏ), **Theo tuần** (Thứ 2 – Chủ nhật), **Theo giờ** (giờ nào đông khách), **Món bán chạy** (số phần bán / tặng, doanh thu, %), **Ưu đãi**, **Hoá đơn** (toàn bộ, lọc được), **Kho hàng** (tồn, nhập / dùng / hỏng / lệch kiểm kho, tiền nhập trong tháng), **Nhập xuất kho**, **Nhân viên & lương** (số ca, giờ công, tiền lương, đã trả, còn phải trả), **Ca làm**.
+  - Các dòng tổng dùng công thức Excel nên sửa số trong file thì tổng tự tính lại; mỗi trang có nút lọc và in được khổ ngang (trang nào cũng có dòng tiêu đề).
+- **Đơn ĐẾN LẤY**: đơn mang về do chủ quán / nhân viên tạo bằng nút **Qua lấy** hiện ô **ĐẾN LẤY** (khác với **MANG VỀ** khách tự đặt) trên bếp / pha chế và phiếu in.
 - **Hoá đơn trong ngày**: cuối trang Doanh thu hiện **tất cả** hoá đơn của 1 ngày (mặc định hôm nay), mới nhất trên cùng, kèm tổng tiền, tiền mặt, chuyển khoản. Bấm **‹ ›** để lùi/tiến 1 ngày hoặc chọn ngày trên lịch.
 - **Doanh thu** có bảng **Tiền theo quầy**: mỗi quầy thu bao nhiêu tiền mặt, bao nhiêu chuyển khoản, để cuối ngày đối chiếu két.
 - **Nhân viên**: mở `quanly.html` trên điện thoại mình → **Chấm công** → chụp ảnh vào ca, cuối ca chụp ảnh ra ca.
@@ -100,7 +118,7 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 
 ## Lưu ý
 
-- **In phiếu** và **QR chuyển khoản động** hiện chỉ bật ở môi trường Test (và bản xem thử). Muốn bật cho quán thật: trong `core.js` đổi dòng `const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST }, …)` thành `print: true, vietqr: true` (hoặc chỉ một trong hai), rồi đưa lên Product. Không cần chạy SQL.
+- **In phiếu / tem**: đã bật cho quán thật (Product). **QR chuyển khoản động** và **Xuất Excel tháng** hiện chỉ bật ở môi trường Test. Muốn bật cho quán thật: trong `core.js` đổi `vietqr: ON_TEST` / `report: ON_TEST` thành `true`, rồi đưa lên Product (QR động cần chạy cập nhật 18 trên Supabase Product trước).
 
 - Đổi mật khẩu nhân viên: Supabase → **Authentication → Users** → chọn người → đặt lại mật khẩu.
 - Dự án Supabase miễn phí tự tạm dừng nếu một tuần không ai dùng; quán mở hằng ngày thì không bị.
@@ -129,6 +147,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-16-kho-hang.sql`: thêm lại **Kho hàng** (nhập theo thùng, dùng theo gói, quy đổi tuỳ từng mặt hàng; lịch sử nhập / dùng / kiểm kho). Chỉ thêm bảng và hàm mới.
 - `sql/cap-nhat-17-quy-cach-kho.sql`: thêm **Quy cách nhập hàng** dùng chung (Thùng 24 gói, Thùng 4 can, Can…). Chạy sau cập nhật 16.
 - `sql/cap-nhat-18-tai-khoan-ngan-hang.sql`: lưu tài khoản nhận chuyển khoản (ngân hàng, số tài khoản, tên chủ, mẫu nội dung chuyển khoản) trong Cài đặt để đổi được mà không sửa code. Mặc định MB Bank 0393247469.
+- `sql/cap-nhat-19-den-lay-bo-ma-don.sql`: đánh dấu đơn **Đến lấy** (quán tạo bằng nút Qua lấy) để phân biệt với Mang về; nội dung chuyển khoản mặc định bỏ mã đơn (`BENOC {ban} {ten}`). Chạy sau cập nhật 18.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 

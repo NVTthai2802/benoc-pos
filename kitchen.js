@@ -15,7 +15,7 @@ const IS_BEP = STATION === 'bep';
 const SHORT = { bep: 'Bếp', pha_che: 'Pha chế' };
 const COLS = [['cho_nhan', 'Chờ nhận'], ['dang_lam', 'Đang làm'], ['thanh_toan', 'Chờ thanh toán']];
 const EMPTY = { cho_nhan: 'Chưa có đơn mới', dang_lam: 'Không có đơn đang làm', thanh_toan: 'Không có đơn chờ thanh toán' };
-const state = { orders: [], panels: {}, col: null, sound: false, seen: null, seenCalls: null, session: null };
+const state = { orders: [], panels: {}, prq: [], self: new Set(), col: null, sound: false, seen: null, seenCalls: null, session: null };
 let audio = null, wakeLock = null, voice = null;
 
 const demoNote = $('#demoNote'); if (demoNote) demoNote.hidden = !DEMO;
@@ -51,12 +51,17 @@ function start() {
     (role === 'owner' ? '<a class="btn btn-sm" href="index.html?dat=giao' + (DEMO ? '&slot=' + encodeURIComponent(BN.SLOT) : '') + '">+ Đơn giao hàng</a>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm btn-line" href="' + (IS_BEP ? 'phache.html' : 'bep.html') + '">' + (IS_BEP ? 'Pha chế' : 'Bếp') + '</a><a class="btn btn-sm btn-line" href="quanly.html">Quản lý</a>' : '') +
     BN.staff.whoChip(state.session) + '</div></header>' +
-    '<div class="wrap" style="max-width:none"><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
+    '<div class="wrap" style="max-width:none"><div class="prq" id="prq"></div><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
     '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2><div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
-  if (BN.FEATURES.print) { paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); }); }
+  if (BN.FEATURES.print) {
+    paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); });
+    BNPrint.ble.on(() => render()); // nối / mất nối máy tem → vẽ lại thanh nhắc
+    bleSlots().forEach(k => BNPrint.ble.restore(k).then(ok => { if (ok) ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + BNPrint.ble.name(k)); render(); }));
+  }
   $('#cols').addEventListener('click', onAction);
   $('#calls').addEventListener('click', onCall);
+  $('#prq').addEventListener('click', onPrq);
   $('#seg').addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) { state.col = b.dataset.seg; render(); } });
   tick(); setInterval(tick, 1000 * 20);
   refresh();
@@ -83,6 +88,8 @@ async function refresh() {
     state.seen = ids; state.seenCalls = calls;
     const all = new Set(state.orders.map(o => o.id));
     Object.keys(state.panels).forEach(id => { if (!all.has(id)) delete state.panels[id]; });
+    state.prq = state.prq.filter(x => all.has(x.id));
+    autoPrint();
     render();
   } catch (e) { ui.toast(errText(e)); }
   finally { busy = false; }
@@ -240,7 +247,7 @@ function actionsHtml(o, col) {
   const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
   const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
   if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
-  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại phiếu</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
+  if (col === 'dang_lam') return edit + pay + (BN.FEATURES.print && BNPrint.jobs(BNPrint.get()).length ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại ' + BNPrint.label() + '</button>' : '') + '<button class="btn btn-line btn-sm" type="button" data-act="extend" data-id="' + id + '">+5 phút</button><button class="btn btn-ok" type="button" data-act="served" data-id="' + id + '">Ra món</button>';
   return edit + (pay || '<span class="small muted">Chờ ' + STATIONS[OTHER].toLowerCase() + ' ra món</span>') + cancel;
 }
 function cardHtml(o, col) {
@@ -293,6 +300,7 @@ function render() {
   });
   $('#seg').innerHTML = COLS.map(([k, t]) => '<button type="button" class="cc-' + k + '" data-seg="' + k + '" aria-pressed="' + (state.col === k) + '">' + t + '<span class="n num">' + by[k].length + '</span></button>').join('');
   const calls = []; state.orders.forEach(o => o.calls.forEach(c => calls.push({ c, o })));
+  const pq = $('#prq'); if (pq) pq.innerHTML = BN.FEATURES.print && window.BNPrint ? prqHtml() : '';
   $('#calls').innerHTML = calls.map(({ c, o }) => '<div class="call" role="alert"><b class="num">' + (isTakeaway(o) ? 'Mang về' : o.queue_number) + '</b><span class="grow">' + esc(o.customer_name) + ' gọi nhân viên · ' + ago(c.created_at) + '</span><button class="btn btn-sm" type="button" data-call="' + c.id + '">Đã tới</button></div>').join('');
   document.title = (by.cho_nhan.length ? '(' + by.cho_nhan.length + ') ' : '') + SHORT[STATION] + ' Bé Nốc';
 }
@@ -324,7 +332,8 @@ async function onAction(e) {
     case 'accept-ok': {
       const m = state.panels[id].minutes; delete state.panels[id];
       // In phiếu chỉ khi người làm bấm Nhận đơn (đơn ảo không bị in)
-      run(b, async () => { await api.acceptOrder(id, m, STATION); printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.get().mode !== 'off' ? ' · đang in phiếu' : ''), 'dang_lam');
+      state.self.add(id); // máy này tự in, không in lại khi tải đơn về
+      run(b, async () => { try { await api.acceptOrder(id, m, STATION); } catch (err) { state.self.delete(id); throw err; } printFor(o, { minutes: m }); }, 'Đã nhận đơn ' + orderLabel(o) + ' · ' + m + ' phút' + (BN.FEATURES.print && BNPrint.label() ? ' · đang in ' + BNPrint.label() : ''), 'dang_lam');
       break;
     }
     case 'reprint': if (!printFor(o, { reprint: true })) ui.toast('Chưa cài máy in. Bấm nút Máy in ở trên.'); break;
@@ -478,18 +487,86 @@ function pickOptions(o, it) {
 function onCall(e) { const b = e.target.closest('[data-call]'); if (b) run(b, () => api.resolveCall(Number(b.dataset.call))); }
 
 /* ---------- In phiếu (print.js) ---------- */
-function paintPrintBtn() { const m = BNPrint.get().mode, b = $('#printBtn'); if (!b) return; b.textContent = m === 'off' ? 'Cài máy in' : 'Máy in: ' + (m === 'rawbt' ? 'RawBT' : 'trình duyệt'); b.className = 'btn btn-sm ' + (m === 'off' ? 'btn-line' : 'btn-ok'); }
+function paintPrintBtn() { const t = BNPrint.label(), b = $('#printBtn'); if (!b) return; b.textContent = t ? 'Máy in: ' + t : 'Cài máy in'; b.className = 'btn btn-sm ' + (t ? 'btn-ok' : 'btn-line'); }
 /* Phiếu của nơi này: chỉ món của bếp (hoặc pha chế), đúng thứ tự trên thẻ */
 function printFor(o, extra) {
   if (!BN.FEATURES.print || !window.BNPrint) return false;
   // Gộp các dòng giống hệt nhau (combo chia giá thành nhiều dòng) để phiếu gọn: 2 x Cơm heo
+  const out = myItems(o), set = BNPrint.get();
+  markPrinted(o);
+  let only = BNPrint.jobs(set);
+  // Máy Bluetooth chưa nối (vừa mở lại trang): in việc khác trước, việc này chờ nối xong bấm in
+  const wait = bleSlots(set).filter(k => only.includes(k) && !BNPrint.ble.has(k));
+  if (wait.length) {
+    only = only.filter(k => !wait.includes(k));
+    if (!state.prq.some(x => x.id === o.id)) state.prq.push({ id: o.id, jobs: wait });
+    ui.toast(wait.map(k => BNPrint.ble.label(k)).join(', ') + ' chưa kết nối: bấm "Kết nối" rồi bấm in');
+  }
+  return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra), set, only) || (only.length === 0 && state.prq.some(x => x.id === o.id));
+}
+function myItems(o) {
   const out = [], by = new Map();
   promoSort(o.items.filter(i => i.station === STATION)).forEach(i => {
     const key = [i.promo_group || '', i.promo_part || '', i.item_name, JSON.stringify((i.options || []).map(x => x.choice)), i.note || ''].join('|');
     const ex = by.get(key); if (ex) { ex.qty += i.qty; return; }
     const c = Object.assign({}, i); by.set(key, c); out.push(c);
   });
-  return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra));
+  return out;
+}
+/* Mỗi máy nhớ đơn nào đã in (theo lần nhận đơn) để không in trùng */
+const PKEY = 'printed.' + STATION;
+function markPrinted(o) {
+  const m = mine(o); if (!m || !m.accepted_at) return;
+  const p = BN.store.get(PKEY, {}), now = Date.now();
+  Object.keys(p).forEach(k => { if (now - new Date(p[k]).getTime() > 86400000) delete p[k]; });
+  p[o.id] = m.accepted_at; BN.store.set(PKEY, p);
+}
+const wasPrinted = o => { const m = mine(o); return !!(m && BN.store.get(PKEY, {})[o.id] === m.accepted_at); };
+/* Máy khác của nơi này vừa bấm Nhận đơn → máy này tự in phần việc của mình (phiếu hoặc tem) */
+let autoBusy = false;
+async function autoPrint() {
+  if (!BN.FEATURES.print || !window.BNPrint || autoBusy) return;
+  const set = BNPrint.get(); if (!BNPrint.jobs(set).length) return;
+  const now = Date.now();
+  const todo = state.orders.filter(o => { const m = mine(o); if (m && m.accepted_at && state.self.has(o.id)) { state.self.delete(o.id); markPrinted(o); return false; } return m && m.status === 'dang_lam' && m.accepted_at && now - new Date(m.accepted_at) < 180000 && !wasPrinted(o) && !state.prq.some(x => x.id === o.id); })
+    .sort((a, b) => new Date(mine(a).accepted_at) - new Date(mine(b).accepted_at));
+  if (!todo.length) return;
+  autoBusy = true;
+  try {
+    for (const o of todo) {
+      // Đợi trang hiện lại (vừa mở RawBT in đơn trước) rồi mới in đơn sau
+      for (let n = 0; document.hidden && n < 40; n++) await new Promise(r => setTimeout(r, 250));
+      markPrinted(o);
+      const left = await BNPrint.tryAuto(o, myItems(o), { station: STATION, minutes: null });
+      if (left.length) { state.prq.push({ id: o.id, jobs: left }); alertNew('Bấm in ' + left.map(k => k === 'tem' ? 'tem' : 'phiếu').join(' + ') + ' đơn ' + orderLabel(o), false); }
+    }
+  } finally { autoBusy = false; render(); }
+}
+/* Các việc in đang dùng Bluetooth trực tiếp */
+const bleSlots = set => { set = set || BNPrint.get(); return [set.mode === 'ble' && 'phieu', set.tmode === 'ble' && 'tem'].filter(Boolean); };
+function prqHtml() {
+  const set = BNPrint.get(), parts = [];
+  // Máy tem Bluetooth: mở lại trang thì Chrome bắt bấm nối lại
+  bleSlots(set).filter(k => !BNPrint.ble.ok(k)).forEach(k => parts.push('<div class="prq-in" role="alert"><span class="grow">' + (k === 'tem' ? 'Máy in tem' : 'Máy in phiếu') + ' ' + esc(BNPrint.ble.name(k)) + ' chưa kết nối. Bấm để nối (tắt app riêng của máy in trước).</span><button class="btn btn-sm" type="button" data-ble="' + k + '">Kết nối ' + (k === 'tem' ? 'máy tem' : 'máy phiếu') + '</button></div>'));
+  if (state.prq.length) parts.push('<div class="prq-in" role="alert"><span class="grow">Đơn vừa được nhận, máy này chưa in:</span>' + state.prq.map(x => {
+    const o = state.orders.find(y => y.id === x.id); if (!o) return '';
+    const n = myItems(o).reduce((t, i) => t + i.qty, 0);
+    return '<button class="btn btn-sm" type="button" data-prq="' + x.id + '">In ' + x.jobs.map(k => k === 'tem' ? n + ' tem' : 'phiếu').join(' + ') + ' · ' + esc(isTakeaway(o) ? o.customer_name || 'mang về' : 'số ' + o.queue_number) + '</button>';
+  }).join('') + '<button class="btn btn-sm btn-line" type="button" data-prq="">Bỏ qua</button></div>');
+  return parts.join('');
+}
+async function onPrq(e) {
+  if (e.target.closest('[data-ble]')) {
+    const k = e.target.closest('[data-ble]').dataset.ble;
+    try { const n = await BNPrint.ble.connect(k); ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + (n || '')); } catch (err) { const m = BNPrint.errMsg(err); if (!/cancel/i.test(m)) ui.toast('Không nối được: ' + m); }
+    render(); return;
+  }
+  const b = e.target.closest('[data-prq]'); if (!b) return;
+  if (!b.dataset.prq) { state.prq = []; render(); return; }
+  const x = state.prq.find(y => y.id === b.dataset.prq), o = state.orders.find(y => y.id === b.dataset.prq);
+  state.prq = state.prq.filter(y => y.id !== b.dataset.prq);
+  if (o && x) { markPrinted(o); BNPrint.printTicket(o, myItems(o), { station: STATION }, null, x.jobs); }
+  render();
 }
 /* ---------- Chuông báo ---------- */
 function toggleSound() {
