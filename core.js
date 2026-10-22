@@ -1268,4 +1268,15 @@ function mountEnvBanner() {
 if (window.BENOC_ENV === 'test' && !DEMO) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountEnvBanner); else mountEnvBanner();
 }
+/* Trang đang mở đè trong màn hình bếp / pha chế: bấm link về đúng màn hình đó thì đóng lớp đè (không mở lồng) */
+(function () {
+  let host = null;
+  try { if (window.parent !== window && window.parent.BN_OVERLAY) host = window.parent.BN_OVERLAY; } catch (e) { /* khác nguồn */ }
+  if (!host) return;
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]'); if (!a || a.target) return;
+    let u; try { u = new URL(a.href, location.href); } catch (err) { return; }
+    if (u.origin === location.origin && u.pathname.replace(/\.html$/, '') === host.page) { e.preventDefault(); host.close(); }
+  }, true);
+})();
 })();

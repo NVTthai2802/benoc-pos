@@ -14,7 +14,8 @@
    ===================================================================== */
 (function () {
 'use strict';
-const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery } = BN; // (không in mã đơn, không in giá)
+const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery } = BN; // (không in mã đơn)
+const money = n => Math.round(Number(n) || 0).toLocaleString('vi-VN') + 'đ';
 const STATION = window.BENOC_STATION || 'bep';
 const KEY = 'printer.' + STATION;
 /* mode = cách in phiếu món, tmode = cách in tem dán ly ('off' | 'rawbt' | 'ble' | 'browser') */
@@ -59,7 +60,16 @@ function ticketCanvas(o, items, extra, set) {
     if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 20, true, 'left', 2);
     lastGroup = i.promo_group || null;
     const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
-    text(i.qty + ' x ' + i.item_name + (sz ? ' - ' + sizeText(sz) : '') + (i.promo_part === 'tang' ? ' (TẶNG)' : ''), 30, true, 'left', 2);
+    // Tên món bên trái, thành tiền bên phải (dòng đầu)
+    const amt = i.amount != null ? i.amount : (i.unit_price || 0) * i.qty, price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
+    ctx.font = F(24, true); const pw = ctx.measureText(price).width + 10 * k;
+    ctx.font = F(30, true);
+    wrap(ctx, i.qty + ' x ' + i.item_name + (sz ? ' - ' + sizeText(sz) : '') + (i.promo_part === 'tang' ? ' (TẶNG)' : ''), W - pad * 2 - pw).forEach((l, n) => {
+      ops.push({ t: l, font: F(30, true), y: y + 30 * k, align: 'left' });
+      if (n === 0) ops.push({ t: price, font: F(24, true), y: y + 30 * k, align: 'right' });
+      y += 30 * k * 1.28;
+    });
+    y += 2 * k;
     const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
     const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
     if (rest.length) text('   ' + rest.join(', '), 22, false);
@@ -68,13 +78,22 @@ function ticketCanvas(o, items, extra, set) {
     y += 6 * k;
   });
   if (o.note) { rule(true); text('Ghi chú: ' + o.note, 24, true, 'left', 2); }
+  // Tiền: cộng các món trên phiếu; đơn có cả món nơi khác thì in thêm tổng cả đơn; trạng thái thanh toán
+  rule(false);
+  const sum = items.reduce((t, i) => t + (i.amount != null ? i.amount : (i.unit_price || 0) * i.qty), 0);
+  const total = o.total != null ? o.total : sum;
+  const pair = (l, r, px) => { ops.push({ t: l, font: F(px, true), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, true), y: y + px * k, align: 'right' }); y += px * k * 1.3; };
+  if (total !== sum) { pair('Cộng phiếu này', money(sum), 22); pair('TỔNG ĐƠN', money(total), 30); }
+  else pair('TỔNG', money(total), 30);
+  const paid = o.paid_amount || 0;
+  text(o.paid_amount == null ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' (CK)' : o.paid_method === 'tien_mat' ? ' (TIỀN MẶT)' : '') : 'ĐÃ TRẢ ' + money(paid) + ' · CÒN THU ' + money(total - paid), 22, true, 'center', 2);
   y += 12 * k; // chừa chút giấy để xé
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
     if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [8, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
     ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(op.t, op.align === 'center' ? W / 2 : pad, op.y);
+    ctx.fillText(op.t, op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
   });
   return cv;
 }
@@ -237,9 +256,22 @@ async function bleOpen(k) {
 }
 async function bleAttach(k, dev) {
   const b = slots[k];
-  if (b.dev !== dev) { b.dev = dev; dev.addEventListener('gattserverdisconnected', () => { if (b.dev === dev) { b.ch = null; bleEmit(); } }); }
+  if (b.dev !== dev) { b.dev = dev; dev.addEventListener('gattserverdisconnected', () => { if (b.dev === dev) { b.ch = null; bleEmit(); autoReconnect(k); } }); }
   await bleOpen(k);
 }
+/* Mất kết nối (tắt màn hình, ra ngoài, máy in tắt…): tự nối lại, không cần chọn lại máy.
+   Trang đang ẩn thì đợi hiện lại mới nối. */
+const retry = { phieu: 0, tem: 0 };
+function autoReconnect(k) {
+  const b = slots[k];
+  if (!b.dev || bleOk(k) || b.reconnecting) return;
+  if (document.hidden) return; // visibilitychange sẽ gọi lại
+  b.reconnecting = true;
+  bleOpen(k).then(() => { retry[k] = 0; }, () => { retry[k]++; })
+    .finally(() => { b.reconnecting = false; if (!bleOk(k) && retry[k] < 20) setTimeout(() => autoReconnect(k), Math.min(15000, 2000 * retry[k])); });
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) Object.keys(slots).forEach(k => { retry[k] = 0; autoReconnect(k); }); });
+window.addEventListener('pageshow', () => Object.keys(slots).forEach(k => autoReconnect(k)));
 /* Chọn máy in (trình duyệt bắt buộc người dùng bấm) */
 async function bleConnect(k) {
   if (!canBle()) throw new Error(isIOS() ? 'Trên iPhone, mở trang bằng app Bluefy (App Store) để nối Bluetooth.' : 'Trình duyệt này không nối Bluetooth được. Mở bằng Chrome.');
@@ -333,8 +365,8 @@ async function tryAuto(o, items, extra, set) {
 /* ---------- Cài đặt máy in (từng máy) ---------- */
 function sample() {
   return { o: { id: 'abcd1234', queue_number: 12, customer_name: 'Khách thử', customer_phone: '0912345678', dine_type: 'tai_quan', created_at: new Date().toISOString(), note: 'In thử phiếu' },
-    items: [{ qty: 2, item_name: window.BENOC_STATION === 'pha_che' ? 'Hồng trà sữa trân châu' : 'Cơm heo chua ngọt', options: window.BENOC_STATION === 'pha_che' ? [{ group: 'Upsize', choice: 'Upsize', price: 10000 }, { group: 'Đường', choice: 'Ít đường' }, { group: 'Topping thêm', choice: 'Trân châu hoàng gia' }] : [{ group: 'Topping thêm', choice: 'Trứng ốp la' }], note: 'ít cay' },
-      { qty: 1, item_name: window.BENOC_STATION === 'pha_che' ? 'Trà đào' : 'Kimbap chiên', options: [], note: null }] };
+    items: [{ qty: 2, unit_price: window.BENOC_STATION === 'pha_che' ? 40000 : 40000, item_name: window.BENOC_STATION === 'pha_che' ? 'Hồng trà sữa trân châu' : 'Cơm heo chua ngọt', options: window.BENOC_STATION === 'pha_che' ? [{ group: 'Upsize', choice: 'Upsize', price: 10000 }, { group: 'Đường', choice: 'Ít đường' }, { group: 'Topping thêm', choice: 'Trân châu hoàng gia' }] : [{ group: 'Topping thêm', choice: 'Trứng ốp la' }], note: 'ít cay' },
+      { qty: 1, unit_price: 25000, item_name: window.BENOC_STATION === 'pha_che' ? 'Trà đào' : 'Kimbap chiên', options: [], note: null }] };
 }
 function openSettings(onChange) {
   let s = get();
@@ -348,7 +380,7 @@ function openSettings(onChange) {
     '<p class="small muted" style="margin:0">' + (canBle() ? 'Tắt app riêng của máy in trước (máy chỉ nối được một nơi). Bật Bluetooth' + (isIOS() ? '.' : ' và Vị trí.') : isIOS() ? '<b>iPhone:</b> Safari / Chrome không nối Bluetooth được. Cài app <b>Bluefy</b> (App Store) rồi mở trang này bằng Bluefy.' : 'Trình duyệt này không nối Bluetooth được, mở bằng Chrome.') + '</p>';
   const IOS = isIOS();
   const body = () => '' +
-    '<section class="pr-sec"><h3>Phiếu món</h3><p class="small muted" style="margin:0 0 6px">Phiếu các món của ' + PLACE + ' (không in giá, không in mã đơn) để người làm xem.</p>' +
+    '<section class="pr-sec"><h3>Phiếu món</h3><p class="small muted" style="margin:0 0 6px">Phiếu các món của ' + PLACE + ': giá từng món, tổng tiền, đã / chưa thanh toán (không in mã đơn).</p>' +
     radios('prm', s.mode, [IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Máy in mặc định trong RawBT (ví dụ MPT-II). Mở RawBT chọn máy một lần.'], ['ble', 'Bluetooth trực tiếp', 'Trang nối thẳng máy in phiếu. Dùng trên iPhone (qua app Bluefy) hoặc khi RawBT đã dùng cho máy khác.'], IOS ? null : ['browser', 'Hộp thoại in của trình duyệt', 'Máy in có ứng dụng in riêng của hãng.'], ['off', 'Không in phiếu', 'Máy này không in phiếu.']].filter(Boolean)) +
     (s.mode === 'ble' ? bleBox('phieu') : '') +
     (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +

@@ -54,6 +54,11 @@ function start() {
     '<div class="wrap" style="max-width:none"><div class="prq" id="prq"></div><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
     '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2><div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
+  // Mở Quản lý / Đơn giao hàng / nơi khác đè lên trên, không rời trang này → máy in Bluetooth vẫn nối, vẫn tự in
+  $('#app').querySelector('.topbar').addEventListener('click', e => {
+    const a = e.target.closest('a[href]'); if (!a || a.target || e.ctrlKey || e.metaKey) return;
+    e.preventDefault(); openOverlay(a.getAttribute('href'));
+  });
   if (BN.FEATURES.print) {
     paintPrintBtn(); $('#printBtn').onclick = () => BNPrint.openSettings(() => { paintPrintBtn(); render(); });
     BNPrint.ble.on(() => render()); // nối / mất nối máy tem → vẽ lại thanh nhắc
@@ -513,8 +518,8 @@ function myItems(o) {
   const out = [], by = new Map();
   promoSort(o.items.filter(i => i.station === STATION)).forEach(i => {
     const key = [i.promo_group || '', i.promo_part || '', i.item_name, JSON.stringify((i.options || []).map(x => x.choice)), i.note || ''].join('|');
-    const ex = by.get(key); if (ex) { ex.qty += i.qty; return; }
-    const c = Object.assign({}, i); by.set(key, c); out.push(c);
+    const ex = by.get(key); if (ex) { ex.qty += i.qty; ex.amount += (i.unit_price || 0) * i.qty; return; }
+    const c = Object.assign({}, i, { amount: (i.unit_price || 0) * i.qty }); by.set(key, c); out.push(c);
   });
   return out;
 }
@@ -573,6 +578,20 @@ async function onPrq(e) {
   if (o && x) { markPrinted(o); BNPrint.printTicket(o, myItems(o), { station: STATION }, null, x.jobs); }
   render();
 }
+/* ---------- Trang khác mở đè lên (giữ màn hình này chạy nền) ---------- */
+function openOverlay(href) {
+  closeOverlay();
+  const ov = document.createElement('div'); ov.className = 'ovl'; ov.id = 'ovl';
+  ov.innerHTML = '<div class="ovl-bar"><button class="btn btn-sm" type="button" id="ovlBack">← ' + SHORT[STATION] + '</button><span class="small">Màn hình ' + SHORT[STATION].toLowerCase() + ' vẫn chạy, máy in vẫn nối</span></div><iframe class="ovl-f" title="Trang khác"></iframe>';
+  document.body.appendChild(ov); document.documentElement.classList.add('ovl-on');
+  ov.querySelector('iframe').src = href;
+  ov.querySelector('#ovlBack').onclick = closeOverlay;
+}
+function closeOverlay() {
+  const ov = $('#ovl'); if (!ov) return;
+  ov.remove(); document.documentElement.classList.remove('ovl-on'); refresh();
+}
+window.BN_OVERLAY = { close: closeOverlay, page: location.pathname.replace(/\.html$/, '') };
 /* ---------- Chuông báo ---------- */
 function toggleSound() {
   state.sound = !state.sound;
