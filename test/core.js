@@ -79,6 +79,8 @@ const ERR = {
   PROMO_ENDED: 'Ưu đãi này vừa hết giờ. Giỏ đã được cập nhật, bạn xem lại nhé.',
   PROMO_INVALID: 'Ưu đãi chưa chọn đủ món. Mở lại ưu đãi để chọn.',
   PROMO_OPTION: 'Món trong ưu đãi không chọn được tuỳ chọn có phí.',
+  DELIVERY_LOCKED: 'Đơn giao hàng không đổi sang ăn tại quán / mang về ở đây.',
+  BAD_DINE: 'Chọn ăn tại quán hoặc mang về.',
   PROMO_LOCKED: 'Món thuộc ưu đãi không đổi được số lượng. Muốn bớt thì bỏ cả phần ưu đãi rồi thêm lại.'
 };
 const errText = e => ERR[e && e.code] || (e && e.hint) || (e && e.code && !/^[A-Z_]+$/.test(e.code) ? e.code : '') || 'Không thực hiện được. Kiểm tra mạng rồi thử lại.';
@@ -268,6 +270,8 @@ function supabaseApi() {
     completePayment: (id, method) => rpc('complete_payment', { p_order_id: id, p_method: method }),
     staffAddItems: (id, items) => rpc('staff_add_items', { p_order_id: id, p_items: items }),
     staffSetItemQty: (itemId, qty) => rpc('staff_set_item_qty', { p_item_id: itemId, p_qty: qty }),
+    staffUpdateOrder: (id, dine, queue) => rpc('staff_update_order', { p_order_id: id, p_dine_type: dine, p_queue_number: dine === 'tai_quan' ? queue : null }),
+    staffSetItemOptions: (itemId, choiceIds) => rpc('staff_set_item_options', { p_item_id: itemId, p_choice_ids: choiceIds }),
     async resolveCall(id) { const c = await cl(); await q(c.from('staff_calls').update({ resolved_at: new Date().toISOString() }).eq('id', id)); },
 
     /* ---------- Menu (quản lý) ---------- */
@@ -857,6 +861,35 @@ function demoApi() {
         } else it.qty = Math.min(50, qty);
         const o = db.orders.find(x => x.id === id); o.total = demoTotal(db, id); refreshOrder(db, id);
         return db.orders.some(x => x.id === id) ? o.total : null;
+      });
+    },
+    async staffUpdateOrder(id, dine, queue) {
+      need();
+      return tx(db => {
+        const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
+        if (o.dine_type === 'giao_hang') fail('DELIVERY_LOCKED');
+        if (dine !== 'tai_quan' && dine !== 'mang_ve') fail('BAD_DINE');
+        if (dine === 'tai_quan' && !(queue > 0)) fail('MISSING_QUEUE_NUMBER');
+        o.dine_type = dine; o.queue_number = dine === 'tai_quan' ? queue : null;
+        const dup = dine === 'tai_quan' && db.orders.find(x => x.id !== id && x.queue_number === queue);
+        return { duplicate_with: dup ? dup.customer_name : null };
+      });
+    },
+    async staffSetItemOptions(itemId, choiceIds) {
+      need();
+      return tx(db => {
+        const it = db.order_items.find(i => i.id === itemId); if (!it) fail('ITEM_NOT_FOUND');
+        const m = db.menu_items.find(x => x.id === it.menu_item_id); if (!m) fail('ITEM_UNAVAILABLE', it.item_name);
+        let { extra, opts } = demoOptions(db, m, choiceIds || []);
+        const base = it.unit_price - (it.options || []).reduce((s, x) => s + (x.price || 0), 0);
+        const p = it.promo_group && it.promo_part !== 'mua' && (db.promotions || []).find(x => x.id === it.promo_id);
+        if (p && p.option_mode === 'khong_phi' && opts.some(x => x.price > 0)) fail('PROMO_OPTION', it.item_name + ' trong ưu đãi không chọn được tuỳ chọn có phí');
+        if (p && p.option_mode === 'mien_phi') { extra = 0; opts = opts.map(x => Object.assign({}, x, { price: 0 })); }
+        Object.assign(it, { options: opts, unit_price: base + extra, edited_at: iso() });
+        const st = db.order_stations.find(x => x.order_id === it.order_id && x.station === it.station);
+        if (st && st.status === 'da_ra_mon') Object.assign(st, { status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
+        const o = db.orders.find(x => x.id === it.order_id); o.total = demoTotal(db, o.id); refreshOrder(db, o.id);
+        return o.total;
       });
     },
     async resolveCall(id) { need(); tx(db => { const c = db.staff_calls.find(x => x.id === id); if (c) c.resolved_at = iso(); }); },
