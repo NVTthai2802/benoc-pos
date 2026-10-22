@@ -331,10 +331,19 @@ async function onAction(e) {
   }
   const id = b.dataset.id, o = state.orders.find(x => x.id === id); if (!o) return;
   switch (b.dataset.act) {
-    case 'accept':
-      state.panels[id] = { kind: 'accept', minutes: null }; render();
-      try { state.panels[id].minutes = await api.suggestWait(id, STATION); } catch (err) { state.panels[id].minutes = IS_BEP ? 15 : 5; }
-      render(); break;
+    case 'accept': {
+      // Bấm là nhận luôn (không hỏi số phút). Thời gian dự kiến lấy theo gợi ý (số đơn đang làm,
+      // thời gian làm gần đây) để màn hình vẫn đếm giờ và khách vẫn thấy khoảng bao lâu xong.
+      delete state.panels[id];
+      state.self.add(id); // máy này tự in, không in lại khi tải đơn về
+      run(b, async () => {
+        let m = IS_BEP ? 15 : 5;
+        try { m = await Promise.race([api.suggestWait(id, STATION), new Promise(r => setTimeout(() => r(m), 1500))]) || m; } catch (err) { /* dùng mặc định */ }
+        try { await api.acceptOrder(id, m, STATION); } catch (err) { state.self.delete(id); throw err; }
+        printFor(o, { minutes: m });
+      }, 'Đã nhận đơn ' + orderLabel(o) + (BN.FEATURES.print && BNPrint.label() ? ' · đang in ' + BNPrint.label() : ''), 'dang_lam');
+      break;
+    }
     case 'min': { const p = state.panels[id]; p.minutes = Math.max(5, Math.min(90, (p.minutes || 15) + Number(b.dataset.d))); render(); break; }
     case 'accept-ok': {
       const m = state.panels[id].minutes; delete state.panels[id];
