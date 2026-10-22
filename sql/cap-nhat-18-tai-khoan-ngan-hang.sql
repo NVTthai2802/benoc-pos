@@ -11,8 +11,8 @@ alter table shop_settings add column if not exists bank_bin     text not null de
 alter table shop_settings add column if not exists bank_name    text not null default 'MB Bank';
 alter table shop_settings add column if not exists bank_account text not null default '0393247469';
 alter table shop_settings add column if not exists bank_holder  text not null default '';           -- tên chủ tài khoản (không bắt buộc)
--- Mẫu nội dung chuyển khoản: {ban} = số bàn / MV / GIAO, {ten} = tên khách, {ma} = mã đơn 4 ký tự
-alter table shop_settings add column if not exists bank_note    text not null default 'BENOC {ban} {ma}';
+-- Mẫu nội dung chuyển khoản: {ban} = số bàn / MV / GIAO, {ten} = tên khách
+alter table shop_settings add column if not exists bank_note    text not null default 'BENOC {ban} {ten}';
 
 -- Khách (chưa đăng nhập) chỉ đọc được 5 thông tin này để tạo mã QR, không đọc được cài đặt khác
 create or replace function get_payment_info() returns jsonb

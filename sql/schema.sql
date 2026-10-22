@@ -23,7 +23,7 @@ create table shop_settings (
   bank_name        text not null default 'MB Bank',
   bank_account     text not null default '0393247469',
   bank_holder      text not null default '',           -- tên chủ tài khoản (không bắt buộc)
-  bank_note        text not null default 'BENOC {ban} {ma}', -- mẫu nội dung chuyển khoản: {ban} {ten} {ma}
+  bank_note        text not null default 'BENOC {ban} {ten}', -- mẫu nội dung chuyển khoản: {ban} {ten}
   updated_at       timestamptz not null default now()
 );
 insert into shop_settings default values;
@@ -183,6 +183,7 @@ create table orders (
   paid_at            timestamptz,
   paid_by            uuid references employees(id),
   customer_name      text not null check (length(trim(customer_name)) > 0),
+  pickup             boolean not null default false, -- mang về do quán tạo (nút Qua lấy) = ĐẾN LẤY
   customer_phone     text,
   note               text,          -- ghi chú chung cho cả đơn (khách viết ở cuối giỏ hàng)
   status             order_status not null default 'cho_nhan',
@@ -1314,3 +1315,23 @@ language sql stable security definer set search_path = public as $$
     from shop_settings where id = 1
 $$;
 grant execute on function get_payment_info() to anon, authenticated;
+
+-- Đơn ĐẾN LẤY: mang về do chủ quán / nhân viên tạo (cập nhật 19)
+create or replace function mark_pickup() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.pickup := new.dine_type = 'mang_ve' and my_role() is not null;
+  return new;
+end $$;
+drop trigger if exists trg_orders_pickup on orders;
+create trigger trg_orders_pickup before insert on orders for each row execute function mark_pickup();
+
+-- Đổi sang ăn tại quán / giao hàng thì không còn là đến lấy
+create or replace function clear_pickup() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.dine_type <> 'mang_ve' then new.pickup := false; end if;
+  return new;
+end $$;
+drop trigger if exists trg_orders_pickup_upd on orders;
+create trigger trg_orders_pickup_upd before update of dine_type on orders for each row execute function clear_pickup();

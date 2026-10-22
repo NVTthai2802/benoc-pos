@@ -15,7 +15,7 @@ const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa p
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 /* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
 const ON_TEST = DEMO || window.BENOC_ENV === 'test';
-const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST }, CONFIG.FEATURES || {});
+const FEATURES = Object.assign({ print: ON_TEST, vietqr: ON_TEST, report: ON_TEST }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
 /* =====================================================================
@@ -42,13 +42,14 @@ const ICON_BAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const ICON_SCOOTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7M15 17l-2-7h-3M13 10h3l2.5 7M4 12h5"/></svg>';
 const isDelivery = o => !!o && (o.dine_type === 'giao_hang' || o.dine === 'giao_hang');
 const isTakeaway = o => !!o && (o.dine_type === 'mang_ve' || o.dine === 'mang_ve' || isDelivery(o)); // đơn không có số thẻ
+const isPickup = o => !!o && !!o.pickup && !isDelivery(o); // khách đến lấy (quán tạo đơn bằng nút Qua lấy)
 const qboxHtml = (o, extra) => isDelivery(o)
   ? '<div class="qbox qbox--mv qbox--giao' + (extra ? ' ' + extra : '') + '">' + ICON_SCOOTER + '<span>' + (o.deliver_at ? 'Giao ' + hhmm(o.deliver_at) : 'Giao hàng') + '</span></div>'
   : isTakeaway(o)
-  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>Mang về</span></div>'
+  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>' + (isPickup(o) ? 'Đến lấy' : 'Mang về') + '</span></div>'
   : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Số</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
 /* "số 12" hoặc "mang về của Lan" — dùng trong thông báo */
-const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isTakeaway(o) ? 'mang về của ' + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
+const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isTakeaway(o) ? (isPickup(o) ? 'đến lấy của ' : 'mang về của ') + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(SP + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -428,6 +429,21 @@ function supabaseApi() {
     async sales(f) {
       const c = await cl();
       return await q(c.from('sales').select('*').gte('paid_at', new Date(f.from).toISOString()).lt('paid_at', new Date(f.to).toISOString()).order('paid_at'));
+    },
+    /* Báo cáo tháng: tải đủ mọi dòng (Supabase trả tối đa 1.000 dòng mỗi lần nên tải từng trang) */
+    async reportData(f) {
+      const c = await cl(), A = new Date(f.from).toISOString(), B = new Date(f.to).toISOString();
+      const all = async build => { let out = []; for (let i = 0; ; i += 1000) { const rows = await q(build().range(i, i + 999)); out = out.concat(rows); if (rows.length < 1000) return out; } };
+      const opt = async fn => { try { return await fn(); } catch (e) { return null; } }; // bảng chưa có (chưa chạy SQL) thì bỏ qua
+      const [sales, shifts, employees, stockItems, stockMoves, packs] = await Promise.all([
+        all(() => c.from('sales').select('*').gte('paid_at', A).lt('paid_at', B).order('paid_at')),
+        all(() => c.from('shifts').select('*').gte('check_in_at', A).lt('check_in_at', B).order('check_in_at')),
+        q(c.from('employees').select('*').order('full_name')),
+        opt(() => all(() => c.from('stock_items').select('*').order('sort_order').order('name'))),
+        opt(() => all(() => c.from('stock_moves').select('*').gte('created_at', A).lt('created_at', B).order('created_at'))),
+        opt(() => q(c.from('stock_packs').select('*')))
+      ]);
+      return { sales, shifts, employees, stockItems: stockItems || [], stockMoves: stockMoves || [], packs: packs || [] };
     },
     async settings() { const c = await cl(); return await q(c.from('shop_settings').select('*').eq('id', 1).single()); },
     async saveBank(b) { const c = await cl(); await q(c.from('shop_settings').update({ bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT, updated_at: new Date().toISOString() }).eq('id', 1)); },
@@ -820,7 +836,7 @@ function demoApi() {
         const dup = !takeaway && db.orders.find(o => o.queue_number === queue);
         if (dup && !confirm) fail('DUPLICATE_QUEUE', 'Số ' + queue + ' đang có đơn của ' + dup.customer_name + ' chưa thanh toán');
         const id = uuid(); const { lines, total } = demoLines(db, id, items);
-        const o = { id, access_token: uuid(), queue_number: queue, dine_type: dine === 'giao_hang' ? 'giao_hang' : takeaway ? 'mang_ve' : 'tai_quan', address: dine === 'giao_hang' ? String(address).trim() : null, deliver_at: dine === 'giao_hang' ? (deliverAt || null) : null, paid_amount: null, paid_method: null, customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
+        const o = { id, access_token: uuid(), queue_number: queue, pickup: dine === 'mang_ve' && !!me(), dine_type: dine === 'giao_hang' ? 'giao_hang' : takeaway ? 'mang_ve' : 'tai_quan', address: dine === 'giao_hang' ? String(address).trim() : null, deliver_at: dine === 'giao_hang' ? (deliverAt || null) : null, paid_amount: null, paid_method: null, customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
         db.orders.push(o); lines.forEach(l => db.order_items.push(l));
         [...new Set(lines.map(l => l.station))].forEach(st => db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null }));
         return { order_id: o.id, access_token: o.access_token, total };
@@ -922,7 +938,7 @@ function demoApi() {
         if (o.dine_type === 'giao_hang') fail('DELIVERY_LOCKED');
         if (dine !== 'tai_quan' && dine !== 'mang_ve') fail('BAD_DINE');
         if (dine === 'tai_quan' && !(queue > 0)) fail('MISSING_QUEUE_NUMBER');
-        o.dine_type = dine; o.queue_number = dine === 'tai_quan' ? queue : null;
+        o.dine_type = dine; o.queue_number = dine === 'tai_quan' ? queue : null; if (dine !== 'mang_ve') o.pickup = false;
         const dup = dine === 'tai_quan' && db.orders.find(x => x.id !== id && x.queue_number === queue);
         return { duplicate_with: dup ? dup.customer_name : null };
       });
@@ -1090,6 +1106,11 @@ function demoApi() {
     },
 
     /* ---------- Doanh thu & cài đặt ---------- */
+    async reportData(f) {
+      need('owner'); const db = load(), a = new Date(f.from), b = new Date(f.to), inR = t => { const x = new Date(t); return x >= a && x < b; };
+      return { sales: db.sales.filter(s => inR(s.paid_at)).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1), shifts: db.shifts.filter(s => inR(s.check_in_at)), employees: db.employees.slice(),
+        stockItems: (db.stock_items || []).slice(), stockMoves: (db.stock_moves || []).filter(m => inR(m.created_at)), packs: (db.stock_packs || []).slice() };
+    },
     async sales(f) { const a = new Date(f.from), b = new Date(f.to); return load().sales.filter(s => { const t = new Date(s.paid_at); return t >= a && t < b; }).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1); },
     async settings() { return Object.assign({}, load().shop_settings); },
     async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT })); },
@@ -1113,9 +1134,9 @@ const api = DEMO ? demoApi() : supabaseApi();
    VIETQR ĐỘNG — mã chuyển khoản theo chuẩn NAPAS (EMVCo), có sẵn số tiền và nội dung.
    Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
    ===================================================================== */
-const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '', note: 'BENOC {ban} {ma}' }, CONFIG.BANK || {});
-const NOTE_DEFAULT = 'BENOC {ban} {ma}';
-/* Nội dung chuyển khoản của 1 đơn theo mẫu chủ quán đặt: {ban} = SO 15 / MV / GIAO, {ten} = tên khách, {ma} = mã đơn */
+const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '', note: 'BENOC {ban} {ten}' }, CONFIG.BANK || {});
+const NOTE_DEFAULT = 'BENOC {ban} {ten}';
+/* Nội dung chuyển khoản của 1 đơn theo mẫu chủ quán đặt: {ban} = SO 15 / MV / GIAO, {ten} = tên khách ({ma} cũ vẫn đọc được) */
 function qrNoteFor(o, tpl) {
   const dine = o.dine_type || 'tai_quan', ban = dine === 'giao_hang' ? 'GIAO' : dine === 'mang_ve' ? 'MV' : 'SO ' + (o.queue_number != null ? o.queue_number : '');
   const t = String(tpl || BANK.note || NOTE_DEFAULT);
@@ -1179,7 +1200,7 @@ const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice 
 window.BN = {
   sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, BANKS, loadBank, qrNoteFor, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
-  ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, qboxHtml, orderLabel,
+  ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
 
