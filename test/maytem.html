@@ -49,23 +49,33 @@
 'use strict';
 const $ = s => document.querySelector(s), log = (t, cls) => { const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = t; $('#log').appendChild(d); };
 // Các dịch vụ BLE máy in nhiệt hay dùng
-const SERVICES = [0xff00, 0xffe0, 0xfff0, 0x18f0, 0xae30, 0xae00, 0xff10, 0xfee7, 0xe0ff, 0xabf0,
-  '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '0000ff00-0000-1000-8000-00805f9b34fb',
-  '6e400001-b5a3-f393-e0a9-e50e24dcca9e', '000018f0-0000-1000-8000-00805f9b34fb'];
+const U16 = h => '0000' + h.toString(16).padStart(4, '0') + '-0000-1000-8000-00805f9b34fb'; // Bluefy (iPhone) cần UUID đầy đủ
+const SERVICES = [0xff00, 0xffe0, 0xfff0, 0x18f0, 0xae30, 0xae00, 0xff10, 0xfee7, 0xe0ff, 0xabf0].map(U16).concat(
+  ['49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '6e400001-b5a3-f393-e0a9-e50e24dcca9e']);
+const em = e => (e && (em(e) || e.name)) || String(e);
+async function pickDevice() {
+  try { return await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES }); }
+  catch (e) {
+    if (/cancel|NotFound/i.test(em(e)) && !/support|filter|accept/i.test(em(e))) throw e;
+    log('Cách 1 không được (' + em(e) + '), thử cách 2…');
+    // Một số trình duyệt (Bluefy) không cho chọn tất cả: lọc theo tên / dịch vụ máy in
+    return await navigator.bluetooth.requestDevice({ filters: SERVICES.map(s => ({ services: [s] })).concat(['CT', 'MPT', 'Printer', 'BT', 'P', 'Q', 'X', 'M', 'C'].map(n => ({ namePrefix: n }))), optionalServices: SERVICES });
+  }
+}
 let dev = null, ch = null;
 $('#support').textContent = navigator.bluetooth ? 'Chrome này hỗ trợ Bluetooth trên web ✓' : (/iPhone|iPad/.test(navigator.userAgent) ? 'iPhone: Safari / Chrome không nối Bluetooth được. Cài app Bluefy (App Store) rồi mở trang này bằng Bluefy.' : 'Trình duyệt này KHÔNG hỗ trợ Bluetooth trên web. Mở bằng Chrome.');
 if (!navigator.bluetooth) $('#pick').disabled = true;
 
 $('#pick').onclick = async () => {
   try {
-    dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES });
+    dev = await pickDevice();
     log('Máy: ' + (dev.name || '(không tên)') + ' · id ' + dev.id);
     const gatt = await dev.gatt.connect(); log('Đã kết nối', 'ok');
     const svcs = await gatt.getPrimaryServices();
     const writable = [];
     for (const s of svcs) {
       log('Dịch vụ ' + s.uuid);
-      let cs = []; try { cs = await s.getCharacteristics(); } catch (e) { log('  (không đọc được: ' + e.message + ')'); }
+      let cs = []; try { cs = await s.getCharacteristics(); } catch (e) { log('  (không đọc được: ' + em(e) + ')'); }
       for (const c of cs) {
         const p = c.properties, f = ['read', 'write', 'writeWithoutResponse', 'notify', 'indicate'].filter(k => p[k]);
         log('  · ' + c.uuid + ' [' + f.join(', ') + ']');
@@ -78,7 +88,7 @@ $('#pick').onclick = async () => {
     if (!ch) { log('Không thấy đặc tính ghi được. Máy này không nối thẳng được.', 'bad'); return; }
     log('Dùng để gửi lệnh: ' + ch.uuid, 'ok');
     document.querySelectorAll('[data-t]').forEach(b => { b.disabled = false; });
-  } catch (e) { log('Lỗi: ' + e.message, 'bad'); }
+  } catch (e) { log('Lỗi: ' + em(e), 'bad'); }
 };
 
 const enc = s => new TextEncoder().encode(s);
@@ -86,8 +96,8 @@ const cat = (...a) => { const n = a.reduce((t, x) => t + x.length, 0), o = new U
 async function send(u8) {
   const size = 180, nr = false; // ghi có phản hồi: chậm hơn nhưng không mất dữ liệu
   for (let i = 0; i < u8.length; i += size) {
-    const part = u8.subarray(i, i + size);
-    if (nr) await ch.writeValueWithoutResponse(part); else await ch.writeValueWithResponse(part);
+    const part = u8.slice(i, i + size);
+    if (ch.writeValueWithResponse) await ch.writeValueWithResponse(part); else await ch.writeValue(part);
     await new Promise(r => setTimeout(r, 5));
   }
 }
@@ -116,7 +126,7 @@ document.querySelectorAll('[data-t]').forEach(b => b.onclick = async () => {
     if (!dev.gatt.connected) { await dev.gatt.connect(); log('Kết nối lại'); }
     const data = TESTS[b.dataset.t](); log('→ ' + b.textContent + ' (' + data.length + ' byte)…');
     await send(data); log('  đã gửi xong. Máy có ra tem không?', 'ok');
-  } catch (e) { log('  lỗi gửi: ' + e.message, 'bad'); }
+  } catch (e) { log('  lỗi gửi: ' + em(e), 'bad'); }
   await new Promise(r => setTimeout(r, 1500));
   busy = false; document.querySelectorAll('[data-t]').forEach(x => { x.disabled = false; });
 });

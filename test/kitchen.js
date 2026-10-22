@@ -558,7 +558,7 @@ function prqHtml() {
 async function onPrq(e) {
   if (e.target.closest('[data-ble]')) {
     const k = e.target.closest('[data-ble]').dataset.ble;
-    try { const n = await BNPrint.ble.connect(k); ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + (n || '')); } catch (err) { if (!/cancel/i.test(err.message)) ui.toast('Không nối được: ' + err.message); }
+    try { const n = await BNPrint.ble.connect(k); ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + (n || '')); } catch (err) { const m = BNPrint.errMsg(err); if (!/cancel/i.test(m)) ui.toast('Không nối được: ' + m); }
     render(); return;
   }
   const b = e.target.closest('[data-prq]'); if (!b) return;
