@@ -85,6 +85,7 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 - **Kho hàng**: **Quản lý → Kho**. Chủ quán bấm **+ Thêm hàng**: đặt tên, nhóm, cách nhập và dùng (chọn nhanh *Thùng → gói*, *Thùng → can*, *Can*, *Bao → kg*… hoặc tự gõ, ví dụ 1 thùng = 24 gói), tồn hiện có, mức báo sắp hết, giá nhập.
   - Mỗi mặt hàng có nút **Nhập** (mặc định theo thùng, đổi sang gói được, máy gợi ý tiền theo giá nhập) và **Lấy dùng** (mặc định theo gói). Bấm tên hàng để **Kiểm kho** (đếm số thùng nguyên + số gói lẻ, máy tự tính chênh lệch), **Hỏng / mất**, xem lịch sử, sửa mặt hàng.
   - Tồn hiện dạng "2 thùng + 5 gói (53 gói)". Hàng còn ≤ mức báo nằm ở khung **Sắp hết · cần nhập thêm** trên cùng.
+  - **Quy cách nhập hàng** (giống Tuỳ chọn của menu): Kho → **Quy cách nhập hàng** → tạo / sửa / xoá các quy cách dùng chung như *Thùng 24 gói*, *Thùng 4 can*, *Can*, *Két 24 chai*. Khi thêm hàng chỉ cần bấm chọn quy cách (hoặc **Tự đặt**). Sửa một quy cách thì mọi mặt hàng đang dùng nó đổi theo, số tồn giữ nguyên.
   - Nhân viên cũng mở được tab Kho để nhập hàng, lấy dùng, kiểm kho; chỉ chủ quán thêm/sửa/xoá mặt hàng và thấy tiền nhập (tổng tiền nhập tháng này hiện ở đầu trang).
 - **Tuỳ chọn món** (size M/L, chọn kem, topping…): **Menu → Tuỳ chọn**, chia hai khung Đồ uống và Đồ ăn. Khi sửa món, tuỳ chọn hợp với món hiện trước, loại kia thu gọn bên dưới.
 
@@ -115,6 +116,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-14-sua-loi-dat-uu-dai.sql`: sửa lỗi "UPDATE requires a WHERE clause" khi khách đặt ưu đãi. Chỉ thay hàm tính giá ưu đãi, không đụng dữ liệu. Chạy sau cập nhật 13.
 - `sql/cap-nhat-15-sua-don-tai-cho.sql`: sửa đơn ngay trên bếp/pha chế: đổi ăn tại quán ↔ mang về, đổi số bàn, đổi tuỳ chọn (topping, đường, đá, size) của món đã có. Thêm 1 cột và 2 hàm, không đụng dữ liệu.
 - `sql/cap-nhat-16-kho-hang.sql`: thêm lại **Kho hàng** (nhập theo thùng, dùng theo gói, quy đổi tuỳ từng mặt hàng; lịch sử nhập / dùng / kiểm kho). Chỉ thêm bảng và hàm mới.
+- `sql/cap-nhat-17-quy-cach-kho.sql`: thêm **Quy cách nhập hàng** dùng chung (Thùng 24 gói, Thùng 4 can, Can…). Chạy sau cập nhật 16.
 
 ## Xoá dữ liệu thử trước khi dùng thật
 
