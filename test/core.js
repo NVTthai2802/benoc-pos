@@ -521,6 +521,24 @@ function promoPrices(p, units) {
   }
   return units.map(u => u.part === 'mua' ? u.base + (u.extra || 0) : ex(u));
 }
+/* Ưu đãi giảm giá: giá bán 1 món (giá món, chưa tính tuỳ chọn) — giống private.sale_price trong SQL.
+   Đồng giá = giá cố định; giảm % làm tròn xuống nghìn; giảm tiền. Lấy giá thấp nhất, không cao hơn giá gốc. */
+function saleCalc(p, base) {
+  const v = Number(p.sale_value) || 0;
+  return p.sale_mode === 'dong_gia' ? v : p.sale_mode === 'phan_tram' ? Math.floor(base * (100 - Math.min(v, 100)) / 100 / 1000 + 1e-9) * 1000 : Math.max(base - v, 0);
+}
+function saleOf(promos, itemId, base, hint, at) {
+  let best = null;
+  (promos || []).forEach(p => {
+    if (p.kind !== 'giam_gia' || p.sale_value == null || !(p.items || []).some(i => i.part === 'giam' && i.menu_item_id === itemId)) return;
+    if (at !== false && !(promoLive(p, at) || (p.id === hint && promoLive(p, (at == null ? Date.now() : +new Date(at)) - 600e3)))) return;
+    const v = saleCalc(p, base);
+    if (v < (best ? best.price : base)) best = { price: v, id: p.id, name: p.name };
+  });
+  return best;
+}
+/* Nhãn ngắn của ưu đãi giảm giá: "ĐỒNG GIÁ 20K", "GIẢM 10%", "GIẢM 5K" */
+const saleBadge = p => p.sale_mode === 'dong_gia' ? 'ĐỒNG GIÁ ' + K(p.sale_value || 0) : p.sale_mode === 'phan_tram' ? 'GIẢM ' + (p.sale_value || 0) + '%' : 'GIẢM ' + K(p.sale_value || 0);
 const DOW = ['', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 /* Mô tả thời gian chạy, ví dụ "14:00–17:00 · T2–T6 · đến 31/10" */
 function promoWhen(p, short) {
@@ -540,11 +558,12 @@ const promoTitle = (kind, name) => (kind === 'combo' && !/^combo/i.test(String(n
 /* Dòng ghi vào bảng promotions */
 function promoRow(p) {
   return {
-    name: String(p.name || '').trim(), kind: p.kind === 'mua_tang' ? 'mua_tang' : 'combo', description: p.description || null, image_path: p.image_path || null,
+    name: String(p.name || '').trim(), kind: ['mua_tang', 'giam_gia'].indexOf(p.kind) >= 0 ? p.kind : 'combo', description: p.description || null, image_path: p.image_path || null,
     price: p.kind === 'combo' ? Math.max(0, Number(p.price) || 0) : null, buy_qty: Math.max(1, Number(p.buy_qty) || 1), get_qty: Math.max(1, Number(p.get_qty) || 1),
     gift_same: !!p.gift_same, option_mode: ['cong_them', 'mien_phi', 'khong_phi'].indexOf(p.option_mode) >= 0 ? p.option_mode : 'cong_them',
     start_at: p.start_at || null, end_at: p.end_at || null, days: p.days && p.days.length && p.days.length < 7 ? p.days.slice().sort((a, b) => a - b) : null,
-    time_from: p.time_from || null, time_to: p.time_to || null, is_active: p.is_active !== false, sort_order: Number(p.sort_order) || 0
+    time_from: p.time_from || null, time_to: p.time_to || null, is_active: p.is_active !== false, sort_order: Number(p.sort_order) || 0,
+    ...(p.kind === 'giam_gia' ? { sale_mode: ['dong_gia', 'phan_tram', 'tru_tien'].indexOf(p.sale_mode) >= 0 ? p.sale_mode : 'dong_gia', sale_value: Math.max(0, Number(p.sale_value) || 0) } : {})
   };
 }
 /* Dòng ghi vào bảng stock_items (kho hàng) */
@@ -561,9 +580,10 @@ function buildPublicPromos(db) {
     const all = db.promotion_items.filter(i => i.promotion_id === p.id).sort((a, b) => a.sort_order - b.sort_order);
     const good = p.kind === 'combo'
       ? p.price != null && all.some(i => i.part === 'combo') && all.filter(i => i.part === 'combo').every(i => ok(i.menu_item_id))
+      : p.kind === 'giam_gia' ? p.sale_value != null && all.some(i => i.part === 'giam' && ok(i.menu_item_id))
       : all.some(i => i.part === 'mua' && ok(i.menu_item_id)) && (p.gift_same || all.some(i => i.part === 'tang' && ok(i.menu_item_id)));
     if (!good) return null;
-    return { id: p.id, name: p.name, kind: p.kind, description: p.description, image_path: p.image_path, price: p.price, buy_qty: p.buy_qty, get_qty: p.get_qty, gift_same: p.gift_same, option_mode: p.option_mode, start_at: p.start_at, end_at: p.end_at, days: p.days, time_from: hm5(p.time_from), time_to: hm5(p.time_to), sort_order: p.sort_order,
+    return { id: p.id, name: p.name, kind: p.kind, description: p.description, image_path: p.image_path, price: p.price, buy_qty: p.buy_qty, get_qty: p.get_qty, gift_same: p.gift_same, option_mode: p.option_mode, start_at: p.start_at, end_at: p.end_at, days: p.days, time_from: hm5(p.time_from), time_to: hm5(p.time_to), sort_order: p.sort_order, sale_mode: p.sale_mode || 'dong_gia', sale_value: p.sale_value == null ? null : p.sale_value,
       items: all.filter(i => ok(i.menu_item_id)).map(i => ({ part: i.part, menu_item_id: i.menu_item_id, qty: i.qty })) };
   }).filter(Boolean).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi'));
 }
@@ -648,14 +668,17 @@ function demoLines(db, orderId, items) {
     const m = db.menu_items.find(x => x.id === li.menu_item_id && x.is_available); if (!m) fail('ITEM_UNAVAILABLE');
     const { extra, opts } = demoOptions(db, m, li.choice_ids);
     const qty = Math.max(1, Math.min(50, li.qty || 1));
-    lines.push({ added_at: new Date().toISOString(), id: db.seq.order_items++, order_id: orderId, menu_item_id: m.id, item_name: m.name, unit_price: m.price + extra, options: opts, qty, note: li.note ? String(li.note).trim() : null, station: stationOf(db, m.id) });
+    const promos = (db.promotions || []).map(p => Object.assign({}, p, { items: db.promotion_items.filter(i => i.promotion_id === p.id) }));
+    const sale = saleOf(promos, m.id, m.price, li.sale_id || null);
+    lines.push(Object.assign({ added_at: new Date().toISOString(), id: db.seq.order_items++, order_id: orderId, menu_item_id: m.id, item_name: m.name, unit_price: (sale ? sale.price : m.price) + extra, options: opts, qty, note: li.note ? String(li.note).trim() : null, station: stationOf(db, m.id) },
+      sale ? { promo_id: sale.id, promo_name: sale.name, promo_kind: 'giam_gia', promo_part: 'giam' } : {}));
   }
   return { lines, total: lines.reduce((s, l) => s + l.unit_price * l.qty, 0) };
 }
 /* Bản xem thử: chép đơn sang doanh thu rồi xoá — giống private.finalize_order */
 function demoFinalize(db, id, method, cashierId) {
   const o = db.orders.find(x => x.id === id); if (!o) return;
-  const items = db.order_items.filter(i => i.order_id === id).map(i => Object.assign({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }, i.promo_group ? { promo_id: i.promo_id, promo_name: i.promo_name, promo_kind: i.promo_kind, promo_group: i.promo_group, promo_part: i.promo_part } : {}));
+  const items = db.order_items.filter(i => i.order_id === id).map(i => Object.assign({ menu_item_id: i.menu_item_id, name: i.item_name, price: i.unit_price, qty: i.qty, options: i.options, station: i.station }, i.promo_group || i.promo_id ? { promo_id: i.promo_id, promo_name: i.promo_name, promo_kind: i.promo_kind, promo_group: i.promo_group, promo_part: i.promo_part } : {}));
   const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
   db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method || o.paid_method || 'tien_mat', items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: o.paid_at || new Date().toISOString(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: o.paid_by || cashierId || null, customer_name: o.customer_name || null, customer_phone: o.customer_phone || null, address: o.address || null });
   db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
@@ -1198,7 +1221,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, DOW, BANK, BANKS, loadBank, qrNoteFor, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, qrNoteFor, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
