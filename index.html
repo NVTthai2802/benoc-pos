@@ -201,6 +201,11 @@
 .sale-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .sale-it { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px; border: 1px solid var(--line, #eadfce); border-radius: 12px; background: #fff; font: inherit; text-align: left; cursor: pointer; }
 .sale-it b { color: #0f7b4b; font-size: 17px; }
+.sale-it { padding: 8px 8px 8px 12px; }
+.sale-it--on { border-color: #0f7b4b; background: #f0faf4; }
+.sale-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; border: 0; background: none; padding: 4px 0; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.sale-n { display: inline-block; padding: 0 6px; border-radius: 6px; background: #0f7b4b; color: #fff; font-size: 12px; font-weight: 700; }
+.sale-add { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--red, #e4335c); color: #fff; font: 800 24px/1 var(--f-body, sans-serif); cursor: pointer; }
 .pr-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font: 800 19px/1.2 var(--f-head); color: var(--red); }
 .pr-head svg { width: 24px; height: 24px; flex: none; }
 .pr-head small { margin-left: auto; font: 600 12px/1.2 var(--f-body); color: var(--ink-2); }
@@ -588,7 +593,7 @@ function levelIcon(name) {
   if (!kind) return null;
   return LV[kind + (/không/.test(n) ? 0 : /\bít\b|^ít|\sít/.test(n) ? 1 : 2)];
 }
-function quickAdd(id) {
+function quickAdd(id, back) {
   if (GIAO && state.staff === false) { ui.toast('Cần đăng nhập ở trang Quản lý trước'); return; }
   if (!dineMode()) { needDine(() => quickAdd(id)); return; }
   const it = state.items.get(id); if (!it) return;
@@ -597,13 +602,14 @@ function quickAdd(id) {
     const defs = g.choices.filter(c => c.default); if (defs.length < g.min) ok = false;
     defs.forEach(c => choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }));
   });
-  if (!ok) { openItem(id); return; }
+  if (!ok) { if (back) ui.close(); setTimeout(() => openItem(id, null, back), 0); return; }
   addLine({ itemId: it.id, name: it.name, base: it.price, sale: it.sale ? it.sale.id : null, choices, qty: 1, note: '' });
   ui.toast('Đã thêm ' + it.name + (choices.length ? ' (' + choices.map(c => c.name).join(', ') + ')' : ''));
 }
 /* edit = { index, line }: sửa món đã có trong giỏ (thêm topping, đổi đường đá… khách quên lúc đầu) */
-function openItem(id, edit) {
-  if (!dineMode()) { needDine(() => openItem(id, edit)); return; }
+/* back: hàm mở lại bảng trước (ví dụ danh sách đồng giá) sau khi thêm món */
+function openItem(id, edit, back) {
+  if (!dineMode()) { needDine(() => openItem(id, edit, back)); return; }
   const it = state.items.get(id); if (!it) return;
   const cat = state.itemCat.get(id);
   const had = edit ? new Set(edit.line.choices.map(c => c.id)) : null;
@@ -659,6 +665,7 @@ function openItem(id, edit) {
         if (edit) { replaceLine(edit.index, line); ui.close(); ui.toast('Đã sửa ' + it.name); setTimeout(openCart, 0); return; }
         addLine(line);
         ui.close(); ui.toast('Đã thêm ' + qty + ' ' + it.name);
+        if (back) setTimeout(back, 0);
       };
     });
 }
@@ -703,12 +710,24 @@ function renderPromos() {
 $('#promos').addEventListener('click', e => { const b = e.target.closest('[data-promo]'); if (!b) return; const p = state.promos.find(x => x.id === b.dataset.promo); if (p && p.kind === 'giam_gia') openSale(p); else openPromo(b.dataset.promo); });
 /* Ưu đãi giảm giá: danh sách món đang giảm, bấm món là mở món như bình thường */
 function openSale(p) {
-  const its = promoItems(p, 'giam').map(i => state.items.get(i.menu_item_id)).filter(it => it.sale && it.sale.id === p.id);
+  if (!dineMode()) { needDine(() => openSale(p)); return; }
+  const its = () => promoItems(p, 'giam').map(i => state.items.get(i.menu_item_id)).filter(it => it.sale && it.sale.id === p.id);
   const when = promoWhen(p, false);
-  ui.sheet(ui.head('<span class="pp pp--sale">' + esc(saleBadge(p)) + '</span> ' + esc(p.name), esc(p.description || 'Chọn món bên dưới, giá đã giảm') + (when ? ' · ' + esc(when) : '')) +
-    '<div class="sh-body"><ul class="sale-list">' + its.map(it => '<li><button type="button" class="sale-it" data-sale-it="' + esc(it.id) + '"><span class="grow">' + esc(it.name) + '</span><s class="num">' + K(it.orig) + '</s><b class="num">' + K(it.price) + '</b><span class="pr-go">Chọn ›</span></button></li>').join('') + '</ul>' +
-    '<p class="small muted">Topping, size L cộng thêm như bình thường.</p></div>', sh => {
-    sh.addEventListener('click', e => { const b = e.target.closest('[data-sale-it]'); if (!b) return; ui.close(); setTimeout(() => openItem(b.dataset.saleIt), 0); });
+  const rows = () => its().map(it => { const n = countInCart(it.id); return '<li><div class="sale-it' + (n ? ' sale-it--on' : '') + '"><button type="button" class="sale-main" data-sale-it="' + esc(it.id) + '"><span class="grow">' + esc(it.name) + (n ? ' <span class="sale-n num">' + n + ' trong giỏ</span>' : '') + '</span><s class="num">' + K(it.orig) + '</s><b class="num">' + K(it.price) + '</b></button>' +
+    '<button type="button" class="btn btn-line btn-sm" data-sale-it="' + esc(it.id) + '">Tuỳ chọn</button><button type="button" class="sale-add" data-sale-add="' + esc(it.id) + '" aria-label="Thêm 1 ' + esc(it.name) + '">+</button></div></li>'; }).join('');
+  const foot = () => { const n = its().reduce((t, it) => t + countInCart(it.id), 0); return n ? 'Xong · xem giỏ (' + n + ' món đồng giá)' : 'Xong'; };
+  ui.sheet(ui.head('<span class="pp pp--sale">' + esc(saleBadge(p)) + '</span> ' + esc(p.name), esc(p.description || 'Chọn bao nhiêu món cũng được, giá đã giảm') + (when ? ' · ' + esc(when) : '')) +
+    '<div class="sh-body"><ul class="sale-list" id="saleList">' + rows() + '</ul>' +
+    '<p class="small muted">Bấm <b>+</b> để thêm nhanh (đường, đá mặc định), bấm <b>Tuỳ chọn</b> để chọn size, topping, đường, đá. Topping, size L cộng thêm như bình thường.</p></div>' +
+    '<div class="sh-foot"><button class="btn btn-block" type="button" id="saleDone">' + foot() + '</button></div>', sh => {
+    const paint = () => { $('#saleList', sh).innerHTML = rows(); $('#saleDone', sh).textContent = foot(); };
+    sh.addEventListener('click', e => {
+      const add = e.target.closest('[data-sale-add]');
+      if (add) { quickAdd(add.dataset.saleAdd, () => openSale(p)); paint(); return; }
+      const b = e.target.closest('[data-sale-it]');
+      if (b) { ui.close(); setTimeout(() => openItem(b.dataset.saleIt, null, () => openSale(p)), 0); return; }
+      if (e.target.closest('#saleDone')) { const n = its().reduce((t, it) => t + countInCart(it.id), 0); ui.close(); if (n) setTimeout(openCart, 0); }
+    });
   });
 }
 
