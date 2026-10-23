@@ -193,6 +193,14 @@
 .st-foot { color: var(--ink-2); font-size: 13px; text-align: center; padding-block: 8px 40px; }
 /* ---------- Ưu đãi: dải nổi bật đầu menu ---------- */
 .promos { padding-block: 10px 4px; }
+.pr-badge--sale { background: #0f7b4b !important; color: #fff !important; }
+.pp--sale { background: #0f7b4b; color: #fff; }
+.item-sale { display: inline-block; padding: 1px 6px; border-radius: 6px; background: #0f7b4b; color: #fff; font: 800 11px/1.5 var(--f-body, sans-serif); margin-bottom: 2px; }
+.item-price s, .sale-it s { color: var(--ink-3, #8a7d74); font-weight: 500; font-size: .85em; margin-right: 2px; }
+.sale-txt { color: #0f7b4b; }
+.sale-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sale-it { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px; border: 1px solid var(--line, #eadfce); border-radius: 12px; background: #fff; font: inherit; text-align: left; cursor: pointer; }
+.sale-it b { color: #0f7b4b; font-size: 17px; }
 .pr-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font: 800 19px/1.2 var(--f-head); color: var(--red); }
 .pr-head svg { width: 24px; height: 24px; flex: none; }
 .pr-head small { margin-left: auto; font: 600 12px/1.2 var(--f-body); color: var(--ink-2); }
@@ -283,7 +291,9 @@
 <script>
 (function () {
 'use strict';
-const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, ICON_SCOOTER, qboxHtml, orderLabel, sizeGroup, promoPrices, promoWhen } = BN;
+const { api, ui, store, esc, K, vnd, hhmm, errText, ERR, DEMO, CONFIG, DRINK_CATS, ICON_BAG, ICON_SCOOTER, qboxHtml, orderLabel, sizeGroup, promoPrices, promoWhen, saleOf, saleBadge } = BN;
+/* Giá gốc (trước giảm giá) — combo / mua tặng tính theo giá gốc */
+const orig = it => it.orig != null ? it.orig : it.price;
 /* Giá size L của món có chọn size (null nếu món chỉ có 1 giá) */
 const priceL = it => { const g = sizeGroup(it), L = g && g.choices.find(c => /^size l$/i.test(c.name)); return L ? it.price + L.price : null; };
 /* Hình ly: M nhỏ, L to, chữ ở giữa */
@@ -479,7 +489,7 @@ function renderMenu() {
         '<span class="item-name">' + esc(it.name) + (it.tag ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
         (it.description ? '<span class="item-desc">' + esc(it.description) + '</span>' : '') +
         (hint ? '<span class="item-opts">' + optionHintHtml(it) + '</span>' : '') + '</button>' +
-        '<div class="item-side">' + (priceL(it) ? '<span class="item-price item-price--ml num"><span><small>M</small> ' + K(it.price) + '</span><span><small>L</small> ' + K(priceL(it)) + '</span></span>' : '<span class="item-price num">' + K(it.price) + '</span>') + addBtnHtml(it) + '</div></li>';
+        '<div class="item-side">' + (it.sale ? '<span class="item-sale">' + esc(saleTag(it)) + '</span>' : '') + (priceL(it) ? '<span class="item-price item-price--ml num"><span><small>M</small> ' + K(it.price) + '</span><span><small>L</small> ' + K(priceL(it)) + '</span></span>' : '<span class="item-price num">' + (it.sale ? '<s>' + K(it.orig) + '</s> ' : '') + K(it.price) + '</span>') + addBtnHtml(it) + '</div></li>';
     }).join('') + '</ul></section>').join('');
   $('#tabsIn').innerHTML = cats.map((c, i) => '<button class="tab cc-' + esc(c.color || 'vang') + '" type="button" data-go="' + esc(c.id) + '"' + (i === 0 ? ' aria-current="true"' : '') + '>' + esc(c.name) + '</button>').join('');
   watchSections(); applySearch();
@@ -588,7 +598,7 @@ function quickAdd(id) {
     defs.forEach(c => choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }));
   });
   if (!ok) { openItem(id); return; }
-  addLine({ itemId: it.id, name: it.name, base: it.price, choices, qty: 1, note: '' });
+  addLine({ itemId: it.id, name: it.name, base: it.price, sale: it.sale ? it.sale.id : null, choices, qty: 1, note: '' });
   ui.toast('Đã thêm ' + it.name + (choices.length ? ' (' + choices.map(c => c.name).join(', ') + ')' : ''));
 }
 /* edit = { index, line }: sửa món đã có trong giỏ (thêm topping, đổi đường đá… khách quên lúc đầu) */
@@ -619,7 +629,7 @@ function openItem(id, edit) {
       '<span class="og-err" hidden></span></fieldset>';
   };
   ui.sheet(
-    ui.head(esc(it.name), (priceL(it) ? '<span class="num">Size M ' + vnd(it.price) + ' · Size L ' + vnd(priceL(it)) + '</span>' : '<span class="num">' + vnd(it.price) + '</span>') + (it.description ? ' · ' + esc(it.description) : '')) +
+    ui.head(esc(it.name), (priceL(it) ? '<span class="num">Size M ' + vnd(it.price) + ' · Size L ' + vnd(priceL(it)) + '</span>' : '<span class="num">' + (it.sale ? '<s>' + vnd(it.orig) + '</s> ' : '') + vnd(it.price) + '</span>') + (it.sale ? ' · <b class="sale-txt">' + esc(it.sale.name) + '</b>' : '') + (it.description ? ' · ' + esc(it.description) : '')) +
     '<div class="sh-body' + (cat ? ' cc-' + esc(cat.color) : '') + '">' +
     (it.image_path ? '<div class="sh-img"><img src="' + esc(it.image_path) + '" alt="' + esc(it.name) + '"></div>' : '') +
     it.option_groups.map(groupHtml).join('') +
@@ -645,7 +655,7 @@ function openItem(id, edit) {
         const bad = it.option_groups.find(g => sel.get(g.id).size < g.min);
         if (bad) { const fs = $('.og[data-g="' + bad.id + '"]', sh); fs.classList.add('og--bad'); const er = $('.og-err', fs); er.textContent = 'Vui lòng chọn: ' + bad.title.toLowerCase(); er.hidden = false; fs.scrollIntoView({ block: 'center' }); return; }
         const choices = []; it.option_groups.forEach(g => g.choices.forEach(c => { if (sel.get(g.id).has(c.id)) choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }); }));
-        const line = { itemId: it.id, name: it.name, base: it.price, choices, qty, note: $('#itNote', sh).value.trim() };
+        const line = { itemId: it.id, name: it.name, base: it.price, sale: it.sale ? it.sale.id : null, choices, qty, note: $('#itNote', sh).value.trim() };
         if (edit) { replaceLine(edit.index, line); ui.close(); ui.toast('Đã sửa ' + it.name); setTimeout(openCart, 0); return; }
         addLine(line);
         ui.close(); ui.toast('Đã thêm ' + qty + ' ' + it.name);
@@ -660,17 +670,21 @@ const promoItems = (p, part) => (p.items || []).filter(i => i.part === part && s
 function promoUsable(p) {
   const its = p.items || [], has = i => state.items.has(i.menu_item_id);
   const ok = p.kind === 'combo' ? its.some(i => i.part === 'combo') && its.filter(i => i.part === 'combo').every(has)
+    : p.kind === 'giam_gia' ? promoItems(p, 'giam').some(i => { const it = state.items.get(i.menu_item_id); return it.sale && it.sale.id === p.id; })
     : promoItems(p, 'mua').length > 0 && (p.gift_same || promoItems(p, 'tang').length > 0);
   if (!ok) return false;
   if (GIAO || !state.menu.some(c => (c.station || 'bep') === state.kind)) return true;
   return its.some(i => { const c = state.itemCat.get(i.menu_item_id); return c && (c.station || 'bep') === state.kind; });
 }
-const promoNormal = p => promoItems(p, 'combo').reduce((s, i) => s + state.items.get(i.menu_item_id).price * i.qty, 0);
-const promoBadge = p => p.kind === 'combo' ? 'COMBO' : 'MUA ' + p.buy_qty + ' TẶNG ' + p.get_qty;
+const promoNormal = p => promoItems(p, 'combo').reduce((s, i) => s + orig(state.items.get(i.menu_item_id)) * i.qty, 0);
+const promoBadge = p => p.kind === 'combo' ? 'COMBO' : p.kind === 'giam_gia' ? saleBadge(p) : 'MUA ' + p.buy_qty + ' TẶNG ' + p.get_qty;
+/* Nhãn nhỏ cạnh giá món đang giảm */
+const saleTag = it => { const p = state.promos.find(x => x.id === it.sale.id); return p ? (p.sale_mode === 'dong_gia' ? 'Đồng giá' : p.sale_mode === 'phan_tram' ? '-' + p.sale_value + '%' : 'Giảm') : 'Giảm'; };
 const namesOf = list => { const n = list.map(i => state.items.get(i.menu_item_id).name); return n.length > 3 ? n.slice(0, 3).join(', ') + '…' : n.join(', '); };
 function promoDesc(p) {
   if (p.description) return p.description;
   if (p.kind === 'combo') return promoItems(p, 'combo').map(i => i.qty + ' ' + state.items.get(i.menu_item_id).name).join(' + ');
+  if (p.kind === 'giam_gia') { const n = promoItems(p, 'giam').length; return n + ' món: ' + namesOf(promoItems(p, 'giam')); }
   return 'Mua ' + p.buy_qty + ': ' + namesOf(promoItems(p, 'mua')) + ' · Tặng ' + p.get_qty + (p.gift_same ? ' món giống hệt' : ': ' + namesOf(promoItems(p, 'tang')));
 }
 function renderPromos() {
@@ -680,13 +694,23 @@ function renderPromos() {
   el.innerHTML = '<h2 class="pr-head">' + GIFT + 'Ưu đãi đang có' + (list.length > 1 ? '<small>Vuốt ngang xem thêm ›</small>' : '') + '</h2><div class="pr-list">' + list.map(p => {
     const normal = p.kind === 'combo' ? promoNormal(p) : 0, when = promoWhen(p, true);
     return '<button class="pr-card" type="button" data-promo="' + esc(p.id) + '">' +
-      '<span class="pr-badge' + (p.kind === 'combo' ? '' : ' pr-badge--gift') + '">' + promoBadge(p) + '</span>' +
+      '<span class="pr-badge' + (p.kind === 'combo' ? '' : p.kind === 'giam_gia' ? ' pr-badge--sale' : ' pr-badge--gift') + '">' + promoBadge(p) + '</span>' +
       '<span class="pr-name">' + esc(p.name) + '</span><span class="pr-desc">' + esc(promoDesc(p)) + '</span>' +
-      '<span class="pr-foot"><span class="pr-price">' + (p.kind === 'combo' ? '<b class="num">' + K(p.price) + '</b>' + (normal > p.price ? '<s class="num">' + K(normal) + '</s>' : '') : '<b>Tặng ' + p.get_qty + '</b>') + '</span>' +
+      '<span class="pr-foot"><span class="pr-price">' + (p.kind === 'combo' ? '<b class="num">' + K(p.price) + '</b>' + (normal > p.price ? '<s class="num">' + K(normal) + '</s>' : '') : p.kind === 'giam_gia' ? '<b>' + (p.sale_mode === 'dong_gia' ? 'Chỉ ' + K(p.sale_value) : p.sale_mode === 'phan_tram' ? 'Giảm ' + p.sale_value + '%' : 'Bớt ' + K(p.sale_value)) + '</b>' : '<b>Tặng ' + p.get_qty + '</b>') + '</span>' +
       (when ? '<span class="pr-when">' + esc(when) + '</span>' : '') + '<span class="pr-go">Chọn ngay ›</span></span></button>';
   }).join('') + '</div>';
 }
-$('#promos').addEventListener('click', e => { const b = e.target.closest('[data-promo]'); if (b) openPromo(b.dataset.promo); });
+$('#promos').addEventListener('click', e => { const b = e.target.closest('[data-promo]'); if (!b) return; const p = state.promos.find(x => x.id === b.dataset.promo); if (p && p.kind === 'giam_gia') openSale(p); else openPromo(b.dataset.promo); });
+/* Ưu đãi giảm giá: danh sách món đang giảm, bấm món là mở món như bình thường */
+function openSale(p) {
+  const its = promoItems(p, 'giam').map(i => state.items.get(i.menu_item_id)).filter(it => it.sale && it.sale.id === p.id);
+  const when = promoWhen(p, false);
+  ui.sheet(ui.head('<span class="pp pp--sale">' + esc(saleBadge(p)) + '</span> ' + esc(p.name), esc(p.description || 'Chọn món bên dưới, giá đã giảm') + (when ? ' · ' + esc(when) : '')) +
+    '<div class="sh-body"><ul class="sale-list">' + its.map(it => '<li><button type="button" class="sale-it" data-sale-it="' + esc(it.id) + '"><span class="grow">' + esc(it.name) + '</span><s class="num">' + K(it.orig) + '</s><b class="num">' + K(it.price) + '</b><span class="pr-go">Chọn ›</span></button></li>').join('') + '</ul>' +
+    '<p class="small muted">Topping, size L cộng thêm như bình thường.</p></div>', sh => {
+    sh.addEventListener('click', e => { const b = e.target.closest('[data-sale-it]'); if (!b) return; ui.close(); setTimeout(() => openItem(b.dataset.saleIt), 0); });
+  });
+}
 
 function openPromo(id, edit) {
   if (GIAO && state.staff === false) { ui.toast('Cần đăng nhập ở trang Quản lý trước'); return; }
@@ -715,7 +739,7 @@ function openPromo(id, edit) {
   }
   let qty = edit ? edit.line.qty : 1;
   const choicesOf = u => { const it = state.items.get(u.itemId), out = []; it.option_groups.forEach(g => g.choices.forEach(c => { if (u.sel.get(g.id).has(c.id)) out.push({ id: c.id, name: c.name, price: c.price, group: g.title }); })); return out; };
-  const asUnits = () => units.map(u => ({ part: u.part, base: state.items.get(u.itemId).price, extra: extraOf(choicesOf(u)) }));
+  const asUnits = () => units.map(u => ({ part: u.part, base: orig(state.items.get(u.itemId)), extra: extraOf(choicesOf(u)) }));
   const total = () => promoPrices(p, asUnits()).reduce((s, x) => s + x, 0) * qty;
   const normal = () => asUnits().reduce((s, u) => s + u.base + u.extra, 0) * qty;
   const label = (u, i) => {
@@ -727,8 +751,8 @@ function openPromo(id, edit) {
     const it = state.items.get(u.itemId);
     const head = '<div class="pu-head">' + (u.part === 'tang' ? '<span class="pu-tag pu-tag--tang">TẶNG</span>' : u.part === 'mua' ? '<span class="pu-tag">MUA</span>' : '') +
       (u.pick.length > 1 ? '<b>' + label(u, i) + '</b>' : '<b>' + esc(it.name) + '</b>' + (label(u, i) ? ' <span class="small muted">' + label(u, i) + '</span>' : '')) +
-      '<span class="num">' + (u.part === 'tang' ? '<s>' + K(it.price) + '</s> 0đ' : K(it.price)) + '</span></div>';
-    const pick = u.pick.length > 1 ? '<select data-u="' + i + '" aria-label="Chọn món">' + u.pick.map(mid => { const m = state.items.get(mid); return '<option value="' + esc(mid) + '"' + (mid === u.itemId ? ' selected' : '') + '>' + esc(m.name) + ' · ' + K(m.price) + '</option>'; }).join('') + '</select>' : '';
+      '<span class="num">' + (u.part === 'tang' ? '<s>' + K(orig(it)) + '</s> 0đ' : K(orig(it))) + '</span></div>';
+    const pick = u.pick.length > 1 ? '<select data-u="' + i + '" aria-label="Chọn món">' + u.pick.map(mid => { const m = state.items.get(mid); return '<option value="' + esc(mid) + '"' + (mid === u.itemId ? ' selected' : '') + '>' + esc(m.name) + ' · ' + K(orig(m)) + '</option>'; }).join('') + '</select>' : '';
     const groups = it.option_groups.map(g => {
       const chs = g.choices.filter(c => !(free(u.part) && p.option_mode === 'khong_phi' && c.price > 0)); if (!chs.length) return '';
       const type = g.max === 1 ? 'radio' : 'checkbox', tp = /topping/i.test(g.title);
@@ -774,7 +798,7 @@ function openPromo(id, edit) {
           if (bad) { const fs = $('.pu-og[data-u="' + i + '"][data-g="' + bad.id + '"]', sh); if (fs) { fs.classList.add('bad'); fs.scrollIntoView({ block: 'center' }); } msg.textContent = 'Chọn "' + bad.title.toLowerCase() + '" cho ' + state.items.get(u.itemId).name; msg.hidden = false; return; }
         }
         (edit ? l => { replaceLine(edit.index, l); setTimeout(openCart, 0); } : addLine)({ promo: p.id, p: { kind: p.kind, price: p.price, option_mode: p.option_mode }, name: p.name, qty,
-          units: units.map(u => ({ part: u.part, itemId: u.itemId, name: state.items.get(u.itemId).name, base: state.items.get(u.itemId).price, choices: choicesOf(u), note: u.note.trim() })) });
+          units: units.map(u => ({ part: u.part, itemId: u.itemId, name: state.items.get(u.itemId).name, base: orig(state.items.get(u.itemId)), choices: choicesOf(u), note: u.note.trim() })) });
         ui.close(); ui.toast(edit ? 'Đã sửa ' + p.name : 'Đã thêm ' + (qty > 1 ? qty + ' phần ' : '') + p.name);
       };
     });
@@ -796,7 +820,7 @@ const promoSubHtml = l => l.units.map(u => PART_TAG[u.part] + esc(u.name) + (u.c
 /* Gửi lên máy chủ: món thường và phần ưu đãi */
 const orderPayload = () => state.cart.map(l => l.promo
   ? { promo_id: l.promo, qty: l.qty, parts: l.units.map(u => ({ part: u.part, menu_item_id: u.itemId, choice_ids: u.choices.map(c => c.id), note: u.note || null })) }
-  : { menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) });
+  : Object.assign({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }, l.sale ? { sale_id: l.sale } : {}));
 function openCart() {
   const linesHtml = () => state.cart.length ? '<ul class="lines">' + state.cart.map((l, i) =>
     '<li class="line' + (l.promo ? ' line--promo' : '') + '"><span class="line-name">' + (l.promo ? '<span class="line-promo"><span class="pp">' + (l.p.kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '</span>' + esc(l.name) + '</span>' : esc(l.name)) + '</span><span class="line-price num">' + vnd(unitPrice(l) * l.qty) + '</span>' +
@@ -1059,6 +1083,10 @@ async function loadMenu() {
     state.items = new Map(); state.itemCat = new Map();
     state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
     try { state.promos = (await api.getPromotions()) || []; } catch (e) { state.promos = []; }
+    // Ưu đãi giảm giá / đồng giá: giá món hiện theo giá đã giảm (máy chủ cũng tính đúng như vậy)
+    state.items.forEach(it => { it.orig = it.price; const sl = saleOf(state.promos, it.id, it.price); if (sl) { it.price = sl.price; it.sale = sl; } });
+    // Món thường trong giỏ: cập nhật giá theo ưu đãi đang chạy (ưu đãi vừa hết thì về giá gốc)
+    state.cart.forEach(l => { if (l.promo) return; const it = state.items.get(l.itemId); if (it) { l.base = it.price; l.sale = it.sale ? it.sale.id : null; } });
     const choiceOk = (itemId, choices) => { const it = state.items.get(itemId); if (!it) return false; const ids = new Set(); it.option_groups.forEach(g => g.choices.forEach(c => ids.add(c.id))); return choices.every(c => ids.has(c.id)); };
     // Phần ưu đãi trong giỏ: ưu đãi còn chạy và mọi món còn bán
     const ok = l => l.promo ? state.promos.some(p => p.id === l.promo) && l.units.every(u => choiceOk(u.itemId, u.choices)) : choiceOk(l.itemId, l.choices);
@@ -1066,6 +1094,7 @@ async function loadMenu() {
     state.cart.filter(l => ok(l) && !l.promo).forEach(l => { const it = state.items.get(l.itemId); it.option_groups.forEach(g => {
       if (g.min > 0 && !l.choices.some(c => g.choices.some(x => x.id === c.id))) g.choices.filter(c => c.default).forEach(c => { l.choices.push({ id: c.id, name: c.name, price: c.price, group: g.title }); });
     }); });
+    saveCart();
     if (gone.length) { state.cart = state.cart.filter(ok); saveCart(); ui.toast('Vừa hết, đã bỏ khỏi giỏ: ' + [...new Set(gone)].join(', ')); }
     renderMenu(); renderPromos(); renderCartBar();
     return gone;

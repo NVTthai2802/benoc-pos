@@ -148,7 +148,9 @@ async function build(month, onStep) {
   /* ===== Ưu đãi ===== */
   const promos = new Map();
   sales.forEach(s => { const g = new Map(); (s.items || []).forEach(i => { if (!i.promo_group) return; const x = g.get(i.promo_group) || { name: i.promo_name || 'Ưu đãi', kind: i.promo_kind, rev: 0, gift: 0 }; x.rev += i.price * i.qty; if (i.promo_part === 'tang') x.gift += i.qty; g.set(i.promo_group, x); });
-    g.forEach(x => { const v = promos.get(x.name) || { name: x.name, kind: x.kind === 'combo' ? 'Combo' : 'Mua tặng', n: 0, gift: 0, rev: 0 }; v.n++; v.gift += x.gift; v.rev += x.rev; promos.set(x.name, v); }); });
+    g.forEach(x => { const v = promos.get(x.name) || { name: x.name, kind: x.kind === 'combo' ? 'Combo' : 'Mua tặng', n: 0, gift: 0, rev: 0 }; v.n++; v.gift += x.gift; v.rev += x.rev; promos.set(x.name, v); });
+    // Giảm giá / đồng giá: mỗi món bán được tính 1 lần dùng
+    (s.items || []).forEach(i => { if (i.promo_kind !== 'giam_gia') return; const k = i.promo_name || 'Giảm giá'; const v = promos.get(k) || { name: k, kind: 'Giảm giá', n: 0, gift: 0, rev: 0 }; v.n += i.qty; v.rev += i.price * i.qty; promos.set(k, v); }); });
   if (promos.size) {
     const pCols = [{ key: 'name', h: 'Ưu đãi', w: 34 }, { key: 'kind', h: 'Loại', w: 12 }, { key: 'n', h: 'Số lần khách đặt', w: 14, num: true, fmt: INT, sum: true }, { key: 'gift', h: 'Món tặng', w: 11, num: true, fmt: INT, sum: true }, { key: 'rev', h: 'Tiền thu', w: 15, num: true, fmt: MONEY, sum: true }];
     const wp = sheetOf(wb, 'Ưu đãi', 'ƯU ĐÃI ĐÃ BÁN · ' + label, sub, pCols, 'FFA47ACB'); const pFirst = wp._next;
@@ -163,7 +165,7 @@ async function build(month, onStep) {
   const wb2 = sheetOf(wb, 'Hoá đơn', 'TẤT CẢ HOÁ ĐƠN · ' + label, sub, bCols, 'FF7A5C3E');
   const bFirst = wb2._next;
   sales.forEach(s => {
-    const txt = (s.items || []).map(i => i.qty + '× ' + i.name + ((i.options || []).length ? ' (' + i.options.map(o => o.choice).join(', ') + ')' : '') + (i.promo_part === 'tang' ? ' [tặng]' : i.promo_group ? ' [' + (i.promo_name || 'ưu đãi') + ']' : '')).join('\n');
+    const txt = (s.items || []).map(i => i.qty + '× ' + i.name + ((i.options || []).length ? ' (' + i.options.map(o => o.choice).join(', ') + ')' : '') + (i.promo_part === 'tang' ? ' [tặng]' : i.promo_group || i.promo_kind === 'giam_gia' ? ' [' + (i.promo_name || 'ưu đãi') + ']' : '')).join('\n');
     addRow(wb2, { d: xd(new Date(new Date(s.paid_at).setHours(0, 0, 0, 0))), t: xd(s.paid_at), dine: DINE[s.dine_type || 'tai_quan'], q: s.queue_number || null,
       name: s.customer_name || '', phone: s.customer_phone || '', addr: s.address || '', items: txt, n: sumOf(s.items || [], i => i.qty), total: s.total, pay: PAY[s.payment_method] || s.payment_method, who: empName.get(s.cashier_id) || '' });
   });
