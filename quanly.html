@@ -392,7 +392,7 @@ function promoBlocked(p) {
   if (p.kind === 'giam_gia') { const g = p.items.filter(i => i.part === 'giam'); return g.some(i => !off(i)) ? '' : g.length ? 'Ẩn vì các món đều hết: ' + nm(g) : 'Ẩn vì chưa có món'; }
   const buy = p.items.filter(i => i.part === 'mua'), gift = p.items.filter(i => i.part === 'tang');
   if (!buy.some(i => !off(i))) return 'Ẩn vì món mua đều hết: ' + nm(buy);
-  if (!p.gift_same && !gift.some(i => !off(i))) return 'Ẩn vì món tặng đều hết: ' + nm(gift);
+  if (!p.gift_same && !p.gift_name && !gift.some(i => !off(i))) return 'Ẩn vì món tặng đều hết: ' + nm(gift);
   return '';
 }
 function promoState(p) {
@@ -404,23 +404,25 @@ function promoState(p) {
   return ['Ngoài khung giờ', 'pill-red'];
 }
 async function renderPromos(main) {
-  const [list, m] = await Promise.all([api.adminPromotions(), api.adminMenu()]); // luôn lấy menu mới: món vừa gạt hết làm ưu đãi bị ẩn
+  const [list, m, used] = await Promise.all([api.adminPromotions(), api.adminMenu(), api.promoUsage()]); // luôn lấy menu mới: món vừa gạt hết làm ưu đãi bị ẩn
   state.menuData = m; state.promoData = list;
+  const limitTxt = p => p.limit_qty ? (used[p.id] || 0) + '/' + p.limit_qty + ' ' + (p.kind === 'giam_gia' ? 'ly' : 'suất') + (p.limit_per === 'tong' ? ' cả đợt' : ' hôm nay') : '';
   const nameOf = id => (m.items.find(i => i.id === id) || {}).name || '(món đã xoá)';
   const itemsText = p => p.kind === 'combo'
     ? p.items.filter(i => i.part === 'combo').map(i => i.qty + ' ' + nameOf(i.menu_item_id)).join(' + ')
     : p.kind === 'giam_gia' ? p.items.filter(i => i.part === 'giam').map(i => nameOf(i.menu_item_id)).join(', ')
-    : 'Mua ' + p.buy_qty + ': ' + p.items.filter(i => i.part === 'mua').map(i => nameOf(i.menu_item_id)).join(', ') + ' · Tặng ' + p.get_qty + ': ' + (p.gift_same ? 'đúng món khách mua' : p.items.filter(i => i.part === 'tang').map(i => nameOf(i.menu_item_id)).join(', '));
+    : 'Mua ' + p.buy_qty + ': ' + p.items.filter(i => i.part === 'mua').map(i => nameOf(i.menu_item_id)).join(', ') + ' · Tặng ' + p.get_qty + ': ' + (p.gift_same ? 'đúng món khách mua' : p.gift_name ? p.gift_name + ' (ngoài menu)' : p.items.filter(i => i.part === 'tang').map(i => nameOf(i.menu_item_id)).join(', '));
   const words = BN.fold(state.promoQuery).split(/\s+/).filter(Boolean);
   const shown = list.filter(p => { const t = BN.fold(p.name + ' ' + (p.description || '') + ' ' + itemsText(p)); return words.every(w => t.indexOf(w) >= 0); });
   main.innerHTML = '<div class="ptitle"><h1>Ưu đãi</h1></div>' +
     '<div class="toolbar"><input class="search" id="pq" type="search" placeholder="Tìm ưu đãi hoặc tên món…" value="' + esc(state.promoQuery) + '" aria-label="Tìm ưu đãi"><button class="btn" type="button" id="addPromo">+ Tạo ưu đãi</button></div>' +
     '<p class="muted small" style="margin:-4px 0 12px">Ưu đãi đang hiện sẽ nằm ở đầu menu của khách. Combo có món ăn hiện ở menu Ăn vặt, có đồ uống hiện ở menu Trà · Cà phê.</p>' +
     '<section class="box cc-tim"><h2 class="box-title"><span>Các ưu đãi</span></h2>' + (shown.length ? '<ul class="list">' + shown.map(p => {
-      const [st, cls] = promoState(p), when = promoWhen(p, false);
+      const out = p.limit_qty && (used[p.id] || 0) >= p.limit_qty && p.is_active;
+      const [st, cls] = out ? ['Đang ẩn vì hết suất' + (p.limit_per === 'tong' ? '' : ', mai mở lại'), 'pill-red'] : promoState(p), when = promoWhen(p, false);
       return '<li><div class="lrow"><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-promo="' + esc(p.id) + '">' +
         '<span class="lname">' + esc(p.name) + ' <span class="pill ' + (p.kind === 'combo' ? 'pill-red' : p.kind === 'giam_gia' ? 'pill-ok' : 'pill-gift') + '">' + (p.kind === 'combo' ? 'Combo ' + K(p.price || 0) : p.kind === 'giam_gia' ? BN.saleBadge(p) : 'Mua ' + p.buy_qty + ' tặng ' + p.get_qty) + '</span></span>' +
-        '<span class="lsub">' + esc(itemsText(p)) + '</span><span class="lsub"><span class="pill ' + cls + '">' + st + '</span> ' + esc(when || 'Mọi lúc') + '</span></button>' +
+        '<span class="lsub">' + esc(itemsText(p)) + '</span><span class="lsub"><span class="pill ' + cls + '">' + st + '</span> ' + esc(when || 'Mọi lúc') + (p.limit_qty ? ' · <span class="pill ' + ((used[p.id] || 0) >= p.limit_qty ? 'pill-red' : 'pill-mute') + '">' + 'Đã dùng ' + limitTxt(p) + '</span>' : '') + '</span></button>' +
         '<label class="switch"><input type="checkbox" data-pon="' + esc(p.id) + '"' + (p.is_active ? ' checked' : '') + '><span class="track"></span><span class="sw-l">' + (p.is_active ? 'Bật' : 'Tắt') + '</span></label></div></li>';
     }).join('') + '</ul>' : '<p class="empty">' + (words.length ? 'Không có ưu đãi nào khớp.' : 'Chưa có ưu đãi nào. Bấm “+ Tạo ưu đãi”.') + '</p>') + '</section>';
   const pq = $('#pq', main);
@@ -440,6 +442,8 @@ function editPromo(p) {
   const m = state.menuData, isNew = !p;
   p = p ? JSON.parse(JSON.stringify(p)) : { name: '', kind: 'combo', description: '', price: null, buy_qty: 1, get_qty: 1, gift_same: false, option_mode: 'cong_them', start_at: null, end_at: null, days: null, time_from: null, time_to: null, is_active: true, sort_order: 0, sale_mode: 'dong_gia', sale_value: null, items: [] };
   p.sale_mode = p.sale_mode || 'dong_gia';
+  p._out = !p.gift_same && !!p.gift_name;
+  const giftKind = () => p.gift_same ? 'same' : p._out ? 'out' : 'menu';
   // Món đã chọn: combo → số lượng từng món; mua / tặng → danh sách món
   const pick = { combo: new Map(), mua: new Set(), tang: new Set(), giam: new Set() };
   p.items.forEach(i => { if (i.part === 'combo') pick.combo.set(i.menu_item_id, i.qty); else pick[i.part].add(i.menu_item_id); });
@@ -470,8 +474,11 @@ function editPromo(p) {
     '<div data-for="mua_tang"' + (p.kind === 'mua_tang' ? '' : ' hidden') + '>' +
     '<div class="grid2"><label class="field" for="prBuy">Mua (X món)<input id="prBuy" class="num" type="number" min="1" max="20" value="' + p.buy_qty + '"></label><label class="field" for="prGet">Tặng (Y món)<input id="prGet" class="num" type="number" min="1" max="20" value="' + p.get_qty + '"></label></div>' +
     '<div class="field pk-h" style="margin-top:10px">Món được tính là món mua <span class="req">*</span></div><div id="pkMua">' + pickerHtml('mua') + '</div>' +
-    '<label class="check" style="margin-top:10px"><input type="checkbox" id="prSame"' + (p.gift_same ? ' checked' : '') + '><span><b>Tặng đúng món khách mua</b><small>Ví dụ mua 1 ly trà sữa nào thì tặng 1 ly giống hệt</small></span></label>' +
-    '<div id="tangBox"' + (p.gift_same ? ' hidden' : '') + '><div class="field pk-h" style="margin-top:10px">Món được tặng <span class="req">*</span></div><div id="pkTang">' + pickerHtml('tang') + '</div></div></div>' +
+    '<div class="field" style="margin-top:10px">Tặng gì</div><div class="seg2" role="group" aria-label="Tặng gì" style="grid-template-columns:repeat(3,1fr)">' + [['menu', 'Món trong menu'], ['same', 'Đúng món khách mua'], ['out', 'Quà ngoài menu']].map(([k, t]) => '<button type="button" data-gk="' + k + '" aria-pressed="' + (giftKind() === k) + '">' + t + '</button>').join('') + '</div>' +
+    '<div id="outBox"' + (giftKind() === 'out' ? '' : ' hidden') + '><div class="grid2" style="margin-top:8px"><label class="field" for="prGiftName">Tên quà (khách thấy, in trên phiếu) <span class="req">*</span><input id="prGiftName" maxlength="60" value="' + esc(p.gift_name || '') + '" placeholder="Ví dụ: Sữa đậu 500ml"></label>' +
+    '<label class="field" for="prGiftSt">Nơi đưa quà<select id="prGiftSt"><option value="pha_che"' + (p.gift_station !== 'bep' ? ' selected' : '') + '>Quầy pha chế</option><option value="bep"' + (p.gift_station === 'bep' ? ' selected' : '') + '>Bếp</option></select></label></div>' +
+    '<p class="small muted" style="margin:4px 0 0">Quà hiện trên đơn của nơi được chọn, giá 0đ, nhãn TẶNG.</p></div>' +
+    '<div id="tangBox"' + (giftKind() === 'menu' ? '' : ' hidden') + '><div class="field pk-h" style="margin-top:10px">Món được tặng <span class="req">*</span></div><div id="pkTang">' + pickerHtml('tang') + '</div></div></div>' +
     // Giảm giá / đồng giá
     '<div data-for="giam_gia"' + (p.kind === 'giam_gia' ? '' : ' hidden') + '>' +
     '<div class="field">Cách giảm</div><div class="seg2" role="group" aria-label="Cách giảm" style="grid-template-columns:repeat(3,1fr)">' + [['dong_gia', 'Đồng giá'], ['phan_tram', 'Giảm %'], ['tru_tien', 'Giảm tiền']].map(([k, t]) => '<button type="button" data-sm="' + k + '" aria-pressed="' + (p.sale_mode === k) + '">' + t + '</button>').join('') + '</div>' +
@@ -480,6 +487,10 @@ function editPromo(p) {
     '<p class="small muted" style="margin:6px 0 0">Giảm trên giá món; topping, upsize, size L vẫn cộng thêm như thường. Giảm % làm tròn xuống nghìn. Khách gọi món như bình thường là được giá giảm.</p></div>' +
     '<label class="field" id="prModeBox" for="prMode" style="margin-top:6px"' + (p.kind === 'giam_gia' ? ' hidden' : '') + '><span id="prModeLbl">' + (p.kind === 'combo' ? 'Topping, upsize có phí trong combo' : 'Topping, upsize có phí của món tặng') + '</span><select id="prMode">' + Object.keys(OPT_MODE).map(k => '<option value="' + k + '"' + (p.option_mode === k ? ' selected' : '') + '>' + OPT_MODE[k] + '</option>').join('') + '</select></label>' +
     // Thời gian
+    '<fieldset style="border:0;padding:0;margin:8px 0 0"><legend class="field" style="margin-bottom:6px">Giới hạn số suất</legend>' +
+    '<div class="grid2"><label class="field" for="prLim">Tối đa (để trống = không giới hạn)<input id="prLim" class="num" type="number" inputmode="numeric" min="1" value="' + (p.limit_qty || '') + '" placeholder="Ví dụ 15"></label>' +
+    '<label class="field" for="prLimPer">Tính theo<select id="prLimPer"><option value="ngay"' + (p.limit_per !== 'tong' ? ' selected' : '') + '>Mỗi ngày (0h mở lại)</option><option value="tong"' + (p.limit_per === 'tong' ? ' selected' : '') + '>Cả đợt ưu đãi</option></select></label></div>' +
+    '<p class="small muted" style="margin:4px 0 0">Combo / mua tặng: 1 suất = 1 phần khách chọn. Giảm giá / đồng giá: 1 suất = 1 món (1 ly). Hết suất thì ưu đãi tự ẩn, món đồng giá về giá gốc; huỷ đơn thì suất được trả lại.</p></fieldset>' +
     '<fieldset style="border:0;padding:0;margin:8px 0 0"><legend class="field" style="margin-bottom:6px">Thời gian hiển thị cho khách</legend>' +
     '<div class="grid2"><label class="field" for="prFrom">Từ ngày<input id="prFrom" type="datetime-local" value="' + localIn(p.start_at) + '"></label><label class="field" for="prTo">Đến ngày<input id="prTo" type="datetime-local" value="' + localIn(p.end_at) + '"></label></div>' +
     '<div class="grid2" style="margin-top:8px"><label class="field" for="prT1">Khung giờ mỗi ngày: từ<input id="prT1" type="time" value="' + esc(p.time_from ? String(p.time_from).slice(0, 5) : '') + '"></label><label class="field" for="prT2">đến<input id="prT2" type="time" value="' + esc(p.time_to ? String(p.time_to).slice(0, 5) : '') + '"></label></div>' +
@@ -494,6 +505,8 @@ function editPromo(p) {
       sh.addEventListener('click', e => {
         const k = e.target.closest('[data-pk]');
         if (k) { p.kind = k.dataset.pk; $$('[data-pk]', sh).forEach(x => x.setAttribute('aria-pressed', x === k)); $$('[data-for]', sh).forEach(x => { x.hidden = x.dataset.for !== p.kind; }); $('#prModeBox', sh).hidden = p.kind === 'giam_gia'; $('#prModeLbl', sh).textContent = p.kind === 'combo' ? 'Topping, upsize có phí trong combo' : 'Topping, upsize có phí của món tặng'; return; }
+        const gk = e.target.closest('[data-gk]');
+        if (gk) { p.gift_same = gk.dataset.gk === 'same'; p._out = gk.dataset.gk === 'out'; $$('[data-gk]', sh).forEach(x => x.setAttribute('aria-pressed', x === gk)); $('#tangBox', sh).hidden = gk.dataset.gk !== 'menu'; $('#outBox', sh).hidden = gk.dataset.gk !== 'out'; return; }
         const sm = e.target.closest('[data-sm]');
         if (sm) { p.sale_mode = sm.dataset.sm; $$('[data-sm]', sh).forEach(x => x.setAttribute('aria-pressed', x === sm)); $('#prSaleLbl', sh).textContent = SALE_LBL[p.sale_mode]; redraw('giam'); return; }
         const cq = e.target.closest('[data-cq]');
@@ -503,7 +516,7 @@ function editPromo(p) {
       sh.addEventListener('change', e => {
         const c = e.target.closest('[data-pp]');
         if (c) { const part = c.dataset.pp, id = c.value; if (part === 'combo') { if (c.checked) pick.combo.set(id, 1); else pick.combo.delete(id); } else if (c.checked) pick[part].add(id); else pick[part].delete(id); redraw(part); return; }
-        if (e.target.id === 'prSame') $('#tangBox', sh).hidden = e.target.checked;
+
       });
       sh.addEventListener('input', e => { if (e.target.id === 'prSale') { clearTimeout(e.target._t); e.target._t = setTimeout(() => redraw('giam'), 300); return; } const s2 = e.target.closest('[data-pq]'); if (s2) { q[s2.dataset.pq] = s2.value; clearTimeout(s2._t); s2._t = setTimeout(() => redraw(s2.dataset.pq), 200); } });
       wireConfirm(sh, '#prDel', 'prDelBox', async () => { await api.deletePromotion(p.id); ui.close(); ui.toast('Đã xoá ưu đãi'); rerender(); });
@@ -524,11 +537,16 @@ function editPromo(p) {
           out.items = [...pick.giam].map(id => ({ part: 'giam', menu_item_id: id }));
         } else {
           out.buy_qty = Math.max(1, Math.min(20, Number($('#prBuy', sh).value) || 1)); out.get_qty = Math.max(1, Math.min(20, Number($('#prGet', sh).value) || 1));
-          out.gift_same = $('#prSame', sh).checked;
+          const gk = giftKind(); out.gift_same = gk === 'same';
+          out.gift_name = gk === 'out' ? $('#prGiftName', sh).value.trim() : null; out.gift_station = $('#prGiftSt', sh).value;
           if (!pick.mua.size) return say('Chọn món được tính là món mua.');
-          if (!out.gift_same && !pick.tang.size) return say('Chọn món được tặng, hoặc tích “Tặng đúng món khách mua”.');
-          out.items = [...pick.mua].map(id => ({ part: 'mua', menu_item_id: id })).concat(out.gift_same ? [] : [...pick.tang].map(id => ({ part: 'tang', menu_item_id: id })));
+          if (gk === 'out' && !out.gift_name) return say('Nhập tên quà tặng ngoài menu.');
+          if (gk === 'menu' && !pick.tang.size) return say('Chọn món được tặng (hoặc chọn “Đúng món khách mua” / “Quà ngoài menu”).');
+          out.items = [...pick.mua].map(id => ({ part: 'mua', menu_item_id: id })).concat(gk === 'menu' ? [...pick.tang].map(id => ({ part: 'tang', menu_item_id: id })) : []);
         }
+        const lim = $('#prLim', sh).value.trim();
+        if (lim !== '' && !(Number(lim) >= 1)) return say('Giới hạn số suất phải từ 1 trở lên, hoặc để trống.');
+        out.limit_qty = lim === '' ? null : Math.round(Number(lim)); out.limit_per = $('#prLimPer', sh).value;
         const f = $('#prFrom', sh).value, t = $('#prTo', sh).value, t1 = $('#prT1', sh).value, t2 = $('#prT2', sh).value;
         out.start_at = f ? new Date(f).toISOString() : null; out.end_at = t ? new Date(t).toISOString() : null;
         if (out.start_at && out.end_at && out.end_at <= out.start_at) return say('Ngày kết thúc phải sau ngày bắt đầu.');
