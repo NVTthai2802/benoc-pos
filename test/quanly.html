@@ -110,6 +110,50 @@
 .sk-conv { display: grid; grid-template-columns: auto 1fr auto 90px 1fr; gap: 6px; align-items: center; }
 .sk-conv input { min-width: 0; height: 42px; border: 1.5px solid var(--line); border-radius: 10px; padding: 0 10px; font: inherit; background: var(--card); }
 .sk-conv span { font-weight: 700; }
+.sc-btn { display: inline-flex; align-items: center; gap: 6px; }
+.sc-btn svg { width: 18px; height: 18px; }
+.seg2.sc-modes { grid-template-columns: repeat(3, 1fr); }
+.sc-cam { position: relative; overflow: hidden; border-radius: 14px; background: #111; aspect-ratio: 4 / 3; max-height: 46vh; width: 100%; }
+.sc-cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sc-frame { position: absolute; left: 10%; right: 10%; top: 30%; bottom: 30%; border: 3px solid rgba(255,255,255,.9); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; }
+.sc-hint { position: absolute; left: 0; right: 0; bottom: 8px; margin: 0; text-align: center; color: #fff; font-size: 14px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+.sc-alt { display: flex; gap: 8px; margin: 10px 0 0; }
+.sc-codes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sc-code { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.sc-code .x { border: 0; background: none; font-size: 18px; line-height: 1; padding: 2px 6px; color: var(--ink-2); cursor: pointer; }
+.sc-new { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--card); }
+.sc-new .seg2 { margin: 0; }
+.nav [data-tab] { position: relative; }
+.nav-badge { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font: 800 11px/18px var(--f-body); text-align: center; }
+.fb-card { padding: 12px 0; border-bottom: 1px dashed var(--line); display: flex; flex-direction: column; gap: 6px; }
+.fb-card:last-child { border-bottom: 0; }
+.fb-changed { background: color-mix(in srgb, var(--danger) 7%, transparent); border-radius: 10px; padding: 12px 10px; }
+.fb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fb-ago { margin-left: auto; }
+.fb-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fb-meta, .fb-unk { margin: 0; }
+.fb-unk { color: var(--danger); }
+.fb-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.fb-review { display: grid; gap: 14px; }
+@media (min-width: 760px) { .fb-review { grid-template-columns: 1fr 1fr; align-items: start; } }
+.fb-chat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.fb-chat { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; padding: 10px; border-radius: 12px; background: var(--card); }
+.fb-msg { display: flex; flex-direction: column; max-width: 85%; }
+.fb-msg span { padding: 8px 11px; border-radius: 14px; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.fb-msg small { font-size: 11px; color: var(--ink-2); margin: 2px 6px 0; }
+.fb-khach { align-self: flex-start; }
+.fb-khach span { background: var(--line); color: var(--ink); border-bottom-left-radius: 4px; }
+.fb-bot, .fb-quan { align-self: flex-end; align-items: flex-end; }
+.fb-bot span { background: #3A7FC2; color: #fff; border-bottom-right-radius: 4px; }
+.fb-quan span { background: #2E9E6B; color: #fff; border-bottom-right-radius: 4px; }
+.fb-send { margin-top: 8px; }
+.fb-send input { font: inherit; text-align: left; font-size: 15px; height: 40px; border: 1.5px solid var(--line); border-radius: 10px; padding: 0 10px; background: var(--card); }
+.fb-edit { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fb-edit li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.fb-edit .sk-step b { min-width: 22px; text-align: center; }
+.fb-total { margin: 6px 0 0; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; margin: 4px 0; cursor: pointer; }
+.check input { width: 18px; height: 18px; }
 .bank-set { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: start; }
 .bank-form { display: flex; flex-direction: column; gap: 10px; }
 .bank-prev { text-align: center; }
@@ -166,7 +210,7 @@ const PAY_COLOR = { tien_mat: '#E2325C', chuyen_khoan: '#3A7FC2' };
 const ICON_BOWL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>';
 const ICON_CUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.5 13h-9z"/><path d="M5 8h14M12 8l2-6"/></svg>';
 const TABS = {
-  owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['uudai', 'Ưu đãi', 'tim'], ['kho', 'Kho', 'xanhla'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
+  owner: [['doanhthu', 'Doanh thu', 'hong'], ['facebook', 'Facebook', 'xanhduong'], ['menu', 'Menu', 'vang'], ['uudai', 'Ưu đãi', 'tim'], ['kho', 'Kho', 'xanhla'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
   staff: [['chamcong', 'Chấm công', 'cam'], ['kho', 'Kho', 'xanhla']]
 };
 const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', promoQuery: '', stockQuery: '', stockSub: 'hang', packQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
@@ -206,6 +250,7 @@ function boot() {
     '<main class="page" id="main"></main>';
   $('.nav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
   go(state.tab);
+  if (isOwner()) { refreshFbBadge(); setInterval(() => { if (document.visibilityState === 'visible') refreshFbBadge(); }, 30000); }
 }
 function go(tab) {
   state.tab = tab;
@@ -213,10 +258,161 @@ function go(tab) {
   BN.store.set('qltab.' + BN.SLOT, tab);
   $$('.nav [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
   const main = $('#main'); main.onclick = null; main.onchange = null; main.innerHTML = '<p class="loading">Đang tải…</p>';
-  ({ doanhthu: renderRevenue, menu: renderMenu, uudai: renderPromos, kho: renderStock, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
+  ({ doanhthu: renderRevenue, facebook: renderFacebook, menu: renderMenu, uudai: renderPromos, kho: renderStock, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
     .catch(e => { main.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; });
 }
 const rerender = () => go(state.tab);
+
+/* =====================================================================
+   ĐƠN FACEBOOK — bot Fanpage tách đơn từ tin nhắn, chủ quán đối chiếu rồi duyệt
+   ===================================================================== */
+const FB_DINE = { mang_ve: ['Qua lấy', 'pill-mute'], tai_quan: ['Ăn tại quán', 'pill-gift'], giao_hang: ['Đi ship', 'pill-ok'] };
+const FB_MISS = { items: 'chưa có món', dine_type: 'chưa chọn lấy / ăn / ship', at: 'chưa có giờ hẹn', at_past: 'giờ hẹn đã qua', at_far: 'hẹn quá xa', at_hours: 'ngoài giờ nhận đơn', address: 'chưa có địa chỉ', phone: 'chưa có SĐT' };
+const FB_INBOX = 'https://business.facebook.com/latest/inbox/all';
+const fbLink = th => (th && th.link) || FB_INBOX;
+const fbWhen = at => { if (!at) return ''; const d = new Date(at), today = startOfDay(new Date()).getTime(), day = startOfDay(d).getTime(); return (day === today ? '' : day === today + 864e5 ? 'mai ' : ddmm(d) + ' ') + hhmm(d); };
+const fbItemsHtml = items => '<ul class="fb-items">' + (items || []).map(i => '<li><b class="num">' + i.qty + '×</b> ' + esc(i.name) + (i.choices && i.choices.length ? ' <span class="small muted">' + esc(i.choices.join(', ')) + '</span>' : '') + (i.note ? ' <span class="small muted">— ' + esc(i.note) + '</span>' : '') + '</li>').join('') + '</ul>';
+async function renderFacebook(main) {
+  const [data, st] = await Promise.all([api.fbDrafts(), api.settings()]);
+  if (!data) {
+    main.innerHTML = '<div class="ptitle"><h1>Đơn Facebook</h1></div><section class="box cc-xanhduong"><h2 class="box-title"><span>Chưa cài bot Fanpage</span></h2><p>Chạy <b>sql/cap-nhat-22-don-facebook.sql</b> trên Supabase, rồi làm theo <b>HUONG-DAN-BOT-FACEBOOK.md</b> để nối Fanpage với bot.</p></section>';
+    return;
+  }
+  const th = new Map(data.threads.map(t => [t.psid, t]));
+  const today = startOfDay(new Date());
+  const pending = data.drafts.filter(d => d.status === 'cho_duyet').sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0));
+  const asking = data.drafts.filter(d => d.status === 'dang_hoi');
+  const done = data.drafts.filter(d => d.status === 'da_duyet' && new Date(d.approved_at) >= today);
+  const help = data.threads.filter(t => t.need_human);
+  const paused = t => t && t.paused_until && new Date(t.paused_until) > new Date();
+  const card = d => { const t = th.get(d.psid);
+    return '<article class="fb-card' + (d.changed_after ? ' fb-changed' : '') + '"><div class="fb-top"><b>' + esc(d.customer_name || (t && t.name) || 'Khách') + '</b>' +
+      (d.dine_type ? '<span class="pill ' + FB_DINE[d.dine_type][1] + '">' + FB_DINE[d.dine_type][0] + (d.at ? ' · ' + fbWhen(d.at) : '') + '</span>' : d.at ? '<span class="pill pill-mute">' + fbWhen(d.at) + '</span>' : '') +
+      (d.changed_after ? '<span class="pill pill-red">Khách vừa sửa đơn</span>' : '') + (paused(t) ? '<span class="pill pill-mute">Bot đang im</span>' : '') +
+      '<span class="small muted fb-ago">' + BN.ago(d.updated_at) + '</span></div>' +
+      (d.items && d.items.length ? fbItemsHtml(d.items) : '') +
+      ((d.unknown || []).length ? '<p class="small fb-unk">Bot chưa hiểu: ' + d.unknown.map(u => '“' + esc(u) + '”').join(', ') + '</p>' : '') +
+      '<p class="small muted fb-meta">' + [d.address ? '📍 ' + esc(d.address) : '', d.customer_phone ? '📞 ' + esc(d.customer_phone) : '', d.total_est ? 'Tạm tính <b class="num">' + vnd(d.total_est) + '</b>' : '', d.status === 'da_duyet' ? 'Duyệt lúc ' + hhmm(d.approved_at) + ' · ' + esc(d.approved_by || '') : ''].filter(Boolean).join(' · ') + '</p>' +
+      (d.status === 'dang_hoi' && (d.missing || []).length ? '<div class="chips">' + d.missing.map(m => '<span class="pill pill-mute">' + (FB_MISS[m] || m) + '</span>').join('') + '</div>' : '') +
+      '<div class="fb-acts"><a class="btn btn-line btn-sm" href="' + esc(fbLink(t)) + '" target="_blank" rel="noopener">Mở đoạn chat</a>' +
+      (d.status === 'da_duyet' ? '' : '<button class="btn btn-sm" type="button" data-fbd="' + esc(d.id) + '">' + (d.status === 'cho_duyet' ? 'Xem & duyệt' : 'Xem / duyệt luôn') + '</button>') + '</div></article>'; };
+  main.innerHTML = '<div class="ptitle"><h1>Đơn Facebook</h1><label class="switch"><input type="checkbox" id="fbOn"' + (st.fb_bot_on !== false ? ' checked' : '') + '><span class="track"></span>Bot tự trả lời</label></div>' +
+    '<div class="toolbar"><span class="small muted grow">Bot hỏi khách đủ món, lấy / ăn tại quán / ship, giờ hẹn, địa chỉ. Bạn đối chiếu với đoạn chat rồi bấm Duyệt để gửi bếp.</span><button class="btn btn-line btn-sm" type="button" id="fbSet">Cài đặt bot</button></div>' +
+    (help.length ? '<section class="box cc-hong"><h2 class="box-title"><span>Khách cần bạn trả lời (' + help.length + ')</span></h2><ul class="list">' + help.map(t => '<li><div class="lrow" style="grid-template-columns:1fr auto;align-items:center"><span class="lmain"><span class="lname">' + esc(t.name || 'Khách') + '</span><span class="lsub">Bot đã nhờ chủ quán · ' + BN.ago(t.last_at) + (paused(t) ? ' · bot im tới ' + hhmm(t.paused_until) : '') + '</span></span><span class="fb-acts"><a class="btn btn-sm" href="' + esc(fbLink(t)) + '" target="_blank" rel="noopener">Mở đoạn chat</a><button class="btn btn-sm btn-line" type="button" data-fbok="' + esc(t.psid) + '">Xong, bot nói tiếp</button></span></div></li>').join('') + '</ul></section>' : '') +
+    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Chờ duyệt (' + pending.length + ')</span></h2>' + (pending.length ? pending.map(card).join('') : '<p class="empty">Chưa có đơn chờ duyệt.</p>') + '</section>' +
+    (asking.length ? '<section class="box cc-vang"><h2 class="box-title"><span>Bot đang hỏi thêm khách (' + asking.length + ')</span></h2>' + asking.map(card).join('') + '</section>' : '') +
+    (done.length ? '<section class="box cc-xanhla"><h2 class="box-title"><span>Đã duyệt hôm nay (' + done.length + ')</span></h2>' + done.map(card).join('') + '</section>' : '');
+  $('#fbOn', main).onchange = async e => { try { await api.fbBotSettings({ fb_bot_on: e.target.checked }); ui.toast(e.target.checked ? 'Bot đã bật' : 'Bot đã tắt, bạn tự nhắn khách'); } catch (err) { e.target.checked = !e.target.checked; ui.toast(errText(err)); } };
+  main.onclick = async e => {
+    const b = e.target.closest('[data-fbd]'); if (b) { openFbDraft(data.drafts.find(d => d.id === b.dataset.fbd), th.get(data.drafts.find(d => d.id === b.dataset.fbd).psid)); return; }
+    const ok = e.target.closest('[data-fbok]'); if (ok) { ok.disabled = true; try { await api.fbThread(ok.dataset.fbok, { need_human: false, paused_until: null }); rerender(); } catch (err) { ui.toast(errText(err)); ok.disabled = false; } return; }
+    if (e.target.closest('#fbSet')) openFbSettings(st);
+  };
+  // Tự làm mới khi đang mở tab (không làm mới lúc đang xem một đơn)
+  clearInterval(state.fbTimer);
+  state.fbTimer = setInterval(() => { if (state.tab !== 'facebook') return clearInterval(state.fbTimer); if (!ui.isOpen() && document.visibilityState === 'visible') renderFacebook(main).catch(() => {}); }, 20000);
+}
+/* Xem đơn nháp: tin nhắn gốc bên trái, đơn bot tách bên phải; sửa rồi duyệt */
+async function openFbDraft(d, t) {
+  const f = { dine: d.dine_type || 'mang_ve', at: d.at ? toLocalInput(d.at) : '', name: d.customer_name || (t && t.name) || '', phone: d.customer_phone || '', address: d.address || '', note: d.note || '', items: JSON.parse(JSON.stringify(d.items || [])), notify: true, bank: true };
+  let msgs = []; try { msgs = await api.fbMessages(d.psid); } catch (e) { /* bỏ qua */ }
+  let menu = null, adding = false, query = '';
+  const total = () => f.items.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
+  const chat = () => msgs.length ? msgs.map(m => '<div class="fb-msg fb-' + m.sender + '"><span>' + esc(m.text).replace(/\n/g, '<br>') + '</span><small>' + (m.sender === 'khach' ? 'Khách' : m.sender === 'bot' ? 'Bot' : 'Quán') + ' · ' + hhmm(m.created_at) + '</small></div>').join('') : '<p class="small muted">Chưa có tin nhắn.</p>';
+  const itemsBox = () => (f.items.length ? '<ul class="fb-edit">' + f.items.map((i, k) => '<li><span class="grow">' + esc(i.name) + (i.choices && i.choices.length ? ' <span class="small muted">' + esc(i.choices.join(', ')) + '</span>' : '') + (i.note ? ' <span class="small muted">— ' + esc(i.note) + '</span>' : '') + '<br><span class="small muted num">' + vnd(i.price) + '</span></span>' +
+    '<span class="sk-step"><button class="btn btn-line btn-sm" type="button" data-q="' + k + '" data-d="-1" aria-label="Bớt">−</button><b class="num">' + i.qty + '</b><button class="btn btn-line btn-sm" type="button" data-q="' + k + '" data-d="1" aria-label="Thêm">+</button></span></li>').join('') + '</ul>' : '<p class="small muted">Chưa có món.</p>') +
+    (adding ? '<input class="search" id="fdQ" type="search" placeholder="Tìm món để thêm…" value="' + esc(query) + '" aria-label="Tìm món"><div class="chips" id="fdList">' + addList() + '</div>' : '<button class="link small" type="button" id="fdAdd">+ Thêm món</button>') +
+    '<p class="fb-total">Tạm tính: <b class="num">' + vnd(total()) + '</b> <span class="small muted">(giá thật tính lại khi duyệt)</span></p>';
+  const addList = () => { if (!menu) return '<span class="small muted">Đang tải menu…</span>'; const w = BN.fold(query).split(/\s+/).filter(Boolean); const all = [].concat(...menu.map(c => c.items)); const hit = all.filter(m => w.every(x => BN.fold(m.name).indexOf(x) >= 0)).slice(0, 24); return hit.map(m => '<button class="chipbtn" type="button" data-addm="' + esc(m.id) + '">' + esc(m.name) + ' · ' + K(m.price) + '</button>').join('') || '<span class="small muted">Không có món khớp.</span>'; };
+  const seg = () => '<div class="seg2 sc-modes" role="group" aria-label="Hình thức">' + Object.keys(FB_DINE).map(k => '<button type="button" data-dine="' + k + '" aria-pressed="' + (f.dine === k) + '">' + FB_DINE[k][0] + '</button>').join('') + '</div>';
+  const atLabel = () => f.dine === 'giao_hang' ? 'Giờ giao' : f.dine === 'tai_quan' ? 'Giờ khách đến ăn' : 'Giờ khách qua lấy';
+  ui.sheet(ui.head('Đơn Facebook · ' + esc(f.name || 'Khách'), d.status === 'cho_duyet' ? 'Bot đã hỏi đủ, chờ bạn duyệt' : 'Bot còn đang hỏi khách: ' + (d.missing || []).map(m => FB_MISS[m] || m).join(', ')) +
+    '<div class="sh-body fb-review"><div class="fb-chat-col"><div class="fb-chat-head"><b>Tin nhắn với khách</b><a class="btn btn-line btn-sm" href="' + esc(fbLink(t)) + '" target="_blank" rel="noopener">Mở đoạn chat</a></div><div class="fb-chat" id="fdChat">' + chat() + '</div>' +
+      '<div class="sk-step fb-send"><input id="fdTxt" maxlength="1000" placeholder="Nhắn khách từ đây…" aria-label="Nhắn khách"><button class="btn btn-sm" type="button" id="fdSend">Gửi</button></div></div>' +
+    '<div class="fb-form-col"><div id="fdSeg">' + seg() + '</div>' +
+      '<label class="field" for="fdAt"><span><span id="fdAtL">' + atLabel() + '</span> <span class="req">*</span></span><input id="fdAt" type="datetime-local" value="' + esc(f.at) + '"></label>' +
+      '<div class="grid2"><label class="field" for="fdName"><span>Tên khách <span class="req">*</span></span><input id="fdName" maxlength="60" value="' + esc(f.name) + '"></label><label class="field" for="fdPhone">SĐT<input id="fdPhone" inputmode="tel" maxlength="15" value="' + esc(f.phone) + '"></label></div>' +
+      '<label class="field" for="fdAddr" id="fdAddrBox"' + (f.dine === 'giao_hang' ? '' : ' hidden') + '><span>Địa chỉ giao <span class="req">*</span></span><input id="fdAddr" maxlength="300" value="' + esc(f.address) + '"></label>' +
+      '<label class="field" for="fdNote">Ghi chú cho bếp<input id="fdNote" maxlength="300" value="' + esc(f.note) + '"></label>' +
+      '<h3 class="og-head">Món</h3><div id="fdItems">' + itemsBox() + '</div>' +
+      ((d.unknown || []).length ? '<p class="small fb-unk">Bot chưa hiểu: ' + d.unknown.map(u => '“' + esc(u) + '”').join(', ') + ' — thêm tay nếu cần.</p>' : '') +
+      '<label class="check"><input type="checkbox" id="fdNotify" checked> Nhắn khách xác nhận đơn</label><label class="check"><input type="checkbox" id="fdBank" checked> Kèm số tài khoản để khách chuyển khoản trước</label>' +
+      '<p class="msg" id="fdMsg" hidden></p>' + confirmBox('Huỷ đơn nháp này? Bot không nhắn gì cho khách, bạn tự báo khách trong đoạn chat.', 'Huỷ đơn', 'fdDelBox') + '</div></div>' +
+    '<div class="sh-foot"><button class="btn btn-danger" type="button" id="fdDel">Huỷ đơn</button><button class="btn grow" type="button" id="fdOk">Duyệt → gửi bếp</button></div>', sh => {
+    const c = $('#fdChat', sh); c.scrollTop = c.scrollHeight;
+    const repaint = () => { $('#fdItems', sh).innerHTML = itemsBox(); const q = $('#fdQ', sh); if (q) { q.oninput = () => { query = q.value; $('#fdList', sh).innerHTML = addList(); }; } };
+    sh.addEventListener('click', async e => {
+      const dn = e.target.closest('[data-dine]'); if (dn) { f.dine = dn.dataset.dine; $('#fdSeg', sh).innerHTML = seg(); $('#fdAddrBox', sh).hidden = f.dine !== 'giao_hang'; $('#fdAtL', sh).textContent = atLabel(); return; }
+      const qb = e.target.closest('[data-q]'); if (qb) { const i = f.items[Number(qb.dataset.q)]; i.qty += Number(qb.dataset.d); if (i.qty <= 0) f.items.splice(Number(qb.dataset.q), 1); repaint(); return; }
+      if (e.target.closest('#fdAdd')) { adding = true; repaint(); $('#fdQ', sh).focus(); if (!menu) { try { menu = await api.getMenu(); } catch (err) { menu = []; } $('#fdList', sh).innerHTML = addList(); } return; }
+      const am = e.target.closest('[data-addm]'); if (am) {
+        const m = [].concat(...menu.map(x => x.items)).find(x => x.id === am.dataset.addm);
+        const defs = (m.option_groups || []).filter(g => g.min > 0).map(g => g.choices.find(x => x.default) || g.choices[0]).filter(Boolean);
+        f.items.push({ menu_item_id: m.id, name: m.name, qty: 1, choice_ids: defs.map(x => x.id), choices: [], note: null, price: m.price + defs.reduce((s, x) => s + (x.price || 0), 0) });
+        adding = false; query = ''; repaint(); ui.toast('Đã thêm ' + m.name + ' · đổi tuỳ chọn bằng Sửa đơn ở bếp nếu cần'); return;
+      }
+    });
+    const send = async () => {
+      const inp = $('#fdTxt', sh), text = inp.value.trim(); if (!text) return; const b = $('#fdSend', sh); b.disabled = true;
+      try { await api.fbCall({ action: 'send', psid: d.psid, text }); msgs.push({ sender: 'quan', text, created_at: new Date().toISOString() }); c.innerHTML = chat(); c.scrollTop = c.scrollHeight; inp.value = ''; }
+      catch (err) { ui.toast(errText(err)); }
+      b.disabled = false;
+    };
+    $('#fdSend', sh).onclick = send; $('#fdTxt', sh).onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); send(); } };
+    wireConfirm(sh, '#fdDel', 'fdDelBox', async () => { await api.fbCancel(d.id); ui.close(); ui.toast('Đã huỷ đơn nháp'); rerender(); });
+    $('#fdOk', sh).onclick = async () => {
+      const m = $('#fdMsg', sh), say = x => { m.textContent = x; m.hidden = false; }; m.hidden = true;
+      const at = $('#fdAt', sh).value, name = $('#fdName', sh).value.trim(), addr = $('#fdAddr', sh).value.trim();
+      if (!f.items.length) return say('Đơn chưa có món.');
+      if (!at) return say('Nhập ' + atLabel().toLowerCase() + '.');
+      if (!name) return say('Nhập tên khách.');
+      if (f.dine === 'giao_hang' && !addr) return say('Nhập địa chỉ giao.');
+      const btn = $('#fdOk', sh); btn.disabled = true;
+      try {
+        const r = await api.fbApprove(d.id, { dine: f.dine, at: new Date(at).toISOString(), name, phone: $('#fdPhone', sh).value.trim(), address: f.dine === 'giao_hang' ? addr : null, note: $('#fdNote', sh).value.trim(),
+          items: f.items.map(i => ({ menu_item_id: i.menu_item_id, qty: i.qty, choice_ids: i.choice_ids || [], note: i.note || null })) });
+        let extra = '';
+        if ($('#fdNotify', sh).checked) { try { await api.fbCall({ action: 'approved', draft_id: d.id, with_bank: $('#fdBank', sh).checked }); extra = ' · đã nhắn khách'; } catch (err) { extra = ' · chưa nhắn được khách: ' + errText(err); } }
+        ui.close(); ui.toast('Đã duyệt, đơn sang bếp · ' + vnd(r.total) + extra); rerender(); refreshFbBadge();
+      } catch (err) { say(errText(err)); btn.disabled = false; }
+    };
+  }, { wide: true });
+}
+function openFbSettings(st) {
+  ui.sheet(ui.head('Cài đặt bot Fanpage', 'Bot dùng menu đang bán, hết món là bot tự báo không có') + '<div class="sh-body">' +
+    '<div class="grid2"><label class="field" for="fsOpen">Nhận đơn từ<input id="fsOpen" type="time" value="' + esc(st.fb_open || '07:00') + '"></label><label class="field" for="fsClose">đến<input id="fsClose" type="time" value="' + esc(st.fb_close || '22:00') + '"></label></div>' +
+    '<p class="small muted" style="margin:-4px 0 0">Khách hẹn giờ ngoài khung này, bot nhắc khách chọn giờ khác.</p>' +
+    '<label class="field" for="fsHello">Câu chào riêng (không bắt buộc)<textarea id="fsHello" rows="3" maxlength="400" placeholder="Để trống: Dạ Bé Nốc chào … ạ 🥰">' + esc(st.fb_hello || '') + '</textarea></label>' +
+    '<p class="small muted" style="margin:0">Bot luôn gửi kèm mẫu đặt món sau câu chào. Khi bạn tự nhắn khách trong hộp thư Fanpage, bot im với khách đó 30 phút.</p>' +
+    '<div class="row"><button class="btn btn-line btn-sm" type="button" id="fsTest">Kiểm tra kết nối bot</button><button class="btn btn-line btn-sm" type="button" id="fsProf">Cài nút “Bắt đầu” trên Messenger</button></div><p class="small" id="fsRes"></p>' +
+    '<p class="msg" id="fsMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="fsSave">Lưu</button></div>', sh => {
+    $('#fsTest', sh).onclick = async e => {
+      e.target.disabled = true; const r = $('#fsRes', sh); r.textContent = 'Đang kiểm tra…';
+      try { const x = await api.fbCall({ action: 'status' });
+        r.innerHTML = x.demo ? 'Bản xem thử: không nối Facebook thật.' : [x.page && x.page.name ? '✅ Nối Fanpage <b>' + esc(x.page.name) + '</b>' : '❌ Chưa nối Fanpage: ' + esc((x.page && x.page.error) || 'thiếu FB_PAGE_TOKEN'), x.has_ai_key ? '✅ AI: ' + esc(x.ai) : '❌ Chưa có khoá AI', x.has_secret ? '✅ App secret' : '❌ Thiếu FB_APP_SECRET', x.has_verify ? '✅ Verify token' : '❌ Thiếu FB_VERIFY_TOKEN'].join('<br>');
+      } catch (err) { r.textContent = '❌ ' + errText(err); }
+      e.target.disabled = false;
+    };
+    $('#fsProf', sh).onclick = async e => {
+      e.target.disabled = true; const r = $('#fsRes', sh);
+      try { await api.fbCall({ action: 'profile' }); r.textContent = '✅ Đã cài nút Bắt đầu và lời chào trên Messenger của Fanpage.'; } catch (err) { r.textContent = '❌ ' + errText(err); }
+      e.target.disabled = false;
+    };
+    $('#fsSave', sh).onclick = async () => {
+      const o = $('#fsOpen', sh).value || '07:00', c = $('#fsClose', sh).value || '22:00';
+      if (o >= c) { const m = $('#fsMsg', sh); m.textContent = 'Giờ mở phải trước giờ đóng.'; m.hidden = false; return; }
+      try { await api.fbBotSettings({ fb_open: o, fb_close: c, fb_hello: $('#fsHello', sh).value.trim() || null }); ui.close(); ui.toast('Đã lưu cài đặt bot'); rerender(); }
+      catch (err) { const m = $('#fsMsg', sh); m.textContent = errText(err); m.hidden = false; }
+    };
+  });
+}
+/* Số trên nút tab Facebook: đơn chờ duyệt + khách cần chủ quán trả lời */
+async function refreshFbBadge() {
+  if (!isOwner()) return;
+  const n = await api.fbCount().catch(() => null); const b = $('.nav [data-tab="facebook"]'); if (!b) return;
+  let s = $('.nav-badge', b); if (!s) { s = document.createElement('span'); s.className = 'nav-badge'; b.appendChild(s); }
+  s.hidden = !n; s.textContent = n || '';
+}
 
 /* =====================================================================
    DOANH THU
@@ -562,22 +758,26 @@ const isLow = it => it.is_active !== false && Number(it.qty) <= Number(it.min_qt
 const STOCK_PRESETS = [['Thùng → gói', 'thùng', 'gói', 24], ['Thùng → can', 'thùng', 'can', 4], ['Can (nhập, dùng theo can)', 'can', 'can', 1], ['Bao → kg', 'bao', 'kg', 25], ['Thùng → hộp', 'thùng', 'hộp', 48], ['Thùng → cây (ly, ống hút)', 'thùng', 'cây', 20]];
 async function renderStock(main) {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const [items, moves, packs] = await Promise.all([api.stockItems(), api.stockMoves({ limit: 400, from: addDays(monthStart, -1) }), api.stockPacks()]);
+  const [items, moves, packs, codes, buys] = await Promise.all([api.stockItems(), api.stockMoves({ limit: 400, from: addDays(monthStart, -1) }), api.stockPacks(), api.stockBarcodes(),
+    isOwner() ? api.stockMoves({ kind: 'nhap', from: monthStart, limit: 5000 }).catch(() => null) : null]);
   state.stockData = items; state.stockPacks = packs; // packs = null: chưa chạy cập nhật 17
+  state.barcodes = codes; // codes = null: chưa chạy cập nhật 21 (chưa có mã vạch)
   const subBar = isOwner() && packs ? '<div class="chips">' + [['hang', 'Hàng hoá'], ['quycach', 'Quy cách nhập hàng']].map(([k, t]) => '<button class="chipbtn" type="button" data-ssub="' + k + '" aria-pressed="' + (state.stockSub === k) + '">' + t + '</button>').join('') + '</div>' : '';
   if (isOwner() && packs && state.stockSub === 'quycach') return renderPacks(main, packs, items, subBar);
   const byId = new Map(items.map(i => [i.id, i]));
   const words = BN.fold(state.stockQuery).split(/\s+/).filter(Boolean);
-  const shown = items.filter(i => words.every(w => BN.fold(i.name + ' ' + (i.grp || '')).indexOf(w) >= 0));
+  const codesOf = it => (codes || []).filter(b => b.item_id === it.id).map(b => b.code).join(' ');
+  const shown = items.filter(i => words.every(w => BN.fold(i.name + ' ' + (i.grp || '') + ' ' + codesOf(i)).indexOf(w) >= 0));
   const low = shown.filter(isLow);
-  const spent = moves.filter(m => m.kind === 'nhap' && m.cost && new Date(m.created_at) >= monthStart).reduce((t, m) => t + m.cost, 0);
+  // Tiền nhập tháng: lấy riêng các lần nhập trong tháng (danh sách lịch sử chỉ có 400 dòng gần nhất)
+  const spent = (buys || moves.filter(m => m.kind === 'nhap' && new Date(m.created_at) >= monthStart)).reduce((t, m) => t + (m.cost || 0), 0);
   const groups = [...new Set(shown.map(i => i.grp || 'Chưa xếp nhóm'))];
   const row = it => '<li><div class="lrow sk-row' + (isLow(it) ? ' sk-low' : '') + '"><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-sk="' + esc(it.id) + '">' +
     '<span class="lname">' + esc(it.name) + (isLow(it) ? ' <span class="pill pill-red">Sắp hết</span>' : '') + (it.is_active === false ? ' <span class="pill pill-mute">Ngừng dùng</span>' : '') + '</span>' +
     '<span class="lsub"><b class="sk-qty num">' + esc(stockText(it)) + '</b>' + (twoUnits(it) ? ' · 1 ' + esc(it.buy_unit) + ' = ' + nf(it.per_buy) + ' ' + esc(it.use_unit) : '') + (it.pack_id && state.stockPacks && state.stockPacks.find(x => x.id === it.pack_id) ? ' · <span class="pill pill-mute">' + esc(state.stockPacks.find(x => x.id === it.pack_id).name) + '</span>' : '') + (Number(it.min_qty) ? ' · báo khi còn ≤ ' + nf(it.min_qty) + ' ' + esc(it.use_unit) : '') + '</span></button>' +
     '<span class="sk-acts"><button class="btn btn-sm" type="button" data-mv="nhap" data-id="' + esc(it.id) + '">Nhập</button><button class="btn btn-sm btn-line" type="button" data-mv="dung" data-id="' + esc(it.id) + '">Lấy dùng</button></span></div></li>';
   main.innerHTML = '<div class="ptitle"><h1>Kho hàng</h1>' + (isOwner() && spent ? '<span class="pill pill-ok">Tiền nhập tháng này: <b class="num">' + vnd(spent) + '</b></span>' : '') + '</div>' + subBar +
-    '<div class="toolbar"><input class="search" id="kq" type="search" placeholder="Tìm hàng hoá…" value="' + esc(state.stockQuery) + '" aria-label="Tìm hàng hoá">' + (isOwner() ? '<button class="btn" type="button" id="addStock">+ Thêm hàng</button>' : '') + '</div>' +
+    '<div class="toolbar"><input class="search" id="kq" type="search" placeholder="Tìm hàng hoá…" value="' + esc(state.stockQuery) + '" aria-label="Tìm hàng hoá">' + (codes ? '<button class="btn btn-line sc-btn" type="button" id="scanStock">' + ICON_SCAN + 'Quét mã</button>' : '') + (isOwner() ? '<button class="btn" type="button" id="addStock">+ Thêm hàng</button>' : '') + '</div>' +
     (low.length ? '<section class="box cc-hong"><h2 class="box-title"><span>Sắp hết · cần nhập thêm</span></h2><ul class="list">' + low.map(row).join('') + '</ul></section>' : '') +
     (shown.length ? groups.map(g => '<section class="box cc-xanhla"><h2 class="box-title"><span>' + esc(g) + '</span></h2><ul class="list">' + shown.filter(i => (i.grp || 'Chưa xếp nhóm') === g).map(row).join('') + '</ul></section>').join('')
       : '<section class="box cc-xanhla"><p class="empty">' + (words.length ? 'Không có hàng nào khớp.' : 'Chưa có hàng hoá nào.' + (isOwner() ? ' Bấm “+ Thêm hàng”.' : ' Nhờ chủ quán thêm hàng.')) + '</p></section>') +
@@ -592,6 +792,7 @@ async function renderStock(main) {
     const mv = e.target.closest('[data-mv]'); if (mv) { openStockMove(state.stockData.find(x => x.id === mv.dataset.id), mv.dataset.mv); return; }
     const sk = e.target.closest('[data-sk]'); if (sk) { openStockItem(state.stockData.find(x => x.id === sk.dataset.sk)); return; }
     if (e.target.closest('#addStock')) editStockItem(null);
+    if (e.target.closest('#scanStock')) scanForMove();
   };
 }
 function wireStockSub(main) { $$('[data-ssub]', main).forEach(b => b.onclick = () => { state.stockSub = b.dataset.ssub; rerender(); }); }
@@ -637,9 +838,9 @@ function editPack(pk, used) {
   });
 }
 /* Nhập / lấy dùng / hỏng / kiểm kho một mặt hàng */
-function openStockMove(it, kind) {
+function openStockMove(it, kind, opt) {
   const two = twoUnits(it);
-  let inBuy = two && kind === 'nhap', amount = kind === 'kiem' ? '' : 1, whole = '', rest = '';
+  let inBuy = two && (opt && opt.inBuy != null ? !!opt.inBuy : kind === 'nhap'), amount = kind === 'kiem' ? '' : 1, whole = '', rest = '';
   const useAmt = () => kind === 'kiem' && two ? (Number(whole) || 0) * Number(it.per_buy) + (Number(rest) || 0) : (Number(amount) || 0) * (inBuy ? Number(it.per_buy) : 1);
   const after = () => kind === 'nhap' ? Number(it.qty) + useAmt() : kind === 'kiem' ? useAmt() : Number(it.qty) - useAmt();
   const unitSeg = () => two && kind !== 'kiem' ? '<div class="seg2" role="group" aria-label="Đơn vị">' + [[true, it.buy_unit + ' (= ' + nf(it.per_buy) + ' ' + it.use_unit + ')'], [false, it.use_unit]].map(([v, t]) => '<button type="button" data-u="' + v + '" aria-pressed="' + (inBuy === v) + '">' + esc(t) + '</button>').join('') + '</div>' : '';
@@ -683,19 +884,27 @@ async function openStockItem(it) {
     '<div class="sk-big"><span>Đang còn</span><b class="num">' + esc(stockText(it)) + '</b>' + (isLow(it) ? '<span class="pill pill-red">Sắp hết</span>' : '') + '</div>' +
     '<div class="sk-acts sk-acts--wide"><button class="btn" type="button" data-k="nhap">Nhập hàng</button><button class="btn btn-line" type="button" data-k="dung">Lấy dùng</button><button class="btn btn-line" type="button" data-k="kiem">Kiểm kho</button><button class="btn btn-line" type="button" data-k="hong">Hỏng / mất</button></div>' +
     (it.note ? '<p class="small muted">' + esc(it.note) + '</p>' : '') +
+    (state.barcodes ? '<h3 class="og-head" style="margin-top:8px">Mã vạch</h3><div class="sc-codes">' + state.barcodes.filter(b => b.item_id === it.id).map(b => '<span class="sc-code"><span class="num">' + esc(b.code) + '</span><span class="small muted">' + esc(codeUnitText(it, b.unit_kind)) + '</span>' + (isOwner() ? '<button class="x" type="button" data-unlink="' + esc(b.code) + '" aria-label="Gỡ mã ' + esc(b.code) + '">×</button>' : '') + '</span>').join('') +
+      '<button class="btn btn-sm btn-line sc-btn" type="button" id="skCode">' + ICON_SCAN + 'Gắn mã vạch</button></div>' : '') +
     '<h3 class="og-head" style="margin-top:8px">Lịch sử</h3>' + (moves.length ? '<ul class="sk-hist">' + moves.map(m => '<li><span class="pill ' + KIND[m.kind][1] + '">' + KIND[m.kind][0] + '</span><span class="num">' + (m.kind === 'kiem' ? 'đếm ' + nf(m.amount) + ' ' + esc(m.unit) + ' (' + (m.delta >= 0 ? '+' : '') + nf(m.delta) + ')' : (m.delta >= 0 ? '+' : '−') + nf(m.amount) + ' ' + esc(m.unit)) + '</span><span class="small muted">' + ddmm(m.created_at) + ' ' + hhmm(m.created_at) + ' · ' + esc(m.employee_name || '') + (isOwner() && m.cost ? ' · ' + vnd(m.cost) : '') + (m.note ? ' · ' + esc(m.note) : '') + '</span></li>').join('') + '</ul>' : '<p class="small muted">Chưa có.</p>') +
     '</div>' + (isOwner() ? '<div class="sh-foot"><button class="btn btn-line btn-block" type="button" id="skEdit">Sửa mặt hàng</button></div>' : ''), sh => {
-    sh.addEventListener('click', e => { const k = e.target.closest('[data-k]'); if (k) { ui.close(); setTimeout(() => openStockMove(it, k.dataset.k), 50); } });
+    sh.addEventListener('click', async e => {
+      const k = e.target.closest('[data-k]'); if (k) { ui.close(); setTimeout(() => openStockMove(it, k.dataset.k), 50); return; }
+      const un = e.target.closest('[data-unlink]'); if (un) { un.disabled = true; try { await api.unlinkBarcode(un.dataset.unlink); state.barcodes = state.barcodes.filter(b => b.code !== un.dataset.unlink); un.closest('.sc-code').remove(); ui.toast('Đã gỡ mã'); } catch (err) { ui.toast(errText(err)); un.disabled = false; } return; }
+      if (e.target.closest('#skCode')) { ui.close(); setTimeout(() => scanToLink(it), 50); }
+    });
     const ed = $('#skEdit', sh); if (ed) ed.onclick = () => { ui.close(); setTimeout(() => editStockItem(it), 50); };
   });
 }
 /* Thêm / sửa mặt hàng (chủ quán) */
-function editStockItem(it) {
+function editStockItem(it, opt) {
+  opt = opt || {}; // opt.barcode: thêm hàng mới từ mã vừa quét; opt.name: tên gợi ý
   // Quy cách: lấy từ bảng quy cách (cập nhật 17); chưa có thì dùng bộ mẫu
   const PRESETS = state.stockPacks ? state.stockPacks : STOCK_PRESETS.map(p => ({ id: null, name: p[0], buy_unit: p[1], use_unit: p[2], per_buy: p[3] }));
-  const isNew = !it; it = it ? Object.assign({}, it, { had_pack: !!it.pack_id }) : Object.assign({ name: '', grp: '', qty: '', min_qty: '', cost_per_buy: '', note: '', is_active: true }, PRESETS[0] ? { buy_unit: PRESETS[0].buy_unit, use_unit: PRESETS[0].use_unit, per_buy: PRESETS[0].per_buy, pack_id: PRESETS[0].id } : { buy_unit: 'thùng', use_unit: 'gói', per_buy: 24, pack_id: null });
+  const isNew = !it; it = it ? Object.assign({}, it, { had_pack: !!it.pack_id }) : Object.assign({ name: opt.name || '', grp: '', qty: '', min_qty: '', cost_per_buy: '', note: '', is_active: true }, PRESETS[0] ? { buy_unit: PRESETS[0].buy_unit, use_unit: PRESETS[0].use_unit, per_buy: PRESETS[0].per_buy, pack_id: PRESETS[0].id } : { buy_unit: 'thùng', use_unit: 'gói', per_buy: 24, pack_id: null });
   const grps = [...new Set(['Đồ khô', 'Nguyên liệu pha chế', 'Gia vị', 'Rau củ · tươi sống', 'Bao bì'].concat((state.stockData || []).map(x => x.grp).filter(Boolean)))];
   ui.sheet(ui.head(isNew ? 'Thêm hàng hoá' : 'Sửa hàng hoá', isNew ? 'Hàng nhập theo thùng, dùng theo gói… tự đặt quy đổi' : esc(it.name)) + '<div class="sh-body">' +
+    (opt.barcode ? '<div class="sc-new"><span>Mã vạch <b class="num">' + esc(opt.barcode) + '</b> in trên:</span><div class="seg2" id="siCodeU" role="group" aria-label="Mã in trên"><button type="button" data-cu="buy" aria-pressed="true">1 <span data-bu>' + esc(it.buy_unit) + '</span></button><button type="button" data-cu="use" aria-pressed="false">1 <span data-uu>' + esc(it.use_unit) + '</span></button></div></div>' : '') +
     '<label class="field" for="siName">Tên hàng <span class="req">*</span><input id="siName" maxlength="60" value="' + esc(it.name) + '" placeholder="Ví dụ: Mì Hàn Quốc, Đường pha chế"></label>' +
     '<label class="field" for="siGrp">Nhóm<input id="siGrp" maxlength="40" list="siGrps" value="' + esc(it.grp || '') + '" placeholder="Ví dụ: Đồ khô"><datalist id="siGrps">' + grps.map(g => '<option value="' + esc(g) + '">').join('') + '</datalist></label>' +
     '<div class="field pk-h">Quy cách nhập hàng' + (state.stockPacks ? ' <button class="link small" type="button" id="siPacks">Quản lý quy cách ›</button>' : '') + '</div><div class="chips" id="siPre">' + PRESETS.map((p, k) => '<button class="chipbtn" type="button" data-pre="' + k + '" aria-pressed="' + (p.id != null && p.id === it.pack_id) + '">' + esc(p.name) + '</button>').join('') + '<button class="chipbtn" type="button" data-pre="-1" aria-pressed="' + (!it.pack_id) + '">Tự đặt</button></div>' +
@@ -709,7 +918,8 @@ function editStockItem(it) {
     '<p class="msg" id="siMsg" hidden></p>' + (isNew ? '' : confirmBox('Xoá hẳn “' + esc(it.name) + '” và toàn bộ lịch sử nhập / dùng của nó?', 'Xoá', 'siDelBox')) + '</div>' +
     '<div class="sh-foot">' + (isNew ? '' : '<button class="btn btn-danger" type="button" id="siDel">Xoá</button>') + '<button class="btn grow" type="button" id="siSave">' + (isNew ? 'Thêm hàng' : 'Lưu') + '</button></div>', sh => {
     const sync = () => { $$('[data-uu]', sh).forEach(x => { x.textContent = $('#siUse', sh).value || 'đơn vị dùng'; }); $$('[data-bu]', sh).forEach(x => { x.textContent = $('#siBuy', sh).value || 'đơn vị nhập'; }); };
-    let packId = it.pack_id || null;
+    let packId = it.pack_id || null, codeUnit = 'buy';
+    const cu = $('#siCodeU', sh); if (cu) cu.onclick = e => { const x = e.target.closest('[data-cu]'); if (!x) return; codeUnit = x.dataset.cu; $$('[data-cu]', cu).forEach(y => y.setAttribute('aria-pressed', String(y === x))); };
     const mark = () => $$('#siPre [data-pre]', sh).forEach(x => { const k = Number(x.dataset.pre); x.setAttribute('aria-pressed', k < 0 ? !packId : String(PRESETS[k].id != null && PRESETS[k].id === packId)); });
     // Tự sửa đơn vị → thành quy cách "Tự đặt" (không còn gắn quy cách chung)
     ['#siBuy', '#siUse', '#siPer'].forEach(sel => { $(sel, sh).oninput = () => { const pk = PRESETS.find(p => p.id === packId); if (pk && ($('#siBuy', sh).value.trim() !== pk.buy_unit || $('#siUse', sh).value.trim() !== pk.use_unit || Number($('#siPer', sh).value) !== Number(pk.per_buy))) packId = null; sync(); mark(); }; });
@@ -728,10 +938,170 @@ function editStockItem(it) {
       if (!out.buy_unit || !out.use_unit) return say('Nhập đủ đơn vị nhập và đơn vị dùng.');
       if (!(out.per_buy > 0)) return say('Quy đổi phải lớn hơn 0, ví dụ 1 thùng = 24 gói.');
       const btn = $('#siSave', sh); btn.disabled = true;
-      try { await api.saveStockItem(out); ui.close(); ui.toast(isNew ? 'Đã thêm ' + out.name : 'Đã lưu'); rerender(); }
+      try {
+        const id = await api.saveStockItem(out);
+        if (opt.barcode) { try { await api.linkBarcode(opt.barcode, id, twoUnits(out) ? codeUnit : 'buy', true); } catch (err) { ui.toast('Đã thêm hàng nhưng chưa nhớ được mã: ' + errText(err)); } }
+        ui.close(); ui.toast(isNew ? 'Đã thêm ' + out.name + (opt.barcode ? ' · đã nhớ mã vạch' : '') : 'Đã lưu'); rerender();
+      }
       catch (err) { say(errText(err)); btn.disabled = false; }
     };
   }, { wide: true });
+}
+
+/* =====================================================================
+   QUÉT MÃ VẠCH (kho)
+   Chrome Android: BarcodeDetector có sẵn. iPhone / máy khác: tải lib/zxing-browser.min.js.
+   Ba cách: camera trực tiếp, chụp ảnh mã vạch, gõ số dưới mã (máy quét cầm tay cũng gõ như bàn phím).
+   ===================================================================== */
+const ICON_SCAN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M16 8v8"/></svg>';
+const SCAN_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'];
+const codeUnitText = (it, k) => !twoUnits(it) ? 'mã ' + it.use_unit : k === 'use' ? 'mã trên ' + it.use_unit : 'mã trên ' + it.buy_unit;
+const cleanCode = c => String(c || '').trim().replace(/\s+/g, '');
+const okCode = c => /^[0-9A-Za-z.\-]{3,64}$/.test(c);
+let nativeDetector; // null: không có, undefined: chưa thử
+async function getDetector() {
+  if (nativeDetector !== undefined) return nativeDetector;
+  nativeDetector = null;
+  try {
+    if ('BarcodeDetector' in window) {
+      const sup = await window.BarcodeDetector.getSupportedFormats();
+      const fm = SCAN_FORMATS.filter(f => sup.indexOf(f) >= 0);
+      if (fm.indexOf('ean_13') >= 0) nativeDetector = new window.BarcodeDetector({ formats: fm });
+    }
+  } catch (e) { nativeDetector = null; }
+  return nativeDetector;
+}
+const loadZXing = () => loadScript('lib/zxing-browser.min.js').then(() => window.ZXingBrowser);
+/* Tra tên sản phẩm theo mã (Open Food Facts, miễn phí). Không có thì thôi. */
+async function lookupProductName(code) {
+  if (!/^\d{8,14}$/.test(code)) return '';
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3500);
+    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=product_name,product_name_vi,brands', { signal: ctl.signal });
+    clearTimeout(t); if (!r.ok) return '';
+    const j = await r.json(); const p = j && j.product; if (!p) return '';
+    return String(p.product_name_vi || p.product_name || '').trim().slice(0, 60);
+  } catch (e) { return ''; }
+}
+/* Khung quét chung. onCode(code) trả true để đóng, false để quét tiếp. */
+function openScanner(o) {
+  let stopped = false, stream = null, zx = null, busy = false;
+  const stop = () => { stopped = true; try { if (zx) zx.stop(); } catch (e) { /* bỏ qua */ } if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; };
+  const modes = o.modes ? '<div class="seg2 sc-modes" role="group" aria-label="Quét để làm gì">' + [['nhap', 'Nhập hàng'], ['dung', 'Lấy dùng'], ['kiem', 'Kiểm kho']].map(([k, t]) => '<button type="button" data-scm="' + k + '" aria-pressed="' + (state.scanMode === k) + '">' + t + '</button>').join('') + '</div>' : '';
+  const sh = ui.sheet(ui.head(o.title, o.sub) + '<div class="sh-body">' + modes +
+    '<div class="sc-cam"><video id="scV" playsinline muted autoplay></video><span class="sc-frame" aria-hidden="true"></span><p class="sc-hint" id="scHint">Đang mở camera…</p></div>' +
+    '<div class="sc-alt"><label class="btn btn-line" for="scFile">Chụp ảnh mã vạch</label><input id="scFile" type="file" accept="image/*" capture="environment" hidden></div>' +
+    '<label class="field" for="scCode">Hoặc gõ số in dưới mã vạch<div class="sk-step"><input id="scCode" class="num" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="893…"><button class="btn" type="button" id="scGo">Tìm</button></div></label>' +
+    '<p class="msg" id="scMsg" hidden></p></div>', s => {
+    const hint = t => { const h = $('#scHint', s); if (h) h.textContent = t; };
+    const say = t => { const m = $('#scMsg', s); m.textContent = t; m.hidden = !t; };
+    const found = async code => {
+      code = cleanCode(code); if (busy || stopped) return;
+      if (!okCode(code)) { say('Mã “' + code + '” không đọc được, thử lại.'); return; }
+      busy = true; if (navigator.vibrate) navigator.vibrate(60); hint('Đã đọc: ' + code);
+      try { const done = await o.onCode(code); if (done !== false) { stop(); return; } }
+      catch (err) { say(errText(err)); }
+      busy = false;
+    };
+    const m = $('.sc-modes', s); if (m) m.onclick = e => { const b = e.target.closest('[data-scm]'); if (!b) return; state.scanMode = b.dataset.scm; $$('[data-scm]', m).forEach(x => x.setAttribute('aria-pressed', String(x === b))); };
+    $('#scGo', s).onclick = () => found($('#scCode', s).value);
+    $('#scCode', s).onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); found($('#scCode', s).value); } };
+    $('#scFile', s).onchange = async e => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      say(''); hint('Đang đọc ảnh…');
+      try {
+        const det = await getDetector(); let code = '';
+        if (det) { const r = await det.detect(await createImageBitmap(f)); code = r[0] && r[0].rawValue; }
+        else { const ZX = await loadZXing(); const url = URL.createObjectURL(f); try { code = (await new ZX.BrowserMultiFormatReader().decodeFromImageUrl(url)).getText(); } catch (err) { code = ''; } URL.revokeObjectURL(url); }
+        if (code) found(code); else { say('Không thấy mã vạch trong ảnh. Chụp gần hơn, đủ sáng, mã nằm ngang.'); hint('Đưa mã vạch vào khung'); }
+      } catch (err) { say(errText(err)); }
+    };
+    const video = $('#scV', s);
+    const gone = () => stopped || !document.body.contains(video) || !ui.isOpen();
+    (async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { hint('Máy không mở được camera ở đây. Dùng “Chụp ảnh mã vạch” hoặc gõ số.'); return; }
+      try {
+        const det = await getDetector();
+        const cons = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+        if (det) {
+          stream = await navigator.mediaDevices.getUserMedia(cons); if (gone()) return stop();
+          video.srcObject = stream; await video.play().catch(() => {}); hint('Đưa mã vạch vào khung');
+          const tick = async () => {
+            if (gone()) return stop();
+            if (!busy && video.readyState >= 2) { try { const r = await det.detect(video); if (r.length) await found(r[0].rawValue); } catch (e) { /* khung hình lỗi, bỏ qua */ } }
+            setTimeout(tick, 180);
+          };
+          tick();
+        } else {
+          const ZX = await loadZXing(); if (gone()) return;
+          zx = await new ZX.BrowserMultiFormatReader().decodeFromConstraints(cons, video, r => { if (gone()) return stop(); if (r) found(r.getText()); });
+          hint('Đưa mã vạch vào khung');
+          const watch = () => { if (gone()) return stop(); setTimeout(watch, 500); }; watch();
+        }
+      } catch (err) {
+        stop(); stopped = false;
+        hint(/NotAllowed|Permission/i.test(err && (err.name + err.message)) ? 'Chưa cho phép camera. Bật quyền camera cho trang này, hoặc chụp ảnh / gõ số.' : 'Không mở được camera. Dùng “Chụp ảnh mã vạch” hoặc gõ số.');
+      }
+    })();
+  });
+  return sh;
+}
+/* Quét để nhập / lấy dùng / kiểm kho. Mã lạ → gắn vào hàng (máy nhớ cho lần sau). */
+function scanForMove() {
+  state.scanMode = state.scanMode || 'nhap';
+  openScanner({ title: 'Quét mã vạch', sub: 'Quét mã trên thùng hoặc gói', modes: true, onCode: async code => {
+    const codes = await api.stockBarcodes(); state.barcodes = codes || [];
+    const link = state.barcodes.find(b => b.code === code);
+    const it = link && state.stockData.find(x => x.id === link.item_id);
+    ui.close();
+    if (it) setTimeout(() => openStockMove(it, state.scanMode, { inBuy: link.unit_kind === 'buy' }), 50);
+    else setTimeout(() => openUnknownCode(code, state.scanMode), 50);
+  } });
+}
+/* Mã chưa gắn hàng nào: chọn hàng có sẵn hoặc thêm hàng mới */
+function openUnknownCode(code, kind, fixedItem) {
+  let pick = fixedItem || null, unit = 'buy', query = '';
+  const items = (state.stockData || []).filter(x => x.is_active !== false);
+  const list = () => { const w = BN.fold(query).split(/\s+/).filter(Boolean); const sh = items.filter(i => w.every(x => BN.fold(i.name + ' ' + (i.grp || '')).indexOf(x) >= 0)).slice(0, 40);
+    return sh.length ? sh.map(i => '<button class="chipbtn" type="button" data-pi="' + esc(i.id) + '" aria-pressed="' + (pick && pick.id === i.id) + '">' + esc(i.name) + '</button>').join('') : '<p class="small muted" style="margin:0">Không có hàng nào khớp.</p>'; };
+  const unitBox = () => pick && twoUnits(pick) ? '<p class="small" style="margin:8px 0 4px">Mã này in trên:</p><div class="seg2" role="group" aria-label="Mã in trên"><button type="button" data-u="buy" aria-pressed="' + (unit === 'buy') + '">1 ' + esc(pick.buy_unit) + ' (' + nf(pick.per_buy) + ' ' + esc(pick.use_unit) + ')</button><button type="button" data-u="use" aria-pressed="' + (unit === 'use') + '">1 ' + esc(pick.use_unit) + '</button></div>' : '';
+  ui.sheet(ui.head(fixedItem ? 'Gắn mã cho ' + esc(fixedItem.name) : 'Mã mới, chưa gắn hàng', '<span class="num">' + esc(code) + '</span>') + '<div class="sh-body">' +
+    '<p class="small muted" id="ucGuess" style="margin:0">' + (fixedItem ? '' : 'Đang tra tên sản phẩm…') + '</p>' +
+    (fixedItem ? '' : '<p class="small" style="margin:4px 0 0">Mã này là của hàng nào? Chọn một lần, lần sau quét là ra ngay.</p><input class="search" id="ucQ" type="search" placeholder="Tìm hàng hoá…" aria-label="Tìm hàng hoá"><div class="chips" id="ucList">' + list() + '</div>') +
+    '<div id="ucUnit">' + unitBox() + '</div><p class="msg" id="ucMsg" hidden></p></div>' +
+    '<div class="sh-foot">' + (isOwner() && !fixedItem ? '<button class="btn btn-line" type="button" id="ucNew">+ Hàng mới</button>' : '') + '<button class="btn grow" type="button" id="ucSave"' + (pick ? '' : ' disabled') + '>' + (kind ? 'Nhớ mã và tiếp tục' : 'Nhớ mã') + '</button></div>', sh => {
+    let guess = '';
+    if (!fixedItem) lookupProductName(code).then(n => { guess = n; const g = $('#ucGuess', sh); if (!g) return; g.textContent = n ? 'Tra trên mạng: ' + n : ''; if (n && !query) { const w = BN.fold(n).split(/\s+/).filter(x => x.length > 2); const hit = items.find(i => w.some(x => BN.fold(i.name).indexOf(x) >= 0)); if (hit && !pick) { pick = hit; $('#ucList', sh).innerHTML = list(); $('#ucUnit', sh).innerHTML = unitBox(); $('#ucSave', sh).disabled = false; } } });
+    const q = $('#ucQ', sh); if (q) q.oninput = () => { query = q.value; $('#ucList', sh).innerHTML = list(); };
+    sh.addEventListener('click', e => {
+      const p = e.target.closest('[data-pi]'); if (p) { pick = items.find(i => i.id === p.dataset.pi); unit = 'buy'; $('#ucList', sh).innerHTML = list(); $('#ucUnit', sh).innerHTML = unitBox(); $('#ucSave', sh).disabled = false; return; }
+      const u = e.target.closest('[data-u]'); if (u) { unit = u.dataset.u; $('#ucUnit', sh).innerHTML = unitBox(); }
+    });
+    const nw = $('#ucNew', sh); if (nw) nw.onclick = () => { ui.close(); setTimeout(() => editStockItem(null, { barcode: code, name: guess }), 50); };
+    $('#ucSave', sh).onclick = async () => {
+      const m = $('#ucMsg', sh); m.hidden = true; if (!pick) return;
+      const btn = $('#ucSave', sh); btn.disabled = true; const k = twoUnits(pick) ? unit : 'buy';
+      try { await api.linkBarcode(code, pick.id, k, false); }
+      catch (err) {
+        if (!/duplicate|unique|pkey/i.test(err.message || '')) { m.textContent = errText(err); m.hidden = false; btn.disabled = false; return; }
+        const other = await api.stockBarcodes().then(c => (c || []).find(b => b.code === code)).catch(() => null);
+        const oi = other && (state.stockData || []).find(x => x.id === other.item_id);
+        if (!isOwner()) { m.textContent = 'Mã này đã gắn cho “' + (oi ? oi.name : 'hàng khác') + '”. Nhờ chủ quán đổi nếu sai.'; m.hidden = false; btn.disabled = false; return; }
+        try { await api.linkBarcode(code, pick.id, k, true); } catch (e2) { m.textContent = errText(e2); m.hidden = false; btn.disabled = false; return; }
+      }
+      state.barcodes = await api.stockBarcodes() || [];
+      ui.close(); ui.toast('Đã nhớ mã · lần sau quét là ra ' + pick.name);
+      if (kind) setTimeout(() => openStockMove(pick, kind, { inBuy: k === 'buy' }), 50); else rerender();
+    };
+  });
+}
+/* Gắn thêm mã cho một mặt hàng (từ trang chi tiết hàng) */
+function scanToLink(it) {
+  openScanner({ title: 'Gắn mã vạch', sub: esc(it.name), onCode: async code => {
+    const codes = await api.stockBarcodes() || []; const ex = codes.find(b => b.code === code);
+    if (ex && ex.item_id === it.id) { ui.close(); ui.toast('Mã này đã gắn cho ' + it.name); return; }
+    ui.close(); setTimeout(() => openUnknownCode(code, null, it), 50);
+  } });
 }
 
 /* =====================================================================
