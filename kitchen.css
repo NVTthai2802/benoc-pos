@@ -186,3 +186,5 @@
 .ovl-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: #2b211c; color: #f6efe6; }
 .ovl-f { flex: 1; width: 100%; border: 0; background: #fff; }
 html.ovl-on, html.ovl-on body { overflow: hidden; }
+
+.kc-src { margin: 4px 0 0; font-size: 12px; font-weight: 800; color: #1877F2; letter-spacing: .02em; text-transform: uppercase; }

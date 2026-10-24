@@ -49,7 +49,8 @@ function ticketCanvas(o, items, extra, set) {
   const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, W - pad * 2).forEach(l => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: align || 'left' }); y += px * k * 1.28; }); y += (gap || 0) * k; };
   const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
   // Phiếu gọn để tiết kiệm giấy: loại đơn + số bàn / giờ giao, địa chỉ (ship), khách, giờ đặt, giờ nhận, món, ghi chú
-  const where = isDelivery(o) ? 'ĐI SHIP' + (o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' : isTakeaway(o) ? 'MANG VỀ' : 'Ở ĐÂY · BÀN ' + o.queue_number;
+  const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
+  const where = isDelivery(o) ? 'ĐI SHIP' + at : o.pickup ? 'ĐẾN LẤY' + at : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'Ở ĐÂY · BÀN ' + o.queue_number;
   text(where, 40, true, 'center', 2);
   if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
   text([o.customer_name, o.customer_phone].filter(Boolean).join(' · '), 24, true, 'center');
@@ -123,7 +124,7 @@ function cups(items) {
   items.forEach(i => { for (let n = 0; n < (i.qty || 1); n++) out.push(i); });
   return out.map((i, n) => ({ i, n: n + 1, of: out.length }));
 }
-const whereShort = o => isDelivery(o) ? 'SHIP' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' : isTakeaway(o) ? 'MANG VỀ' : 'BÀN ' + o.queue_number;
+const whereShort = o => isDelivery(o) ? 'SHIP' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĐẶT BÀN' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'BÀN ' + o.queue_number;
 function labelCanvas(o, cup, set) {
   set = set || get();
   const L = labelOf(set), W = L.w * 8, H = L.h * 8, pad = 10, i = cup.i;
