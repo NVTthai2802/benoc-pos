@@ -38,12 +38,16 @@ Mở địa chỉ này trên trình duyệt thấy chữ "Bé Nốc fb-bot đang
 
 Chọn **một** trong hai.
 
-**Cách A — Gemini (có gói miễn phí):**
-1. Vào https://aistudio.google.com bằng tài khoản Google.
-2. Bấm **Get API key → Create API key**.
+**Cách A — Gemini (khuyên dùng, có gói miễn phí):**
+1. Vào https://aistudio.google.com bằng tài khoản Google (dùng luôn tài khoản đang có Gemini Pro).
+2. Bấm **Get API key → Create API key** → chọn hoặc tạo một project Google Cloud.
 3. Chép khoá (dạng `AIza…`), cất tạm vào Ghi chú.
 
-Gói miễn phí có giới hạn số lượt mỗi phút, đủ cho quán nhỏ. Google có thể dùng dữ liệu gói miễn phí để cải thiện sản phẩm.
+Gói **Gemini Pro (Google AI Pro)** chỉ tăng lượt dùng trên web AI Studio / app Gemini, **không** áp vào khoá API mà bot dùng. Khoá API vẫn chạy gói miễn phí của Gemini API: có giới hạn số lượt, đủ cho quán nhỏ; Google có thể dùng dữ liệu gói miễn phí để cải thiện sản phẩm.
+
+Nếu sau này cần nhiều lượt hơn hoặc không muốn Google dùng dữ liệu: bật **Cloud Billing** cho project của khoá. Người có Google AI Pro có thể được tặng credit Google Cloud hằng tháng qua Google Developer Program để trừ vào tiền API, xem trang [Google AI plans](https://ai.google.dev/gemini-api/docs/google-ai-plans).
+
+Bot tự chọn model Gemini đang có (thử `gemini-3.8-flash`, rồi `gemini-3.5-flash-lite`, rồi `gemini-2.5-flash`), không cần cài thêm.
 
 **Cách B — Claude (trả phí theo lượt dùng):**
 1. Vào https://console.anthropic.com, đăng ký.
@@ -87,7 +91,7 @@ Dùng nick Facebook **đang là admin Fanpage Bé Nốc**.
 
 | Gemini | Claude |
 |---|---|
-| `GEMINI_API_KEY` = khoá `AIza…`<br>`AI_PROVIDER` = `gemini` | `ANTHROPIC_API_KEY` = khoá `sk-ant-…` |
+| `GEMINI_API_KEY` = khoá `AIza…` (chỉ cần 1 dòng này, bot tự biết dùng Gemini) | `ANTHROPIC_API_KEY` = khoá `sk-ant-…` |
 
 3. Bấm **Save**. Bảng **Custom secrets** bên dưới phải hiện đủ các tên vừa nhập.
 

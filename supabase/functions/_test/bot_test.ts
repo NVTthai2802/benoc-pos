@@ -118,3 +118,16 @@ Deno.test('prompt có menu, giờ hiện tại, đơn đang ghi', () => {
   const up = bot.userPrompt(empty(), [{ sender: 'khach', text: '2 ts tcdd', at: NOW.toISOString() }], null);
   assertStringIncludes(up, 'Khách [15:00]: 2 ts tcdd');
 });
+
+Deno.test('Gemini: chỉ có GEMINI_API_KEY → tự dùng Gemini, model không có thì thử model kế', async () => {
+  Deno.env.set('GEMINI_API_KEY', 'k'); Deno.env.delete('ANTHROPIC_API_KEY'); Deno.env.delete('AI_PROVIDER'); Deno.env.delete('GEMINI_MODEL');
+  assertEquals(bot.aiProvider(), 'gemini');
+  const seen: string[] = []; const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    seen.push(String(url).split('/models/')[1].split(':')[0]);
+    if (seen.length === 1) return new Response('not found', { status: 404 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"intent":"order","items":[]}' }] } }] }), { status: 200 });
+  }) as typeof fetch;
+  try { assertEquals((await bot.askAi('s', 'u')).intent, 'order'); } finally { globalThis.fetch = real; }
+  assertEquals(seen, ['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+});
