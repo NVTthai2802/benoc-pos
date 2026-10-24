@@ -193,6 +193,7 @@
 .st-foot { color: var(--ink-2); font-size: 13px; text-align: center; padding-block: 8px 40px; }
 /* ---------- Ưu đãi: dải nổi bật đầu menu ---------- */
 .promos { padding-block: 10px 4px; }
+.pr-left { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #fff0c2; color: #8a5a00; font-weight: 800; font-size: 12px; }
 .pr-badge--sale { background: #0f7b4b !important; color: #fff !important; }
 .pp--sale { background: #0f7b4b; color: #fff; }
 .item-sale { display: inline-block; padding: 1px 6px; border-radius: 6px; background: #0f7b4b; color: #fff; font: 800 11px/1.5 var(--f-body, sans-serif); margin-bottom: 2px; }
@@ -678,7 +679,7 @@ function promoUsable(p) {
   const its = p.items || [], has = i => state.items.has(i.menu_item_id);
   const ok = p.kind === 'combo' ? its.some(i => i.part === 'combo') && its.filter(i => i.part === 'combo').every(has)
     : p.kind === 'giam_gia' ? promoItems(p, 'giam').some(i => { const it = state.items.get(i.menu_item_id); return it.sale && it.sale.id === p.id; })
-    : promoItems(p, 'mua').length > 0 && (p.gift_same || promoItems(p, 'tang').length > 0);
+    : promoItems(p, 'mua').length > 0 && (p.gift_same || !!p.gift_name || promoItems(p, 'tang').length > 0);
   if (!ok) return false;
   if (GIAO || !state.menu.some(c => (c.station || 'bep') === state.kind)) return true;
   return its.some(i => { const c = state.itemCat.get(i.menu_item_id); return c && (c.station || 'bep') === state.kind; });
@@ -688,11 +689,15 @@ const promoBadge = p => p.kind === 'combo' ? 'COMBO' : p.kind === 'giam_gia' ? s
 /* Nhãn nhỏ cạnh giá món đang giảm */
 const saleTag = it => { const p = state.promos.find(x => x.id === it.sale.id); return p ? (p.sale_mode === 'dong_gia' ? 'Đồng giá' : p.sale_mode === 'phan_tram' ? '-' + p.sale_value + '%' : 'Giảm') : 'Giảm'; };
 const namesOf = list => { const n = list.map(i => state.items.get(i.menu_item_id).name); return n.length > 3 ? n.slice(0, 3).join(', ') + '…' : n.join(', '); };
+/* Quà tặng ngoài menu (ví dụ "Sữa đậu 500ml") */
+const giftOut = p => p.kind === 'mua_tang' && !p.gift_same && p.gift_name ? p.gift_name : null;
+/* Ưu đãi giới hạn: "Còn 7 suất hôm nay" */
+const leftText = (p, unit) => p.left != null ? 'Còn ' + p.left + ' ' + (unit || 'suất') + (p.limit_per === 'tong' ? '' : ' hôm nay') : '';
 function promoDesc(p) {
   if (p.description) return p.description;
   if (p.kind === 'combo') return promoItems(p, 'combo').map(i => i.qty + ' ' + state.items.get(i.menu_item_id).name).join(' + ');
   if (p.kind === 'giam_gia') { const n = promoItems(p, 'giam').length; return n + ' món: ' + namesOf(promoItems(p, 'giam')); }
-  return 'Mua ' + p.buy_qty + ': ' + namesOf(promoItems(p, 'mua')) + ' · Tặng ' + p.get_qty + (p.gift_same ? ' món giống hệt' : ': ' + namesOf(promoItems(p, 'tang')));
+  return 'Mua ' + p.buy_qty + ': ' + namesOf(promoItems(p, 'mua')) + ' · Tặng ' + p.get_qty + (p.gift_same ? ' món giống hệt' : ': ' + (giftOut(p) ? p.gift_name : namesOf(promoItems(p, 'tang'))));
 }
 function renderPromos() {
   const el = $('#promos'), list = state.promos.filter(promoUsable);
@@ -704,7 +709,7 @@ function renderPromos() {
       '<span class="pr-badge' + (p.kind === 'combo' ? '' : p.kind === 'giam_gia' ? ' pr-badge--sale' : ' pr-badge--gift') + '">' + promoBadge(p) + '</span>' +
       '<span class="pr-name">' + esc(p.name) + '</span><span class="pr-desc">' + esc(promoDesc(p)) + '</span>' +
       '<span class="pr-foot"><span class="pr-price">' + (p.kind === 'combo' ? '<b class="num">' + K(p.price) + '</b>' + (normal > p.price ? '<s class="num">' + K(normal) + '</s>' : '') : p.kind === 'giam_gia' ? '<b>' + (p.sale_mode === 'dong_gia' ? 'Chỉ ' + K(p.sale_value) : p.sale_mode === 'phan_tram' ? 'Giảm ' + p.sale_value + '%' : 'Bớt ' + K(p.sale_value)) + '</b>' : '<b>Tặng ' + p.get_qty + '</b>') + '</span>' +
-      (when ? '<span class="pr-when">' + esc(when) + '</span>' : '') + '<span class="pr-go">Chọn ngay ›</span></span></button>';
+      (when ? '<span class="pr-when">' + esc(when) + '</span>' : '') + (p.left != null ? '<span class="pr-left">' + leftText(p, p.kind === 'giam_gia' ? 'ly' : 'suất') + '</span>' : '') + '<span class="pr-go">Chọn ngay ›</span></span></button>';
   }).join('') + '</div>';
 }
 $('#promos').addEventListener('click', e => { const b = e.target.closest('[data-promo]'); if (!b) return; const p = state.promos.find(x => x.id === b.dataset.promo); if (p && p.kind === 'giam_gia') openSale(p); else openPromo(b.dataset.promo); });
@@ -716,7 +721,7 @@ function openSale(p) {
   const rows = () => its().map(it => { const n = countInCart(it.id); return '<li><div class="sale-it' + (n ? ' sale-it--on' : '') + '"><button type="button" class="sale-main" data-sale-it="' + esc(it.id) + '"><span class="grow">' + esc(it.name) + (n ? ' <span class="sale-n num">' + n + ' trong giỏ</span>' : '') + '</span><s class="num">' + K(it.orig) + '</s><b class="num">' + K(it.price) + '</b></button>' +
     '<button type="button" class="btn btn-line btn-sm" data-sale-it="' + esc(it.id) + '">Tuỳ chọn</button><button type="button" class="sale-add" data-sale-add="' + esc(it.id) + '" aria-label="Thêm 1 ' + esc(it.name) + '">+</button></div></li>'; }).join('');
   const foot = () => { const n = its().reduce((t, it) => t + countInCart(it.id), 0); return n ? 'Xong · xem giỏ (' + n + ' món đồng giá)' : 'Xong'; };
-  ui.sheet(ui.head('<span class="pp pp--sale">' + esc(saleBadge(p)) + '</span> ' + esc(p.name), esc(p.description || 'Chọn bao nhiêu món cũng được, giá đã giảm') + (when ? ' · ' + esc(when) : '')) +
+  ui.sheet(ui.head('<span class="pp pp--sale">' + esc(saleBadge(p)) + '</span> ' + esc(p.name), esc(p.description || (p.left != null ? 'Giá đã giảm' : 'Chọn bao nhiêu món cũng được, giá đã giảm')) + (p.left != null ? ' · ' + esc(leftText(p, 'ly')) : '') + (when ? ' · ' + esc(when) : '')) +
     '<div class="sh-body"><ul class="sale-list" id="saleList">' + rows() + '</ul>' +
     '<p class="small muted">Bấm <b>+</b> để thêm nhanh (đường, đá mặc định), bấm <b>Tuỳ chọn</b> để chọn size, topping, đường, đá. Topping, size L cộng thêm như bình thường.</p></div>' +
     '<div class="sh-foot"><button class="btn btn-block" type="button" id="saleDone">' + foot() + '</button></div>', sh => {
@@ -744,7 +749,7 @@ function openPromo(id, edit) {
     const buy = promoItems(p, 'mua').map(i => i.menu_item_id);
     for (let k = 0; k < p.buy_qty; k++) units.push({ part: 'mua', pick: buy, itemId: buy[0] });
     const gift = promoItems(p, 'tang').map(i => i.menu_item_id);
-    for (let k = 0; k < p.get_qty; k++) units.push({ part: 'tang', pick: gift, itemId: p.gift_same ? buy[0] : gift[0] });
+    if (!giftOut(p)) for (let k = 0; k < p.get_qty; k++) units.push({ part: 'tang', pick: gift, itemId: p.gift_same ? buy[0] : gift[0] });
   }
   units.forEach(u => { u.sel = defaults(state.items.get(u.itemId)); u.note = ''; });
   // Tặng đúng món khách mua: món tặng chọn trong các món đã chọn ở phần mua
@@ -782,12 +787,14 @@ function openPromo(id, edit) {
     return '<section class="pu' + (u.part === 'tang' ? ' pu--tang' : '') + '" data-unit="' + i + '">' + head + pick + groups +
       '<input type="text" data-note="' + i + '" maxlength="120" placeholder="Ghi chú cho món này (không bắt buộc)" value="' + esc(u.note) + '"></section>';
   };
-  const rule = p.kind === 'combo' ? '' : '<p class="pr-rule">Chọn ' + p.buy_qty + ' món mua, được tặng ' + p.get_qty + ' món' + (p.gift_same ? ' giống món bạn mua' : '') + '.' +
+  const giftBox = () => giftOut(p) ? '<section class="pu pu--tang"><div class="pu-head"><span class="pu-tag pu-tag--tang">TẶNG</span><b>' + esc(p.gift_name) + '</b> <span class="small muted">× ' + p.get_qty * qty + '</span><span class="num">0đ</span></div></section>' : '';
+  const maxQty = Math.min(20, p.left != null ? p.left : 20);
+  const rule = p.kind === 'combo' ? '' : '<p class="pr-rule">Chọn ' + p.buy_qty + ' món mua, được tặng ' + (giftOut(p) ? p.get_qty + ' ' + esc(p.gift_name) : p.get_qty + ' món' + (p.gift_same ? ' giống món bạn mua' : '')) + '.' +
     (p.option_mode === 'khong_phi' ? ' Món tặng không kèm tuỳ chọn có phí.' : p.option_mode === 'mien_phi' ? ' Tuỳ chọn của món tặng được miễn phí.' : '') + '</p>';
   const comboRule = p.kind === 'combo' && p.option_mode !== 'cong_them' ? '<p class="pr-rule">' + (p.option_mode === 'mien_phi' ? 'Topping, upsize trong combo được miễn phí.' : 'Combo không kèm topping, upsize có phí.') + '</p>' : '';
   const when = promoWhen(p, false);
   ui.sheet(ui.head('<span class="pp' + (p.kind === 'combo' ? '' : ' pp--tang') + '">' + promoBadge(p) + '</span> ' + esc(p.name), esc(promoDesc(p)) + (when ? ' · ' + esc(when) : '')) +
-    '<div class="sh-body">' + rule + comboRule + '<div id="puList" style="display:flex;flex-direction:column;gap:10px">' + units.map(unitHtml).join('') + '</div><p class="msg" id="puMsg" hidden></p></div>' +
+    '<div class="sh-body">' + rule + comboRule + (p.left != null ? '<p class="pr-rule">' + leftText(p) + '.</p>' : '') + '<div id="puList" style="display:flex;flex-direction:column;gap:10px">' + units.map(unitHtml).join('') + giftBox() + '</div><p class="msg" id="puMsg" hidden></p></div>' +
     '<div class="sh-foot"><div class="stepper" role="group" aria-label="Số phần ưu đãi"><button type="button" data-q="-1" aria-label="Bớt 1">−</button><output id="puQty" class="num">1</output><button type="button" data-q="1" aria-label="Thêm 1">+</button></div>' +
     '<div class="grow" style="display:flex;flex-direction:column;gap:4px"><button class="btn btn-block" type="button" id="puAdd"></button><p class="pr-save" id="puSave"></p></div></div>',
     sh => {
@@ -795,9 +802,9 @@ function openPromo(id, edit) {
         const t = total(), n = normal();
         $('#puAdd', sh).innerHTML = (edit ? 'Lưu thay đổi · ' : 'Thêm ưu đãi · ') + '<span class="num">' + vnd(t) + '</span>';
         $('#puSave', sh).textContent = n > t ? 'Giá thường ' + vnd(n) + ' · tiết kiệm ' + vnd(n - t) : '';
-        $('#puQty', sh).textContent = qty; $('[data-q="-1"]', sh).disabled = qty <= 1; $('[data-q="1"]', sh).disabled = qty >= 20;
+        $('#puQty', sh).textContent = qty; $('[data-q="-1"]', sh).disabled = qty <= 1; $('[data-q="1"]', sh).disabled = qty >= maxQty;
       };
-      const redraw = () => { $('#puList', sh).innerHTML = units.map(unitHtml).join(''); paint(); };
+      const redraw = () => { $('#puList', sh).innerHTML = units.map(unitHtml).join('') + giftBox(); paint(); };
       paint();
       sh.addEventListener('change', e => {
         const sel = e.target.closest('select[data-u]');
@@ -809,14 +816,14 @@ function openPromo(id, edit) {
         u.sel.set(g.id, new Set(picked.map(o => Number(o.value)))); fs.classList.remove('bad'); paint();
       });
       sh.addEventListener('input', e => { const n = e.target.closest('[data-note]'); if (n) units[Number(n.dataset.note)].note = n.value; });
-      sh.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { qty = Math.max(1, Math.min(20, qty + Number(q.dataset.q))); paint(); } });
+      sh.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { qty = Math.max(1, Math.min(maxQty, qty + Number(q.dataset.q))); if (giftOut(p)) redraw(); else paint(); } });
       $('#puAdd', sh).onclick = () => {
         const msg = $('#puMsg', sh); msg.hidden = true;
         for (let i = 0; i < units.length; i++) {
           const u = units[i], bad = state.items.get(u.itemId).option_groups.find(g => u.sel.get(g.id).size < g.min);
           if (bad) { const fs = $('.pu-og[data-u="' + i + '"][data-g="' + bad.id + '"]', sh); if (fs) { fs.classList.add('bad'); fs.scrollIntoView({ block: 'center' }); } msg.textContent = 'Chọn "' + bad.title.toLowerCase() + '" cho ' + state.items.get(u.itemId).name; msg.hidden = false; return; }
         }
-        (edit ? l => { replaceLine(edit.index, l); setTimeout(openCart, 0); } : addLine)({ promo: p.id, p: { kind: p.kind, price: p.price, option_mode: p.option_mode }, name: p.name, qty,
+        (edit ? l => { replaceLine(edit.index, l); setTimeout(openCart, 0); } : addLine)({ promo: p.id, p: { kind: p.kind, price: p.price, option_mode: p.option_mode, gift_name: giftOut(p), get_qty: p.get_qty }, name: p.name, qty,
           units: units.map(u => ({ part: u.part, itemId: u.itemId, name: state.items.get(u.itemId).name, base: orig(state.items.get(u.itemId)), choices: choicesOf(u), note: u.note.trim() })) });
         ui.close(); ui.toast(edit ? 'Đã sửa ' + p.name : 'Đã thêm ' + (qty > 1 ? qty + ' phần ' : '') + p.name);
       };
@@ -835,7 +842,7 @@ $('#cartBtn').onclick = () => openCart();
 const lineSub = l => l.choices.map(c => c.name + (c.price ? ' +' + K(c.price) : '')).concat(l.note ? ['Ghi chú: ' + l.note] : []).join(' · ');
 /* Các món trong 1 phần ưu đãi: món nào mua, món nào được tặng */
 const PART_TAG = { combo: '', mua: '<span class="pp pp--mua">MUA</span> ', tang: '<span class="pp pp--tang">TẶNG</span> ' };
-const promoSubHtml = l => l.units.map(u => PART_TAG[u.part] + esc(u.name) + (u.choices.length || u.note ? ' (' + esc(u.choices.map(c => c.name).concat(u.note ? [u.note] : []).join(', ')) + ')' : '')).join('<br>');
+const promoSubHtml = l => l.units.map(u => PART_TAG[u.part] + esc(u.name) + (u.choices.length || u.note ? ' (' + esc(u.choices.map(c => c.name).concat(u.note ? [u.note] : []).join(', ')) + ')' : '')).concat(l.p && l.p.gift_name ? [PART_TAG.tang + esc(l.p.gift_name) + ' × ' + (l.p.get_qty || 1)] : []).join('<br>');
 /* Gửi lên máy chủ: món thường và phần ưu đãi */
 const orderPayload = () => state.cart.map(l => l.promo
   ? { promo_id: l.promo, qty: l.qty, parts: l.units.map(u => ({ part: u.part, menu_item_id: u.itemId, choice_ids: u.choices.map(c => c.id), note: u.note || null })) }
