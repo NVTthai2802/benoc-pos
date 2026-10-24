@@ -12,9 +12,9 @@
 //    FB_VERIFY_TOKEN    chuỗi tự đặt, dán giống hệt vào ô "Verify token" trên Meta
 //    FB_APP_SECRET      App secret của app Meta (để kiểm tra tin đúng là từ Facebook)
 //    FB_PAGE_TOKEN      Page access token của Fanpage Bé Nốc
-//    AI_PROVIDER        claude (mặc định) | gemini
+//    AI_PROVIDER        gemini | claude (để trống: có GEMINI_API_KEY thì dùng gemini, không thì claude)
 //    ANTHROPIC_API_KEY  khi dùng claude        (CLAUDE_MODEL, mặc định claude-haiku-5-5)
-//    GEMINI_API_KEY     khi dùng gemini        (GEMINI_MODEL, mặc định gemini-2.5-flash)
+//    GEMINI_API_KEY     khi dùng gemini        (GEMINI_MODEL, để trống: tự thử gemini-3.8-flash → 3.5-flash-lite → 2.5-flash)
 //    BOT_PAUSE_MINUTES  chủ quán tự nhắn trong hộp thư thì bot im bao lâu (mặc định 30)
 //    FB_GRAPH_VERSION   mặc định v25.0
 //  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: Supabase tự cấp sẵn.
@@ -240,17 +240,25 @@ export function parseJson(t: string): AiOut {
   return JSON.parse(s.slice(a, b + 1));
 }
 
-async function askAi(system: string, user: string): Promise<AiOut> {
-  const provider = env('AI_PROVIDER', 'claude').toLowerCase();
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+export const aiProvider = () => (env('AI_PROVIDER') || (env('GEMINI_API_KEY') && !env('ANTHROPIC_API_KEY') ? 'gemini' : 'claude')).toLowerCase();
+export async function askAi(system: string, user: string): Promise<AiOut> {
+  const provider = aiProvider();
   let text = '';
   if (provider === 'gemini') {
-    const model = env('GEMINI_MODEL', 'gemini-2.5-flash');
-    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }),
-    });
-    if (!r.ok) throw new Error('Gemini ' + r.status + ': ' + (await r.text()).slice(0, 300));
-    const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '';
+    // Model không có / không được dùng (404, 403) thì thử model kế tiếp
+    const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : GEMINI_MODELS;
+    let err = '';
+    for (const model of models) {
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }),
+      });
+      if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; break; }
+      err = 'Gemini ' + model + ' ' + r.status + ': ' + (await r.text()).slice(0, 300);
+      if (r.status !== 404 && r.status !== 403 && r.status !== 400) break;
+    }
+    if (err) throw new Error(err);
   } else {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
@@ -494,7 +502,7 @@ async function appAction(sb: SupabaseClient, req: Request, body: any) {
   }
   if (body.action === 'status') { // trang Cài đặt kiểm tra bot đã cài đủ chưa
     let page: any = null; try { page = await graph('me?fields=id,name'); } catch (e) { page = { error: String((e as Error).message) }; }
-    return json({ ok: true, page, ai: env('AI_PROVIDER', 'claude'), has_ai_key: !!(env('ANTHROPIC_API_KEY') || env('GEMINI_API_KEY')), has_secret: !!env('FB_APP_SECRET'), has_verify: !!env('FB_VERIFY_TOKEN') });
+    return json({ ok: true, page, ai: aiProvider(), has_ai_key: !!(aiProvider() === 'gemini' ? env('GEMINI_API_KEY') : env('ANTHROPIC_API_KEY')), has_secret: !!env('FB_APP_SECRET'), has_verify: !!env('FB_VERIFY_TOKEN') });
   }
   return json({ error: 'BAD_ACTION' }, 400);
 }
