@@ -301,7 +301,12 @@ export async function verifySignature(raw: string, header: string | null, secret
 // ---------------------------------------------------------------------
 // Xử lý một khách
 // ---------------------------------------------------------------------
-const db = () => createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
+// Khoá quyền cao của Supabase: tên cũ SUPABASE_SERVICE_ROLE_KEY, tên mới SUPABASE_SECRET_KEY(S)
+function serviceKey() {
+  const k = env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY'); if (k) return k;
+  try { const m = JSON.parse(env('SUPABASE_SECRET_KEYS', '{}')); return m.default || Object.values(m)[0] || ''; } catch (_) { return ''; }
+}
+const db = () => createClient(env('SUPABASE_URL'), serviceKey() as string, { auth: { persistSession: false } });
 
 async function ensureThread(sb: SupabaseClient, psid: string) {
   const { data } = await sb.from('fb_threads').select('*').eq('psid', psid).maybeSingle();
