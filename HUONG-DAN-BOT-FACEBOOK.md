@@ -1,128 +1,180 @@
-# Bot nhận đơn Fanpage Bé Nốc — cài đặt môi trường TEST
+# Bot nhận đơn Fanpage Bé Nốc — hướng dẫn cài đặt (môi trường TEST)
 
-Bot đọc tin nhắn khách gửi Fanpage, hỏi đủ các ý rồi đưa đơn vào **Quản lý → Facebook** để chủ quán duyệt:
+## Bot làm gì
 
-| Bot hỏi | Khi nào |
-|---|---|
-| Món ăn, đồ uống | luôn hỏi (gọi đồ ăn mà chưa gọi nước thì gợi ý 1 lần, và ngược lại) |
-| Qua lấy / Ăn tại quán / Ship | luôn hỏi, có nút bấm nhanh |
-| Giờ hẹn | cả 3 loại: giờ qua lấy, giờ đến quán, giờ nhận ship |
-| Địa chỉ + SĐT | chỉ khi ship |
+Khách nhắn Fanpage Bé Nốc → bot hỏi đủ các ý:
 
-Khách gửi thiếu ý nào bot hỏi lại đúng ý đó. Đủ rồi thì báo khách "đã gửi quán xác nhận". Chủ quán duyệt xong, bot nhắn khách tổng tiền và giờ hẹn; đơn sang bếp như đơn thường.
+- Ăn gì, uống gì (gọi đồ ăn mà chưa gọi nước thì gợi ý 1 lần, và ngược lại)
+- Qua lấy / Ăn tại quán / Ship (có nút bấm nhanh)
+- Giờ hẹn: giờ qua lấy, giờ đến quán, hoặc giờ nhận ship
+- Địa chỉ + SĐT (chỉ khi ship)
 
-```
-Khách nhắn Fanpage → Meta gửi tới → Supabase Edge Function "fb-bot" → AI tách đơn → bảng fb_drafts
-                                                  ↓ trả lời / hỏi lại khách
-Chủ quán: Quản lý → Facebook → Duyệt → đơn thật → bếp / pha chế (Nhận đơn thì in phiếu)
-```
-
-Làm hết trên **Supabase TEST** (`benoc-pos-test`) trước. Ổn rồi mới làm lại các bước tương tự cho Product.
+Khách thiếu ý nào bot hỏi lại đúng ý đó. Đủ rồi, đơn hiện ở **Quản lý → Facebook**. Chủ quán mở đoạn chat đối chiếu, bấm **Duyệt → gửi bếp**: đơn sang bếp / pha chế như đơn thường, bot nhắn khách xác nhận kèm tổng tiền.
 
 ---
 
-## Bước 1. Chạy SQL trên Supabase TEST
+## Tiến độ
 
-Supabase → dự án **benoc-pos-test** → **SQL Editor**, dán từng file rồi **Run**:
-
-1. `sql/cap-nhat-21-ma-vach-kho.sql` (mã vạch kho)
-2. `sql/cap-nhat-22-don-facebook.sql` (đơn Facebook)
-
-## Bước 2. Đưa bot lên Supabase (Edge Function)
-
-**Cách dễ — trên web Supabase:**
-
-1. **Edge Functions → Deploy a new function → Via Editor**.
-2. Đặt tên đúng **`fb-bot`**, xoá code mẫu, dán toàn bộ file `supabase/functions/fb-bot/index.ts`, bấm **Deploy**.
-3. Mở function **fb-bot → Details** (hoặc Settings), **tắt "Verify JWT" / "Enforce JWT verification"** rồi lưu. Facebook không gửi JWT; bot tự kiểm tra chữ ký Facebook.
-4. Chép **địa chỉ function**, dạng:
-   `https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/fb-bot`
-   Mở thử trên trình duyệt phải thấy chữ **"Bé Nốc fb-bot đang chạy"**.
-
-**Cách dùng máy tính (nếu đã cài Node):** `npx supabase functions deploy fb-bot --project-ref bsnpcinocphuruahpzwr` (file `supabase/config.toml` đã tắt sẵn Verify JWT).
-
-Sửa code bot sau này: dán lại file `index.ts` vào editor rồi Deploy.
-
-## Bước 3. Lấy khoá AI
-
-Chọn **một** trong hai:
-
-| | Claude (mặc định) | Gemini |
-|---|---|---|
-| Lấy khoá | https://console.anthropic.com → API Keys (cần nạp tiền, tính theo lượt dùng) | https://aistudio.google.com → Get API key (có gói miễn phí) |
-| Secret | `ANTHROPIC_API_KEY` | `GEMINI_API_KEY` và `AI_PROVIDER` = `gemini` |
-| Model | `claude-haiku-5-5` (đổi bằng `CLAUDE_MODEL`) | `gemini-2.5-flash` (đổi bằng `GEMINI_MODEL`) |
-
-Lưu ý: gói miễn phí của Gemini có thể dùng dữ liệu gửi lên để cải thiện sản phẩm của Google; gói trả phí thì không.
-
-## Bước 4. Tạo app trên Meta for Developers
-
-1. Vào https://developers.facebook.com bằng nick Facebook **đang là admin Fanpage Bé Nốc** → **My Apps → Create App**.
-2. Tên app: `Bé Nốc Bot`. Use case chọn **Engage with customers on Messenger from Meta** (Messenger). Nếu được hỏi loại app, chọn **Business**.
-3. **App settings → Basic**:
-   - Chép **App secret** (bấm Show) → dùng cho secret `FB_APP_SECRET` ở Bước 5.
-   - **Privacy Policy URL**: `https://benoc-pos.pages.dev/test/chinh-sach.html` (trang có sẵn trong repo, chủ quán đọc lại nội dung trước khi dùng thật).
-   - Lưu.
-4. **Use cases → Messenger → Customize → Messenger API Settings**:
-   - Mục **Generate access tokens**: **Connect / Add Page** → chọn Fanpage **Bé Nốc** → cấp đủ quyền → bấm **Generate** → chép token → dùng cho `FB_PAGE_TOKEN`.
-   - Để mục **Configure webhooks** cho Bước 6.
-
-## Bước 5. Nhập secret cho bot
-
-Supabase TEST → **Edge Functions → Secrets** (hoặc Project Settings → Edge Functions) → thêm:
-
-| Tên | Giá trị |
+| Việc | Trạng thái |
 |---|---|
-| `FB_VERIFY_TOKEN` | tự đặt một chuỗi khó đoán, ví dụ `benoc-test-7Kq2xP9` |
-| `FB_APP_SECRET` | App secret ở Bước 4.3 |
-| `FB_PAGE_TOKEN` | Page token ở Bước 4.4 |
-| `ANTHROPIC_API_KEY` **hoặc** `GEMINI_API_KEY` + `AI_PROVIDER=gemini` | Bước 3 |
-| `BOT_PAUSE_MINUTES` (không bắt buộc) | chủ quán tự nhắn thì bot im bao nhiêu phút, mặc định 30 |
+| Chạy SQL cập nhật 21 (mã vạch kho) và 22 (đơn Facebook) trên Supabase TEST | ✅ Đã xong |
+| Đưa bot `fb-bot` lên Supabase TEST, tắt Verify JWT | ✅ Đã xong |
+| Trang web test có tab Facebook, nút Quét mã | ✅ Đã xong |
+| Lấy khoá AI | ⬜ Bước 1 |
+| Tạo app Meta, lấy App secret + Page token | ⬜ Bước 2 |
+| Nhập secret vào Supabase | ⬜ Bước 3 |
+| Nối webhook Facebook với bot | ⬜ Bước 4 |
+| Kiểm tra, nhắn thử | ⬜ Bước 5, 6 |
 
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` Supabase tự có, không cần thêm.
+**Địa chỉ bot (dùng ở Bước 4):**
+```
+https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/fb-bot
+```
+Mở địa chỉ này trên trình duyệt thấy chữ "Bé Nốc fb-bot đang chạy" là bot đã sẵn sàng.
 
-## Bước 6. Nối webhook
+---
 
-Meta → **Messenger API Settings → Configure webhooks**:
+## Bước 1. Lấy khoá AI
 
-1. **Callback URL**: địa chỉ function ở Bước 2.4.
-2. **Verify token**: đúng chuỗi `FB_VERIFY_TOKEN` ở Bước 5.
-3. Bấm **Verify and save**. Báo lỗi thì kiểm tra lại Verify JWT đã tắt chưa và verify token có giống hệt không.
-4. Ở dòng Fanpage Bé Nốc, bấm **Add subscriptions** → tích **messages**, **messaging_postbacks**, **message_echoes** → Save.
+Chọn **một** trong hai.
 
-## Bước 7. Kiểm tra từ trang Quản lý
+**Cách A — Gemini (có gói miễn phí):**
+1. Vào https://aistudio.google.com bằng tài khoản Google.
+2. Bấm **Get API key → Create API key**.
+3. Chép khoá (dạng `AIza…`), cất tạm vào Ghi chú.
 
-Mở https://benoc-pos.pages.dev/test/quanly.html bằng tài khoản chủ quán → tab **Facebook** → **Cài đặt bot**:
+Gói miễn phí có giới hạn số lượt mỗi phút, đủ cho quán nhỏ. Google có thể dùng dữ liệu gói miễn phí để cải thiện sản phẩm.
 
-- **Kiểm tra kết nối bot**: phải hiện đủ 4 dấu ✅ (Fanpage, AI, App secret, Verify token).
-- **Cài nút "Bắt đầu" trên Messenger**: khách mới mở chat sẽ thấy nút Bắt đầu, bấm vào là bot gửi mẫu đặt món.
-- Chỉnh **giờ nhận đơn** (mặc định 07:00–22:00) và câu chào nếu muốn.
+**Cách B — Claude (trả phí theo lượt dùng):**
+1. Vào https://console.anthropic.com, đăng ký.
+2. **Billing**: nạp tiền.
+3. **API Keys → Create Key** → chép khoá (dạng `sk-ant-…`).
 
-## Bước 8. Nhắn thử
+---
 
-Khi app còn ở chế độ **Development**, bot **chỉ trả lời người có vai trò trong app**. Thêm người test: Meta → **App roles → Roles → Add People → Tester** (người đó phải chấp nhận lời mời). Dùng nick cá nhân của bạn (đã là admin app) nhắn Fanpage là thử được ngay.
+## Bước 2. Tạo app trên Meta for Developers
 
-Kịch bản thử:
+Dùng nick Facebook **đang là admin Fanpage Bé Nốc**.
 
-1. Nhắn: `2 ts trân châu ít đá, 1 cơm gà viên thêm trứng` → bot tóm tắt đơn, hỏi qua lấy / ăn tại quán / ship (có nút) và giờ.
-2. Bấm **Ship**, nhắn `6r tối nhé` → bot hỏi địa chỉ và SĐT.
-3. Nhắn địa chỉ + SĐT → bot báo đã gửi quán xác nhận.
-4. Trang Quản lý → **Facebook**: đơn ở **Chờ duyệt** → **Xem & duyệt** → **Duyệt → gửi bếp** → khách nhận tin xác nhận, màn hình bếp có đơn **GIAO 18:30 · ĐẶT QUA FACEBOOK**.
-5. Thử thêm: nhắn giờ đã qua, nhắn món không có trong menu, nhắn "shipper giao trễ quá" (bot phải nhờ chủ quán), tự trả lời khách trong hộp thư Fanpage (bot phải im).
+1. Vào https://developers.facebook.com → **My Apps → Create App**.
+2. Tên app: `Bé Nốc Bot`, email liên hệ: email của bạn.
+3. Chọn use case **Engage with customers on Messenger from Meta**. Nếu hỏi loại app, chọn **Business**. Bấm tạo app.
+4. Menu trái **App settings → Basic**:
+   - **App secret** → bấm **Show** → nhập mật khẩu Facebook → chép, cất vào Ghi chú.
+   - **Privacy Policy URL**: `https://benoc-pos.pages.dev/test/chinh-sach.html`
+   - Bấm **Save changes**.
+5. Menu trái **Use cases → Messenger → Customize → Messenger API Settings**.
+6. Kéo tới mục **Generate access tokens**:
+   - Bấm **Connect** (hoặc **Add Page**) → chọn Fanpage **Bé Nốc** → cho phép đủ quyền.
+   - Bấm **Generate** cạnh Fanpage → tích đồng ý → chép token (chuỗi rất dài), cất vào Ghi chú.
+   - Giữ nguyên trang này, Bước 4 quay lại.
 
-## Bước 9. Mở cho mọi khách (sau khi test ổn)
+---
 
-- Meta yêu cầu **xét duyệt quyền `pages_messaging`** (App Review) và chuyển app sang **Live** thì bot mới trả lời khách bình thường. Trong Messenger API Settings có mục **Complete App Review** hướng dẫn từng bước (quay video bot đang chạy, mô tả cách dùng). Có thể cần xác minh doanh nghiệp.
-- Làm lại Bước 1, 2, 5, 6 trên Supabase **Product** (địa chỉ function đổi thành `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot`), Privacy Policy URL đổi thành `https://benoc-pos.pages.dev/chinh-sach.html`.
-- Ghim link `m.me/<tên Fanpage>` lên nick cá nhân / bài ghim để khách chuyển sang nhắn Fanpage.
+## Bước 3. Nhập secret vào Supabase
+
+1. Vào https://supabase.com/dashboard/project/bsnpcinocphuruahpzwr/functions/secrets
+   (Supabase → dự án **benoc-pos-test** → **Edge Functions → Secrets**).
+2. Ở khung **Add or replace secrets**, mỗi dòng nhập **Name** và **Value**, bấm **Add another** để thêm dòng:
+
+| Name | Value |
+|---|---|
+| `FB_VERIFY_TOKEN` | Tự đặt một chuỗi, ví dụ `benoc-test-7Kq2xP9` (ghi lại, Bước 4 dùng) |
+| `FB_APP_SECRET` | App secret ở Bước 2.4 |
+| `FB_PAGE_TOKEN` | Token ở Bước 2.6 |
+
+   Thêm khoá AI theo cách đã chọn ở Bước 1:
+
+| Gemini | Claude |
+|---|---|
+| `GEMINI_API_KEY` = khoá `AIza…`<br>`AI_PROVIDER` = `gemini` | `ANTHROPIC_API_KEY` = khoá `sk-ant-…` |
+
+3. Bấm **Save**. Bảng **Custom secrets** bên dưới phải hiện đủ các tên vừa nhập.
+
+---
+
+## Bước 4. Nối webhook Facebook với bot
+
+Quay lại trang **Messenger API Settings** ở Bước 2.5.
+
+1. Mục **Configure webhooks**:
+   - **Callback URL**: `https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/fb-bot`
+   - **Verify token**: đúng chuỗi `FB_VERIFY_TOKEN` ở Bước 3 (giống từng ký tự).
+   - Bấm **Verify and save**.
+2. Ở dòng Fanpage **Bé Nốc** (mục Generate access tokens hoặc Webhooks), bấm **Add subscriptions** → tích:
+   - `messages`
+   - `messaging_postbacks`
+   - `message_echoes`
+
+   → **Confirm / Save**.
+
+Nếu **Verify and save** báo lỗi: kiểm tra verify token gõ có khớp không, và đã bấm Save secret ở Bước 3 chưa.
+
+---
+
+## Bước 5. Kiểm tra từ trang Quản lý
+
+1. Mở https://benoc-pos.pages.dev/test/quanly.html, đăng nhập tài khoản **chủ quán**.
+2. Tab **Facebook → Cài đặt bot**.
+3. Bấm **Kiểm tra kết nối bot**. Phải hiện đủ 4 dấu ✅:
+   - ✅ Nối Fanpage Bé Nốc
+   - ✅ AI
+   - ✅ App secret
+   - ✅ Verify token
+4. Bấm **Cài nút "Bắt đầu" trên Messenger**: khách mới mở chat sẽ thấy nút Bắt đầu, bấm vào là bot gửi mẫu đặt món.
+5. Chỉnh **giờ nhận đơn** (mặc định 07:00–22:00), câu chào nếu muốn → **Lưu**.
+
+Có dấu ❌ thì xem bảng **Khi có sự cố** cuối trang.
+
+---
+
+## Bước 6. Nhắn thử
+
+App Meta mới tạo ở chế độ **Development**: bot **chỉ trả lời người có vai trò trong app**. Nick của bạn (người tạo app) dùng được ngay. Muốn người khác thử: Meta → **App roles → Roles → Add People → Tester**, người đó vào https://developers.facebook.com/requests để chấp nhận.
+
+Dùng nick cá nhân nhắn vào Fanpage Bé Nốc lần lượt:
+
+| Bạn nhắn | Bot phải làm |
+|---|---|
+| `2 ts trân châu ít đá, 1 cơm gà viên thêm trứng` | Tóm tắt đơn, hỏi qua lấy / ăn tại quán / ship (có nút) và giờ |
+| Bấm nút **Ship**, nhắn `6r tối nhé` | Hỏi địa chỉ và SĐT |
+| `12 ngõ 5 Nguyễn Trãi, 0912345678` | Báo đã gửi quán xác nhận |
+
+Rồi vào **Quản lý → Facebook**:
+
+1. Đơn nằm ở **Chờ duyệt** → bấm **Xem & duyệt**.
+2. Bên trái là tin nhắn, bên phải là đơn bot tách → kiểm tra, sửa nếu sai → **Duyệt → gửi bếp**.
+3. Messenger của bạn nhận tin "quán đã xác nhận" kèm tổng tiền.
+4. Mở màn hình **Bếp** (trang test): có đơn **GIAO 18:00**, dòng **ĐẶT QUA FACEBOOK**. Bấm **Nhận đơn** là in phiếu như thường.
+
+Thử thêm các trường hợp:
+
+- Nhắn giờ đã qua → bot bảo chọn giờ khác.
+- Nhắn món không có trong menu → bot báo chưa tìm thấy món.
+- Nhắn `shipper giao trễ quá` → bot nhờ chủ quán, khách hiện ở khung **Khách cần bạn trả lời**.
+- Bạn tự trả lời khách trong hộp thư Fanpage → bot im với khách đó 30 phút.
+- Chọn **Ăn tại quán** → bếp thấy ô tím **ĐẶT BÀN hh:mm**; khách đến thì bấm **Sửa đơn** điền số bàn.
+
+---
 
 ## Khi có sự cố
 
-| Hiện tượng | Xem ở đâu |
+| Hiện tượng | Cách xử lý |
 |---|---|
-| Bot không trả lời | Supabase → Edge Functions → fb-bot → **Logs**. Kiểm tra công tắc **Bot tự trả lời** đã bật, khách có đang bị "bot im" không (vừa có người tự nhắn), app còn Development thì khách phải là Tester |
-| Bot trả lời "chủ quán sẽ trả lời mình ngay" liên tục | Khoá AI sai / hết tiền / sai tên model → xem Logs dòng "AI lỗi" |
-| Duyệt được nhưng khách không nhận tin xác nhận | Quá 24 giờ kể từ tin cuối của khách (Facebook không cho Page nhắn tiếp) hoặc Page token hết hạn → tạo token mới ở Bước 4.4 |
-| Tab Facebook báo "Chưa cài bot" | Chưa chạy `sql/cap-nhat-22-don-facebook.sql` |
+| ❌ Chưa nối Fanpage | Token ở Bước 2.6 sai / hết hạn → tạo token mới, thay `FB_PAGE_TOKEN` |
+| ❌ Chưa có khoá AI | Chưa nhập `GEMINI_API_KEY` hoặc `ANTHROPIC_API_KEY` |
+| Bot không trả lời gì | Công tắc **Bot tự trả lời** đã bật chưa · người nhắn có phải Tester/admin app không · đã tích `messages` ở Bước 4.2 chưa · xem Supabase → Edge Functions → fb-bot → **Logs** |
+| Bot luôn trả lời "chủ quán sẽ trả lời mình ngay" | Khoá AI sai, hết lượt hoặc hết tiền → xem Logs dòng "AI lỗi" |
+| Duyệt được nhưng khách không nhận tin xác nhận | Đã quá 24 giờ từ tin cuối của khách (Facebook chặn) hoặc token hết hạn |
+| Tab Facebook báo "Chưa cài bot" | Đăng nhập nhầm trang Product (`/quanly.html` thay vì `/test/quanly.html`) |
+
+---
+
+## Sau khi test ổn: mở cho mọi khách
+
+1. Meta → **Messenger API Settings → Complete App Review**: xin quyền **pages_messaging** (quay video bot đang chạy, mô tả cách dùng). Có thể cần xác minh doanh nghiệp. Duyệt xong, chuyển app sang **Live**.
+2. Làm lại trên Supabase **Product** (`benoc-pos`): chạy SQL 21, 22 · đưa bot `fb-bot` lên · nhập secret · đổi Callback URL thành `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` · Privacy Policy URL đổi thành `https://benoc-pos.pages.dev/chinh-sach.html`.
+3. Chạy `scripts/dua-len-product.sh` để đưa giao diện mới lên quán thật (tab Facebook tự hiện khi Product đã chạy SQL 22).
+4. Đổi link đặt món trên nick cá nhân thành `m.me/<tên Fanpage>` để khách chuyển sang nhắn Fanpage.
 
 Bot không tự tạo đơn thật: mọi đơn đều qua chủ quán duyệt, giá tính lại ở máy chủ theo menu và ưu đãi hiện tại.
