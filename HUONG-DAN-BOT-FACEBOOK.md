@@ -18,7 +18,7 @@ Khách thiếu ý nào bot hỏi lại đúng ý đó. Đủ rồi, đơn hiện
 | Việc | Trạng thái |
 |---|---|
 | Chạy SQL cập nhật 21 (mã vạch kho) và 22 (đơn Facebook) trên Supabase TEST | ✅ Đã xong |
-| Chạy SQL cập nhật 24 (dữ liệu huấn luyện) trên Supabase TEST, đưa lại bot `fb-bot` bản mới | ⬜ Chưa (xem phần "Dữ liệu huấn luyện" cuối file) |
+| Chạy SQL cập nhật 24 (dữ liệu huấn luyện) trên Supabase TEST, đưa lại bot `fb-bot` bản mới | ✅ Đã xong (xem phần "Dữ liệu huấn luyện" cuối file) |
 | Đưa bot `fb-bot` lên Supabase TEST, tắt Verify JWT | ✅ Đã xong |
 | Trang web test có tab Facebook, nút Quét mã | ✅ Đã xong |
 | Lấy khoá AI | ⬜ Bước 1 |
