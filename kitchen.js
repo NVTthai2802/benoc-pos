@@ -58,6 +58,8 @@ function start() {
   // Mở Quản lý / Đơn giao hàng / nơi khác đè lên trên, không rời trang này → máy in Bluetooth vẫn nối, vẫn tự in
   $('#app').querySelector('.topbar').addEventListener('click', e => {
     const a = e.target.closest('a[href]'); if (!a || a.target || e.ctrlKey || e.metaKey) return;
+    // Chuyển Bếp ↔ Pha chế: đi thẳng sang trang kia (khung con không dùng được Bluetooth, và không cần nút quay lại)
+    if (/(^|\/)(bep|phache)(\.html)?($|[?#])/.test(a.getAttribute('href'))) return;
     e.preventDefault(); openOverlay(a.getAttribute('href'));
   });
   if (BN.FEATURES.print) {
@@ -577,7 +579,8 @@ function prqHtml() {
 }
 async function onPrq(e) {
   if (e.target.closest('[data-ble]')) {
-    const k = e.target.closest('[data-ble]').dataset.ble;
+    const btn = e.target.closest('[data-ble]'), k = btn.dataset.ble;
+    if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Đang nối…';
     try { const n = await BNPrint.ble.connect(k); ui.toast('Đã nối ' + BNPrint.ble.label(k) + ' ' + (n || '')); } catch (err) { const m = BNPrint.errMsg(err); if (!/cancel/i.test(m)) ui.toast('Không nối được: ' + m); }
     render(); return;
   }
@@ -607,7 +610,7 @@ function toggleSound() {
   state.sound = !state.sound;
   const b = $('#soundBtn'); b.setAttribute('aria-pressed', state.sound); b.textContent = state.sound ? 'Chuông báo: Bật' : 'Bật chuông báo';
   b.className = 'btn btn-sm ' + (state.sound ? 'btn-ok' : 'btn-line');
-  if (state.sound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); loadVoice().then(() => { if (state.sound && !playVoice()) beep(); }); } catch (e) { /* không có âm thanh */ } lockScreen(); }
+  if (state.sound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); beep(); loadVoice(); } catch (e) { /* không có âm thanh */ } lockScreen(); }
 }
 function beep() {
   if (!audio) return;
