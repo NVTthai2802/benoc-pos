@@ -607,7 +607,7 @@ function toggleSound() {
   state.sound = !state.sound;
   const b = $('#soundBtn'); b.setAttribute('aria-pressed', state.sound); b.textContent = state.sound ? 'Chuông báo: Bật' : 'Bật chuông báo';
   b.className = 'btn btn-sm ' + (state.sound ? 'btn-ok' : 'btn-line');
-  if (state.sound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); beep(); loadVoice(); } catch (e) { /* không có âm thanh */ } lockScreen(); }
+  if (state.sound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); loadVoice().then(() => { if (state.sound && !playVoice()) beep(); }); } catch (e) { /* không có âm thanh */ } lockScreen(); }
 }
 function beep() {
   if (!audio) return;
