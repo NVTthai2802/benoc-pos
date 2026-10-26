@@ -1,4 +1,4 @@
-# Bot nhận đơn Fanpage Bé Nốc — hướng dẫn cài đặt (môi trường TEST)
+# Bot nhận đơn Fanpage Bé Nốc — hướng dẫn cài đặt (TEST rồi PRODUCT)
 
 ## Bot làm gì
 
@@ -26,6 +26,8 @@ Khách thiếu ý nào bot hỏi lại đúng ý đó. Đủ rồi, đơn hiện
 | Nhập secret vào Supabase | ⬜ Bước 3 |
 | Nối webhook Facebook với bot | ⬜ Bước 4 |
 | Kiểm tra, nhắn thử | ⬜ Bước 5, 6 |
+| PRODUCT: chạy SQL 21, 22, 24 | ✅ Đã xong 26/10 |
+| PRODUCT: đưa bot, nhập secret, đưa giao diện, đổi webhook | ⬜ Phần "Đưa lên PRODUCT" (P1 → P6) |
 
 **Địa chỉ bot (dùng ở Bước 4):**
 ```
@@ -171,16 +173,54 @@ Thử thêm các trường hợp:
 | Bot không trả lời gì | Công tắc **Bot tự trả lời** đã bật chưa · người nhắn có phải Tester/admin app không · đã tích `messages` ở Bước 4.2 chưa · xem Supabase → Edge Functions → fb-bot → **Logs** |
 | Bot luôn trả lời "chủ quán sẽ trả lời mình ngay" | Khoá AI sai, hết lượt hoặc hết tiền → xem Logs dòng "AI lỗi" |
 | Duyệt được nhưng khách không nhận tin xác nhận | Đã quá 24 giờ từ tin cuối của khách (Facebook chặn) hoặc token hết hạn |
-| Tab Facebook báo "Chưa cài bot" | Đăng nhập nhầm trang Product (`/quanly.html` thay vì `/test/quanly.html`) |
+| Tab Facebook báo "Chưa cài bot" | Supabase của trang đó chưa có bot / secret (Test: `/test/quanly.html`, Product: `/quanly.html`) |
 
 ---
 
-## Sau khi test ổn: mở cho mọi khách
+## Đưa lên PRODUCT (quán thật)
 
-1. Meta → **Messenger API Settings → Complete App Review**: xin quyền **pages_messaging** (quay video bot đang chạy, mô tả cách dùng). Có thể cần xác minh doanh nghiệp. Duyệt xong, chuyển app sang **Live**.
-2. Làm lại trên Supabase **Product** (`benoc-pos`): chạy SQL 21, 22 · đưa bot `fb-bot` lên · nhập secret · đổi Callback URL thành `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` · Privacy Policy URL đổi thành `https://benoc-pos.pages.dev/chinh-sach.html`.
-3. Chạy `scripts/dua-len-product.sh` để đưa giao diện mới lên quán thật (tab Facebook tự hiện khi Product đã chạy SQL 22).
-4. Đổi link đặt món trên nick cá nhân thành `m.me/<tên Fanpage>` để khách chuyển sang nhắn Fanpage.
+**Đã xong (26/10/2026):** chạy SQL 21, 22, 24 trên Supabase Product (`benoc-pos`). 5 đơn cũ còn nguyên, chưa có gì đổi với quán.
+
+Phần còn lại làm **đúng thứ tự** dưới đây.
+
+### P1. Đưa bot `fb-bot` lên Supabase Product
+1. Supabase → chọn project **benoc-pos** (không phải benoc-pos-test) → **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. Tên function: `fb-bot` (đúng chữ thường, có gạch nối).
+3. Xoá code mẫu, dán toàn bộ nội dung file `supabase/functions/fb-bot/index.ts` (nhánh `test`) → **Deploy function**.
+4. Vào **fb-bot → Details** (hoặc Settings): **tắt "Verify JWT"** → Save. Không tắt thì Facebook gọi vào bị lỗi 401.
+5. Mở `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` trên trình duyệt: phải hiện **"Bé Nốc fb-bot đang chạy"**.
+
+### P2. Nhập secret cho Product
+Supabase **benoc-pos** → **Edge Functions → Secrets** (secret của Test không tự sang Product, phải nhập lại). Nhập 4 dòng, giá trị giống bên Test:
+
+| Tên | Giá trị |
+|---|---|
+| `FB_VERIFY_TOKEN` | chuỗi bạn tự đặt (giống bên Test cũng được) |
+| `FB_APP_SECRET` | App secret của app Meta |
+| `FB_PAGE_TOKEN` | Page access token của Fanpage Bé Nốc |
+| `GEMINI_API_KEY` hoặc `ANTHROPIC_API_KEY` | khoá AI |
+
+### P3. Đưa giao diện mới lên quán
+Trong thư mục code (Git Bash / Terminal), nhánh `test` đã commit sạch:
+```
+bash scripts/dua-len-product.sh
+```
+Khoảng 1 phút sau, https://benoc-pos.pages.dev/ có tab **Facebook** và nút **Quét mã** ở kho. Mở **Quản lý** trên máy quán, tải lại trang (Ctrl+F5) để chắc chắn lấy bản mới.
+
+### P4. Chuyển webhook Meta sang Product
+1. Meta for Developers → app của quán → **Messenger → Messenger API Settings → Configure webhooks → Edit**.
+2. Callback URL: `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` · Verify token: đúng `FB_VERIFY_TOKEN` vừa nhập ở P2 → **Verify and save**.
+3. **App settings → Basic → Privacy Policy URL**: `https://benoc-pos.pages.dev/chinh-sach.html` → Save.
+
+Một app Meta chỉ có 1 Callback URL: chuyển sang Product thì bot Test thôi nhận tin. Muốn thử lại trên Test thì đổi URL về `https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/fb-bot`.
+
+### P5. Kiểm tra trên Product
+1. Đăng nhập https://benoc-pos.pages.dev/quanly.html bằng tài khoản chủ quán → tab **Facebook → Cài đặt bot → Kiểm tra kết nối bot**: đủ 4 dấu ✅.
+2. Dùng nick là admin / tester của app nhắn Fanpage một đơn thử → đơn hiện ở tab Facebook → **Huỷ** đơn thử (đừng Duyệt, kẻo thành đơn thật trong doanh thu).
+
+### P6. Mở cho mọi khách
+1. Meta → **App Review**: xin quyền **pages_messaging** (quay video bot đang chạy, mô tả cách dùng). Có thể cần xác minh doanh nghiệp. Duyệt xong, chuyển app sang **Live**. Trước khi Live, chỉ admin / tester của app nhắn mới được bot trả lời.
+2. Đổi link đặt món trên nick cá nhân thành `m.me/<tên Fanpage>` để khách chuyển sang nhắn Fanpage.
 
 Bot không tự tạo đơn thật: mọi đơn đều qua chủ quán duyệt, giá tính lại ở máy chủ theo menu và ưu đãi hiện tại.
 
