@@ -6,7 +6,6 @@
 2. Chốt xong, **chụp màn hình đoạn chat** (1 hoặc nhiều ảnh) và gửi cho **bot Zalo của quán**.
 3. Bot đọc ảnh bằng AI (Gemini), tách món, hình thức (qua lấy / ăn tại quán / ship), giờ hẹn, địa chỉ, SĐT → tạo **đơn nháp** trong **Quản lý → Đơn online**, rồi nhắn lại tóm tắt và phần còn thiếu.
 4. Chủ quán mở **Đơn online**, đối chiếu ảnh, sửa nếu cần, bấm **Duyệt → gửi bếp**. Bếp in phiếu như đơn thường.
-5. Bot gửi lại câu xác nhận (tổng tiền, giờ hẹn, số tài khoản) để chủ quán **copy dán cho khách**.
 
 Bot không nhắn gì cho khách, nên không cần Meta duyệt app hay xác minh doanh nghiệp. Chỉ tài khoản Zalo đã **kết nối bằng mã** lấy trong Quản lý mới dùng được bot.
 
