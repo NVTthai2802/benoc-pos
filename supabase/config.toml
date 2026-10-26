@@ -1,0 +1,4 @@
+# Chỉ dùng khi đưa bot lên bằng Supabase CLI (npx supabase functions deploy fb-bot).
+# Facebook không gửi JWT nên phải tắt kiểm tra JWT; bot tự kiểm tra chữ ký Facebook.
+[functions.fb-bot]
+verify_jwt = false

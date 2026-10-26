@@ -1462,6 +1462,143 @@ begin
 end $$;
 revoke all on all functions in schema private from public;
 
+-- ===== CẬP NHẬT 21: mã vạch cho kho hàng =====
+
+create table if not exists stock_barcodes (
+  code       text primary key check (code ~ '^[0-9A-Za-z.\-]{3,64}$'),
+  item_id    uuid not null references stock_items(id) on delete cascade,
+  unit_kind  text not null default 'buy' check (unit_kind in ('buy', 'use')), -- mã in trên đơn vị nhập (thùng) hay đơn vị dùng (gói)
+  created_by text,
+  created_at timestamptz not null default now()
+);
+create index if not exists stock_barcodes_item on stock_barcodes(item_id);
+
+alter table stock_barcodes enable row level security;
+drop policy if exists stock_barcodes_read on stock_barcodes;
+create policy stock_barcodes_read on stock_barcodes for select using (my_role() is not null);
+drop policy if exists stock_barcodes_add on stock_barcodes;
+create policy stock_barcodes_add on stock_barcodes for insert with check (my_role() is not null);
+drop policy if exists stock_barcodes_owner on stock_barcodes;
+create policy stock_barcodes_owner on stock_barcodes for all using (my_role() = 'owner') with check (my_role() = 'owner');
+grant select, insert, update, delete on stock_barcodes to authenticated;
+
+
+-- ===== CẬP NHẬT 22: đơn đặt qua Facebook (bot Fanpage) =====
+
+-- 1. Đơn thật: nguồn đơn + cho phép "ăn tại quán" chưa có số bàn nếu đặt qua Facebook
+alter table orders add column if not exists source text not null default 'qr';
+alter table orders drop constraint if exists orders_source_check;
+alter table orders add constraint orders_source_check check (source in ('qr', 'quan', 'fb'));
+alter table orders drop constraint if exists orders_queue_or_takeaway;
+alter table orders add constraint orders_queue_or_takeaway check (dine_type <> 'tai_quan' or queue_number is not null or source = 'fb');
+
+-- 2. Cài đặt bot
+alter table shop_settings add column if not exists fb_bot_on   boolean not null default true;  -- tắt: bot im, chủ quán tự nhắn
+alter table shop_settings add column if not exists fb_open     text not null default '07:00';  -- giờ nhận đơn (bot từ chối giờ hẹn ngoài khung này)
+alter table shop_settings add column if not exists fb_close    text not null default '22:00';
+alter table shop_settings add column if not exists fb_hello    text;                            -- câu chào riêng (để trống dùng mặc định)
+
+-- 3. Khách nhắn Fanpage (mỗi khách 1 dòng, khoá là PSID của Facebook)
+create table if not exists fb_threads (
+  psid         text primary key,
+  name         text,                       -- tên Facebook của khách
+  link         text,                       -- link mở đoạn chat trong hộp thư Fanpage
+  paused_until timestamptz,                -- chủ quán đang tự nhắn → bot im tới lúc này
+  need_human   boolean not null default false, -- bot nhờ chủ quán trả lời (khiếu nại, câu hỏi khó…)
+  last_at      timestamptz not null default now(),
+  created_at   timestamptz not null default now()
+);
+
+create table if not exists fb_messages (
+  id         bigserial primary key,
+  psid       text not null references fb_threads(psid) on delete cascade,
+  mid        text unique,                  -- mã tin nhắn của Facebook (chống nhận trùng)
+  sender     text not null check (sender in ('khach', 'bot', 'quan')), -- quan = chủ quán tự nhắn trong hộp thư
+  text       text,
+  created_at timestamptz not null default now()
+);
+create index if not exists fb_messages_thread on fb_messages(psid, created_at desc);
+
+-- 4. Đơn nháp bot tách từ tin nhắn
+create table if not exists fb_drafts (
+  id             uuid primary key default gen_random_uuid(),
+  psid           text not null references fb_threads(psid) on delete cascade,
+  status         text not null default 'dang_hoi' check (status in ('dang_hoi', 'cho_duyet', 'da_duyet', 'huy')),
+  dine_type      text check (dine_type in ('mang_ve', 'tai_quan', 'giao_hang')), -- qua lấy / ăn tại quán / đi ship
+  at             timestamptz,              -- giờ hẹn: giờ qua lấy / giờ đến ăn / giờ giao
+  customer_name  text,
+  customer_phone text,
+  address        text,
+  note           text,
+  items          jsonb not null default '[]', -- [{menu_item_id, name, qty, choice_ids, choices, note, price}]
+  unknown        jsonb not null default '[]', -- món khách gọi mà bot không khớp được menu
+  missing        text[] not null default '{}', -- còn thiếu: items, dine_type, at, address, phone
+  total_est      int not null default 0,       -- tạm tính (giá thật tính lại khi duyệt)
+  changed_after  boolean not null default false, -- khách nhắn sửa sau khi đã chờ duyệt
+  asked          text[] not null default '{}', -- bot đã hỏi gợi ý (đồ uống / đồ ăn) rồi thì không hỏi lại
+  order_id       uuid,
+  approved_by    text,
+  approved_at    timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists fb_drafts_status on fb_drafts(status, updated_at desc);
+create index if not exists fb_drafts_psid on fb_drafts(psid, updated_at desc);
+
+-- 5. Quyền: chủ quán xem / sửa; bot dùng khoá service_role (không qua RLS)
+alter table fb_threads enable row level security;
+alter table fb_messages enable row level security;
+alter table fb_drafts enable row level security;
+drop policy if exists fb_threads_owner on fb_threads;
+create policy fb_threads_owner on fb_threads for all using (my_role() = 'owner') with check (my_role() = 'owner');
+drop policy if exists fb_messages_owner on fb_messages;
+create policy fb_messages_owner on fb_messages for select using (my_role() = 'owner');
+drop policy if exists fb_drafts_owner on fb_drafts;
+create policy fb_drafts_owner on fb_drafts for all using (my_role() = 'owner') with check (my_role() = 'owner');
+grant select, insert, update, delete on fb_threads, fb_drafts to authenticated;
+grant select on fb_messages to authenticated;
+
+-- 6. Duyệt đơn nháp → tạo đơn thật (giá tính ở máy chủ như mọi đơn khác)
+--    p_items = [{"menu_item_id": "...", "qty": 2, "note": "ít cay", "choice_ids": [3, 7]}]
+create or replace function fb_approve(
+  p_draft   uuid,
+  p_dine    text,
+  p_name    text,
+  p_phone   text,
+  p_address text,
+  p_at      timestamptz,
+  p_items   jsonb,
+  p_note    text default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare d fb_drafts; v_order orders; v_total int; v_emp employees;
+begin
+  if my_role() is distinct from 'owner' then raise exception 'FORBIDDEN'; end if;
+  select * into d from fb_drafts where id = p_draft for update;
+  if not found then raise exception 'DRAFT_NOT_FOUND'; end if;
+  if d.status = 'da_duyet' then raise exception 'DRAFT_DONE' using hint = 'Đơn này đã duyệt rồi'; end if;
+  if p_dine not in ('mang_ve', 'tai_quan', 'giao_hang') then raise exception 'BAD_DINE' using hint = 'Chọn qua lấy / ăn tại quán / đi ship'; end if;
+  if p_at is null then raise exception 'MISSING_TIME' using hint = 'Nhập giờ hẹn'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'MISSING_NAME' using hint = 'Nhập tên khách'; end if;
+  if p_dine = 'giao_hang' and coalesce(trim(p_address), '') = '' then raise exception 'MISSING_ADDRESS' using hint = 'Nhập địa chỉ giao hàng'; end if;
+
+  insert into orders (queue_number, customer_name, customer_phone, note, dine_type, address, deliver_at, source)
+  values (null, trim(p_name), nullif(trim(p_phone), ''), nullif(left(trim(p_note), 300), ''), p_dine,
+          case when p_dine = 'giao_hang' then nullif(left(trim(p_address), 300), '') end, p_at, 'fb')
+  returning * into v_order;
+  perform private.add_items(v_order.id, p_items);
+  select total into v_total from orders where id = v_order.id;
+
+  select * into v_emp from employees where id = my_employee_id();
+  update fb_drafts set status = 'da_duyet', order_id = v_order.id, approved_by = v_emp.full_name, approved_at = now(),
+         dine_type = p_dine, at = p_at, customer_name = trim(p_name), customer_phone = nullif(trim(p_phone), ''),
+         address = nullif(trim(p_address), ''), note = nullif(trim(p_note), ''), total_est = v_total,
+         changed_after = false, updated_at = now()
+   where id = p_draft;
+  return jsonb_build_object('order_id', v_order.id, 'total', v_total);
+end $$;
+grant execute on function fb_approve(uuid, text, text, text, text, timestamptz, jsonb, text) to authenticated;
+
 -- ===== CẬP NHẬT 23: quà ngoài menu + giới hạn số suất =====
 -- 1. Cột mới
 alter table promotions add column if not exists gift_name    text;                 -- quà ngoài menu (mua tặng)
@@ -1778,4 +1915,140 @@ begin
          o.customer_name, o.customer_phone, o.address;
   delete from orders where id = o.id;
 end $$;
+
+-- ===== CẬP NHẬT 24: dữ liệu huấn luyện cho mô hình đọc đơn =====
+alter table shop_settings add column if not exists fb_train_on boolean not null default true;
+
+-- Ảnh chụp menu tại lúc lưu mẫu (để đọc lại số thứ tự món / lựa chọn về sau). Một menu = một dòng.
+create table if not exists fb_train_menu (
+  hash       text primary key,
+  menu       jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists fb_train (
+  id           bigserial primary key,
+  created_at   timestamptz not null default now(),
+  thread_hash  text not null,                 -- băm của PSID: gom mẫu cùng 1 khách, không lần ngược ra khách được
+  draft_id     uuid,                          -- đơn nháp của mẫu (trống nếu lượt này chưa thành đơn)
+  now_vn       text not null,                 -- "2026-10-24 15:00" giờ Việt Nam lúc khách nhắn
+  convo        jsonb not null default '[]',   -- [{"s":"khach|bot|quan","t":"…"}] đã ẩn thông tin cá nhân
+  state_before jsonb not null default '{}',   -- đơn đang ghi trước tin mới
+  intent       text,                          -- order | question | human | other
+  target       jsonb,                         -- đơn bot tách ra sau khi kiểm lại theo menu (null nếu intent = human)
+  answer       text,                          -- câu AI trả lời khi khách hỏi thông tin
+  model        text,                          -- AI nào đã đọc (vd gemini-3.8-flash)
+  menu_hash    text,
+  outcome      text not null default 'chua_ro' check (outcome in ('chua_ro', 'da_duyet', 'huy')),
+  final        jsonb,                         -- bản chủ quán duyệt (đáp án đúng), chỉ có ở mẫu cuối của đơn đã duyệt
+  edits        text[]                         -- chủ quán đã sửa: items | dine_type | time (rỗng = bot đọc đúng hết)
+);
+create index if not exists fb_train_draft  on fb_train(draft_id) where draft_id is not null;
+create index if not exists fb_train_thread on fb_train(thread_hash);
+
+alter table fb_train enable row level security;
+alter table fb_train_menu enable row level security;
+drop policy if exists fb_train_owner_read on fb_train;
+create policy fb_train_owner_read on fb_train for select using (my_role() = 'owner');
+drop policy if exists fb_train_owner_del on fb_train;
+create policy fb_train_owner_del on fb_train for delete using (my_role() = 'owner');
+drop policy if exists fb_train_menu_owner on fb_train_menu;
+create policy fb_train_menu_owner on fb_train_menu for select using (my_role() = 'owner');
+revoke all on fb_train, fb_train_menu from anon, authenticated;
+grant select, delete on fb_train to authenticated;
+grant select on fb_train_menu to authenticated;
+revoke all on sequence fb_train_id_seq from anon, authenticated;
+
+-- Chuỗi so sánh danh sách món: "menu_item_id|số lượng|các lựa chọn", đã sắp xếp
+create or replace function private.fb_items_sig(p_items jsonb) returns text
+language sql immutable as $$
+  select coalesce(string_agg(x, ';' order by x), '')
+    from (select (e ->> 'menu_item_id') || '|' || coalesce((e ->> 'qty')::int, 1)::text || '|' ||
+                 coalesce((select string_agg(c, ',' order by c::int) from jsonb_array_elements_text(coalesce(e -> 'choice_ids', '[]'::jsonb)) c), '') as x
+            from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) e) q;
+$$;
+
+-- Chủ quán duyệt xong: gắn đáp án đúng vào mẫu cuối của đơn
+create or replace function private.fb_train_close(p_draft uuid, p_items jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare d fb_drafts; s fb_train; v_final jsonb; v_edits text[] := '{}'; v_date text; v_time text;
+begin
+  select * into d from fb_drafts where id = p_draft;
+  if not found then return; end if;
+  update fb_train set outcome = 'da_duyet' where draft_id = p_draft;
+  select * into s from fb_train where draft_id = p_draft and target is not null order by id desc limit 1;
+  if not found then return; end if;
+  v_date := to_char(d.at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD');
+  v_time := to_char(d.at at time zone 'Asia/Ho_Chi_Minh', 'HH24:MI');
+  v_final := jsonb_build_object(
+    'items', coalesce((select jsonb_agg(jsonb_build_object(
+                'name', i.item_name, 'qty', i.qty,
+                'choices', coalesce((select jsonb_agg(o ->> 'choice') from jsonb_array_elements(i.options) o), '[]'::jsonb),
+                'note', nullif(regexp_replace(coalesce(i.note, ''), '\d{9,}', '<SO>', 'g'), '')) order by i.id)
+              from order_items i where i.order_id = d.order_id), '[]'::jsonb),
+    'dine_type', d.dine_type, 'date', v_date, 'time', v_time,
+    'address', d.address,
+    'phone',   case when d.customer_phone is not null then '<SDT>' end);
+  -- Chủ quán sửa gì so với bot? (so với đơn nháp bot đã ghi: d.items vẫn là bản của bot)
+  if private.fb_items_sig(d.items) is distinct from private.fb_items_sig(p_items) then v_edits := array_append(v_edits, 'items'); end if;
+  if (s.target ->> 'dine_type') is distinct from d.dine_type then v_edits := array_append(v_edits, 'dine_type'); end if;
+  if (s.target ->> 'time') is distinct from v_time or (s.target ->> 'date') is distinct from v_date then v_edits := array_append(v_edits, 'time'); end if;
+  update fb_train set final = v_final, edits = v_edits where id = s.id;
+end $$;
+
+-- Chủ quán huỷ đơn nháp → các mẫu của đơn không phải đáp án đúng
+create or replace function private.fb_train_cancel() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status = 'huy' and old.status is distinct from 'huy' then
+    update fb_train set outcome = 'huy' where draft_id = new.id;
+  end if;
+  return new;
+end $$;
+drop trigger if exists fb_drafts_train_cancel on fb_drafts;
+create trigger fb_drafts_train_cancel after update of status on fb_drafts
+  for each row execute function private.fb_train_cancel();
+
+-- fb_approve (như cập nhật 22) + gọi fb_train_close ở cuối
+create or replace function fb_approve(
+  p_draft   uuid,
+  p_dine    text,
+  p_name    text,
+  p_phone   text,
+  p_address text,
+  p_at      timestamptz,
+  p_items   jsonb,
+  p_note    text default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare d fb_drafts; v_order orders; v_total int; v_emp employees;
+begin
+  if my_role() is distinct from 'owner' then raise exception 'FORBIDDEN'; end if;
+  select * into d from fb_drafts where id = p_draft for update;
+  if not found then raise exception 'DRAFT_NOT_FOUND'; end if;
+  if d.status = 'da_duyet' then raise exception 'DRAFT_DONE' using hint = 'Đơn này đã duyệt rồi'; end if;
+  if p_dine not in ('mang_ve', 'tai_quan', 'giao_hang') then raise exception 'BAD_DINE' using hint = 'Chọn qua lấy / ăn tại quán / đi ship'; end if;
+  if p_at is null then raise exception 'MISSING_TIME' using hint = 'Nhập giờ hẹn'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'MISSING_NAME' using hint = 'Nhập tên khách'; end if;
+  if p_dine = 'giao_hang' and coalesce(trim(p_address), '') = '' then raise exception 'MISSING_ADDRESS' using hint = 'Nhập địa chỉ giao hàng'; end if;
+
+  insert into orders (queue_number, customer_name, customer_phone, note, dine_type, address, deliver_at, source)
+  values (null, trim(p_name), nullif(trim(p_phone), ''), nullif(left(trim(p_note), 300), ''), p_dine,
+          case when p_dine = 'giao_hang' then nullif(left(trim(p_address), 300), '') end, p_at, 'fb')
+  returning * into v_order;
+  perform private.add_items(v_order.id, p_items);
+  select total into v_total from orders where id = v_order.id;
+
+  select * into v_emp from employees where id = my_employee_id();
+  update fb_drafts set status = 'da_duyet', order_id = v_order.id, approved_by = v_emp.full_name, approved_at = now(),
+         dine_type = p_dine, at = p_at, customer_name = trim(p_name), customer_phone = nullif(trim(p_phone), ''),
+         address = nullif(trim(p_address), ''), note = nullif(trim(p_note), ''), total_est = v_total,
+         changed_after = false, updated_at = now()
+   where id = p_draft;
+  perform private.fb_train_close(p_draft, p_items);
+  return jsonb_build_object('order_id', v_order.id, 'total', v_total);
+end $$;
+grant execute on function fb_approve(uuid, text, text, text, text, timestamptz, jsonb, text) to authenticated;
+revoke all on function private.fb_items_sig(jsonb), private.fb_train_close(uuid, jsonb), private.fb_train_cancel() from public;
+
 revoke all on all functions in schema private from public;

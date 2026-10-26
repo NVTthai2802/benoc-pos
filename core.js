@@ -43,13 +43,18 @@ const ICON_SCOOTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const isDelivery = o => !!o && (o.dine_type === 'giao_hang' || o.dine === 'giao_hang');
 const isTakeaway = o => !!o && (o.dine_type === 'mang_ve' || o.dine === 'mang_ve' || isDelivery(o)); // đơn không có số thẻ
 const isPickup = o => !!o && !!o.pickup && !isDelivery(o); // khách đến lấy (quán tạo đơn bằng nút Qua lấy)
+/* Ăn tại quán đặt trước qua Facebook: chưa có số bàn, có giờ hẹn */
+const isBooked = o => !!o && (o.dine_type || o.dine) === 'tai_quan' && (o.queue_number == null && o.queue == null);
+const whenText = o => o.deliver_at ? hhmm(o.deliver_at) : '';
 const qboxHtml = (o, extra) => isDelivery(o)
   ? '<div class="qbox qbox--mv qbox--giao' + (extra ? ' ' + extra : '') + '">' + ICON_SCOOTER + '<span>' + (o.deliver_at ? 'Giao ' + hhmm(o.deliver_at) : 'Giao hàng') + '</span></div>'
   : isTakeaway(o)
-  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>' + (isPickup(o) ? 'Đến lấy' : 'Mang về') + '</span></div>'
+  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>' + (isPickup(o) ? 'Đến lấy' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'Mang về') + '</span></div>'
+  : isBooked(o)
+  ? '<div class="qbox qbox--book' + (extra ? ' ' + extra : '') + '"><span>Đặt bàn</span><b class="num">' + (o.deliver_at ? hhmm(o.deliver_at) : '?') + '</b></div>'
   : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Số</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
 /* "số 12" hoặc "mang về của Lan" — dùng trong thông báo */
-const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isTakeaway(o) ? (isPickup(o) ? 'đến lấy của ' : 'mang về của ') + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
+const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isBooked(o) ? 'đặt bàn của ' + (o.customer_name || o.name || '') : isTakeaway(o) ? (isPickup(o) ? 'đến lấy của ' : 'mang về của ') + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(SP + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -375,7 +380,61 @@ function supabaseApi() {
       const c = await cl(); let b = c.from('stock_moves').select('*').order('created_at', { ascending: false }).limit((f && f.limit) || 100);
       if (f && f.itemId) b = b.eq('item_id', f.itemId);
       if (f && f.from) b = b.gte('created_at', new Date(f.from).toISOString());
+      if (f && f.kind) b = b.eq('kind', f.kind);
       return await q(b);
+    },
+    /* Mã vạch kho (chưa chạy cập nhật 21 thì trả về null) */
+    async stockBarcodes() { try { const c = await cl(); return await q(c.from('stock_barcodes').select('*').order('created_at')); } catch (e) { return null; } },
+    async linkBarcode(code, itemId, unitKind, replace) {
+      const c = await cl(); const e = await myEmployee().catch(() => null);
+      const row = { code: String(code).trim(), item_id: itemId, unit_kind: unitKind === 'use' ? 'use' : 'buy', created_by: e ? e.full_name : null };
+      await q(replace ? c.from('stock_barcodes').upsert(row) : c.from('stock_barcodes').insert(row));
+    },
+    async unlinkBarcode(code) { const c = await cl(); await q(c.from('stock_barcodes').delete().eq('code', code)); },
+
+    /* ---------- Đơn Facebook (cập nhật 22 + Edge Function fb-bot). Chưa cài thì trả về null ---------- */
+    async fbDrafts() {
+      const c = await cl(); const since = new Date(Date.now() - 36 * 3600e3).toISOString();
+      let drafts; try { drafts = await q(c.from('fb_drafts').select('*').gte('updated_at', since).neq('status', 'huy').order('updated_at', { ascending: false }).limit(200)); } catch (e) { return null; }
+      const threads = await q(c.from('fb_threads').select('*').gte('last_at', since).order('last_at', { ascending: false }).limit(200));
+      return { drafts, threads };
+    },
+    async fbMessages(psid) { const c = await cl(); return (await q(c.from('fb_messages').select('*').eq('psid', psid).order('created_at', { ascending: false }).limit(60))).reverse(); },
+    fbApprove: (id, f) => rpc('fb_approve', { p_draft: id, p_dine: f.dine, p_name: f.name, p_phone: f.phone || null, p_address: f.address || null, p_at: f.at, p_items: f.items, p_note: f.note || null }),
+    async fbCancel(id) { const c = await cl(); await q(c.from('fb_drafts').update({ status: 'huy', updated_at: new Date().toISOString() }).eq('id', id)); },
+    async fbThread(psid, patch) { const c = await cl(); await q(c.from('fb_threads').update(patch).eq('psid', psid)); },
+    async fbBotSettings(patch) { const c = await cl(); await q(c.from('shop_settings').update(patch).eq('id', 1)); },
+    /* Dữ liệu huấn luyện (cập nhật 24). Chưa cài thì trả về null */
+    async fbTrainStats() {
+      try {
+        const c = await cl();
+        const a = await c.from('fb_train').select('id', { count: 'exact', head: true }); if (a.error) return null;
+        const g = await c.from('fb_train').select('edits').not('final', 'is', null).limit(5000);
+        const gold = g.data || [];
+        return { total: a.count || 0, gold: gold.length, fixed: gold.filter(r => r.edits && r.edits.length).length };
+      } catch (e) { return null; }
+    },
+    async fbTrainExport() {
+      const c = await cl(); const rows = [];
+      for (let from = 0; ; from += 1000) { const r = await q(c.from('fb_train').select('*').order('id').range(from, from + 999)); rows.push(...r); if (r.length < 1000) break; }
+      const hashes = [...new Set(rows.map(r => r.menu_hash).filter(Boolean))];
+      const menus = hashes.length ? await q(c.from('fb_train_menu').select('*').in('hash', hashes)) : [];
+      return { rows, menus };
+    },
+    async fbCount() {
+      try {
+        const c = await cl(); const since = new Date(Date.now() - 36 * 3600e3).toISOString();
+        const a = await c.from('fb_drafts').select('id', { count: 'exact', head: true }).eq('status', 'cho_duyet').gte('updated_at', since);
+        if (a.error) return null;
+        const b = await c.from('fb_threads').select('psid', { count: 'exact', head: true }).eq('need_human', true).gte('last_at', since);
+        return (a.count || 0) + (b.count || 0);
+      } catch (e) { return null; }
+    },
+    /* Gọi bot: nhắn khách sau khi duyệt, nhắn tay, kiểm tra cài đặt */
+    async fbCall(body) {
+      const c = await cl(); const { data, error } = await c.functions.invoke('fb-bot', { body });
+      if (error) { let msg = error.message || 'Lỗi gọi bot'; try { const j = await error.context.json(); msg = j.error || msg; } catch (e) { /* bỏ qua */ } if (/Failed to send|NOT_FOUND|404/i.test(msg)) msg = 'Chưa cài bot (Edge Function fb-bot) trên Supabase.'; fail(msg); }
+      return data;
     },
 
     /* ---------- Nhân viên & chấm công ---------- */
@@ -840,6 +899,44 @@ function demoStockSeed(db) {
   [['Mì Hàn Quốc', 'Đồ khô', 'gói', 'thùng', 24, 30, 10, 312000], ['Đường pha chế', 'Nguyên liệu pha chế', 'can', 'can', 1, 3, 2, 95000], ['Dầu ăn', 'Gia vị', 'can', 'thùng', 4, 2, 1, 420000],
    ['Trân châu đen', 'Nguyên liệu pha chế', 'gói', 'thùng', 20, 8, 5, 560000], ['Sữa đặc', 'Nguyên liệu pha chế', 'hộp', 'thùng', 48, 60, 12, 1150000], ['Ly nhựa 700ml', 'Bao bì', 'cây', 'thùng', 20, 4, 5, 380000]]
     .forEach(([name, grp, use, buy, per, qty, min, cost], k) => db.stock_items.push({ id: uuid(), name, grp, use_unit: use, buy_unit: buy, per_buy: per, qty, min_qty: min, cost_per_buy: cost, note: null, is_active: true, sort_order: k, created_at: new Date().toISOString() }));
+  // Mã vạch mẫu: gõ 8934563000016 (gói mì) hoặc 8934563000023 (thùng mì) vào ô Quét mã để thử
+  const mi = db.stock_items[0];
+  db.stock_barcodes = [{ code: '8934563000016', item_id: mi.id, unit_kind: 'use', created_by: 'Mẫu', created_at: new Date().toISOString() }, { code: '8934563000023', item_id: mi.id, unit_kind: 'buy', created_by: 'Mẫu', created_at: new Date().toISOString() }];
+  return db;
+}
+/* Đơn Facebook mẫu của bản xem thử */
+function demoFbSeed(db) {
+  const now = Date.now(), at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); if (d.getTime() < now + 30 * 60e3) d.setTime(now + 60 * 60e3); return d.toISOString(); };
+  const mi = n => db.menu_items.find(m => m.name === n && m.is_available) || db.menu_items.find(m => m.is_available);
+  const defs = m => db.menu_item_option_groups.filter(l => l.menu_item_id === m.id).map(l => db.option_groups.find(g => g.id === l.group_id)).filter(g => g && g.min_select > 0)
+    .map(g => db.option_choices.find(c => c.group_id === g.id && c.is_default) || db.option_choices.find(c => c.group_id === g.id)).filter(Boolean);
+  const line = (n, qty, extra) => { const m = mi(n); const cs = defs(m); const ex = extra ? db.option_choices.filter(c => extra.indexOf(c.name) >= 0 && db.menu_item_option_groups.some(l => l.menu_item_id === m.id && l.group_id === c.group_id)) : [];
+    const all = cs.filter(c => !ex.some(x => x.group_id === c.group_id)).concat(ex);
+    return { menu_item_id: m.id, name: m.name, qty, choice_ids: all.map(c => c.id), choices: ex.map(c => c.name), note: null, price: m.price + all.reduce((t, c) => t + (c.price_delta || 0), 0), drink: DRINK_CATS.test((db.menu_categories.find(c => c.id === m.category_id) || {}).name || '') }; };
+  const t = (min) => new Date(now - min * 60e3).toISOString();
+  db.fb_threads = [
+    { psid: 'demo-1', name: 'Nguyễn Thu Hà', link: null, paused_until: null, need_human: false, last_at: t(3), created_at: t(10) },
+    { psid: 'demo-2', name: 'Trần Minh Đức', link: null, paused_until: null, need_human: false, last_at: t(6), created_at: t(9) },
+    { psid: 'demo-3', name: 'Lê Phương Anh', link: null, paused_until: null, need_human: true, last_at: t(1), created_at: t(2) }
+  ];
+  const i1 = [line('Cơm gà viên', 2, ['Trứng ốp la']), line('Hồng trà sữa trân châu', 2, ['Ít đá'])];
+  const i2 = [line('Kimbap chiên', 1), line('Hồng trà sữa trân châu', 1)];
+  const sum = a => a.reduce((s, i) => s + i.price * i.qty, 0);
+  db.fb_drafts = [
+    { id: uuid(), psid: 'demo-1', status: 'cho_duyet', dine_type: 'giao_hang', at: at(18, 30), customer_name: 'Nguyễn Thu Hà', customer_phone: '0912345678', address: '12 ngõ 5 Nguyễn Trãi, Thanh Xuân', note: null, items: i1, unknown: [], missing: [], total_est: sum(i1), asked: ['drink'], changed_after: false, created_at: t(10), updated_at: t(3) },
+    { id: uuid(), psid: 'demo-2', status: 'dang_hoi', dine_type: 'mang_ve', at: null, customer_name: 'Trần Minh Đức', customer_phone: null, address: null, note: null, items: i2, unknown: [], missing: ['at'], total_est: sum(i2), asked: [], changed_after: false, created_at: t(9), updated_at: t(6) }
+  ];
+  db.fb_messages = [
+    { id: 1, psid: 'demo-1', sender: 'khach', text: 'shop ơi cho mình 2 cơm gà viên thêm trứng, 2 ts trân châu ít đá', created_at: t(10) },
+    { id: 2, psid: 'demo-1', sender: 'bot', text: 'Dạ Bé Nốc chào Hà ạ 🥰\n\nEm ghi nhận đơn của mình:\n• 2 Cơm gà viên (Trứng ốp la)\n• 2 Hồng trà sữa trân châu (Ít đá)\n\n👉 Mình qua lấy, ăn tại quán hay để quán ship ạ?\n👉 Mình hẹn mấy giờ ạ?', created_at: t(10) },
+    { id: 3, psid: 'demo-1', sender: 'khach', text: 'ship 6r tối nha, 12 ngõ 5 nguyễn trãi thanh xuân, sdt 0912345678', created_at: t(4) },
+    { id: 4, psid: 'demo-1', sender: 'bot', text: 'Em đã gửi đơn cho quán xác nhận ạ. Quán xác nhận xong em nhắn mình ngay, mình cần sửa gì cứ nhắn em nha.', created_at: t(3) },
+    { id: 5, psid: 'demo-2', sender: 'khach', text: '1 kimbap chiên 1 ts nhé, mình qua lấy', created_at: t(9) },
+    { id: 6, psid: 'demo-2', sender: 'bot', text: 'Em ghi nhận đơn của mình:\n• 1 Kimbap chiên\n• 1 Hồng trà sữa trân châu\n🛍 Qua lấy\n\nMấy giờ mình qua lấy ạ?', created_at: t(6) },
+    { id: 7, psid: 'demo-3', sender: 'khach', text: 'hôm qua mình đặt ship mà shipper giao trễ quá 😢', created_at: t(2) },
+    { id: 8, psid: 'demo-3', sender: 'bot', text: 'Dạ em báo chủ quán trả lời mình ngay ạ, mình đợi em chút nha.', created_at: t(1) }
+  ];
+  if (db.shop_settings.fb_bot_on == null) Object.assign(db.shop_settings, { fb_bot_on: true, fb_open: '07:00', fb_close: '22:00', fb_hello: null });
   return db;
 }
 function demoApi() {
@@ -851,6 +948,7 @@ function demoApi() {
     if (!cache.promotions) { demoPromoSeed(cache); store.set(DEMO_KEY, cache); } // dữ liệu xem thử cũ: thêm ưu đãi mẫu
     if (!cache.stock_items) { demoStockSeed(cache); store.set(DEMO_KEY, cache); } // thêm kho mẫu
     if (!cache.stock_packs) { demoPackSeed(cache); store.set(DEMO_KEY, cache); } // thêm quy cách mẫu
+    if (!cache.stock_barcodes) { cache.stock_barcodes = []; store.set(DEMO_KEY, cache); }
     return cache;
   };
   const save = () => {
@@ -1086,7 +1184,7 @@ function demoApi() {
       });
     },
     async deleteStockPack(id) { need('owner'); tx(db => { db.stock_packs = db.stock_packs.filter(x => x.id !== id); db.stock_items.forEach(it => { if (it.pack_id === id) it.pack_id = null; }); }); },
-    async deleteStockItem(id) { need('owner'); tx(db => { db.stock_items = db.stock_items.filter(x => x.id !== id); db.stock_moves = db.stock_moves.filter(m => m.item_id !== id); }); },
+    async deleteStockItem(id) { need('owner'); tx(db => { db.stock_items = db.stock_items.filter(x => x.id !== id); db.stock_moves = db.stock_moves.filter(m => m.item_id !== id); db.stock_barcodes = (db.stock_barcodes || []).filter(b => b.item_id !== id); }); },
     async stockMove(itemId, kind, amount, inBuy, note, cost) {
       const e = need();
       return tx(db => {
@@ -1099,7 +1197,50 @@ function demoApi() {
         return { qty: it.qty, delta };
       });
     },
-    async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
+    async stockBarcodes() { need(); return (load().stock_barcodes || []).map(x => Object.assign({}, x)); },
+    async linkBarcode(code, itemId, unitKind, replace) {
+      const e = need();
+      tx(db => {
+        db.stock_barcodes = db.stock_barcodes || []; code = String(code).trim();
+        if (!/^[0-9A-Za-z.\-]{3,64}$/.test(code)) fail('Mã vạch không hợp lệ.');
+        const ex = db.stock_barcodes.find(x => x.code === code);
+        if (ex && !replace) fail('duplicate key value violates unique constraint "stock_barcodes_pkey"');
+        if (ex && e.role !== 'owner') fail('FORBIDDEN');
+        db.stock_barcodes = db.stock_barcodes.filter(x => x.code !== code);
+        db.stock_barcodes.push({ code, item_id: itemId, unit_kind: unitKind === 'use' ? 'use' : 'buy', created_by: e.full_name, created_at: iso() });
+      });
+    },
+    async unlinkBarcode(code) { need('owner'); tx(db => { db.stock_barcodes = (db.stock_barcodes || []).filter(x => x.code !== code); }); },
+
+    /* ---------- Đơn Facebook (bản xem thử: dữ liệu mẫu, không nhắn Facebook thật) ---------- */
+    async fbDrafts() { need('owner'); const db = load(); if (!db.fb_drafts) { demoFbSeed(db); save(); } return { drafts: db.fb_drafts.filter(d => d.status !== 'huy').map(d => JSON.parse(JSON.stringify(d))), threads: db.fb_threads.map(t => Object.assign({}, t)) }; },
+    async fbMessages(psid) { need('owner'); return (load().fb_messages || []).filter(m => m.psid === psid).map(m => Object.assign({}, m)); },
+    async fbApprove(id, f) {
+      const e = need('owner');
+      const d = load().fb_drafts.find(x => x.id === id); if (!d) fail('DRAFT_NOT_FOUND'); if (d.status === 'da_duyet') fail('DRAFT_DONE', 'Đơn này đã duyệt rồi');
+      if (!f.at) fail('MISSING_TIME', 'Nhập giờ hẹn');
+      const r = await api.placeOrder({ name: f.name, phone: f.phone, items: f.items, note: f.note, dine: f.dine === 'giao_hang' ? 'giao_hang' : 'mang_ve', address: f.address, deliverAt: f.at });
+      tx(db => {
+        const o = db.orders.find(x => x.id === r.order_id); Object.assign(o, { deliver_at: f.at, source: 'fb' });
+        if (f.dine === 'tai_quan') Object.assign(o, { dine_type: 'tai_quan', pickup: false, queue_number: null });
+        Object.assign(db.fb_drafts.find(x => x.id === id), { status: 'da_duyet', order_id: o.id, approved_by: e.full_name, approved_at: iso(), dine_type: f.dine, at: f.at, customer_name: f.name, customer_phone: f.phone || null, address: f.address || null, note: f.note || null, total_est: r.total, changed_after: false, updated_at: iso() });
+      });
+      return { order_id: r.order_id, total: r.total };
+    },
+    async fbCancel(id) { need('owner'); tx(db => { db.fb_drafts.find(x => x.id === id).status = 'huy'; }); },
+    async fbThread(psid, patch) { need('owner'); tx(db => { Object.assign(db.fb_threads.find(x => x.psid === psid), patch); }); },
+    async fbBotSettings(patch) { need('owner'); tx(db => { Object.assign(db.shop_settings, patch); }); },
+    async fbTrainStats() { need('owner'); return { total: 0, gold: 0, fixed: 0, demo: true }; },
+    async fbTrainExport() { need('owner'); return { rows: [], menus: [] }; },
+    async fbCount() { const db = load(); if (!db.fb_drafts) return 0; return db.fb_drafts.filter(d => d.status === 'cho_duyet').length + db.fb_threads.filter(t => t.need_human).length; },
+    async fbCall(body) {
+      need('owner'); await wait(300);
+      if (body.action === 'status') return { ok: true, demo: true };
+      const db = load(); const d = body.draft_id && db.fb_drafts.find(x => x.id === body.draft_id); const psid = body.psid || (d && d.psid);
+      tx(x => { x.fb_messages.push({ id: Date.now(), psid, sender: 'quan', text: body.text || 'Dạ quán đã xác nhận đơn của mình ✅ (bản xem thử không nhắn Facebook thật)', created_at: iso() }); });
+      return { ok: true, demo: true };
+    },
+    async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.kind || m.kind === f.kind) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
 
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { return load().employees.slice().sort((a, b) => (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name, 'vi')); },
@@ -1187,7 +1328,7 @@ const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '039324746
 const NOTE_DEFAULT = 'BENOC {ban} {ten}';
 /* Nội dung chuyển khoản của 1 đơn theo mẫu chủ quán đặt: {ban} = SO 15 / MV / GIAO, {ten} = tên khách ({ma} cũ vẫn đọc được) */
 function qrNoteFor(o, tpl) {
-  const dine = o.dine_type || 'tai_quan', ban = dine === 'giao_hang' ? 'GIAO' : dine === 'mang_ve' ? 'MV' : 'SO ' + (o.queue_number != null ? o.queue_number : '');
+  const dine = o.dine_type || 'tai_quan', ban = dine === 'giao_hang' ? 'GIAO' : dine === 'mang_ve' ? 'MV' : o.queue_number != null ? 'SO ' + o.queue_number : 'DAT BAN';
   const t = String(tpl || BANK.note || NOTE_DEFAULT);
   return qrInfo(t.replace(/\{ban\}/gi, ban).replace(/\{ten\}/gi, o.customer_name || '').replace(/\{ma\}/gi, String(o.id || '').replace(/-/g, '').slice(0, 4)));
 }
@@ -1249,7 +1390,7 @@ const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice 
 window.BN = {
   sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, qrNoteFor, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
-  ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, qboxHtml, orderLabel,
+  ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, isBooked, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
 
