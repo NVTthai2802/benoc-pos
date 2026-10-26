@@ -88,7 +88,7 @@ export type Draft = {
 export type AiOut = {
   intent?: string; items?: { m: number; qty?: number; choices?: number[]; note?: string }[]; unknown?: string[];
   dine_type?: string | null; date?: string | null; time?: string | null; address?: string | null; phone?: string | null; name?: string | null; note?: string | null; answer?: string | null;
-  same_order?: boolean; khach?: string | null; convo?: { s: string; t: string }[];
+  same_order?: boolean; khach?: string | null; convo?: { s: string; t: string }[]; nguon?: string | null;
   _model?: string;   // máy chủ gắn thêm: model nào đã đọc (không phải AI trả)
 };
 
@@ -171,7 +171,18 @@ export function systemPrompt(menu: Menu, now: Date, open: string, close: string)
 Bây giờ là ${vnTime(now)} ${vnWeekday(now)} ngày ${vnDate(now)} (giờ Việt Nam). Quán nhận đơn từ ${open} đến ${close}.
 
 Chủ quán gửi cho bạn MỘT trong hai loại:
-(a) ẢNH CHỤP MÀN HÌNH đoạn chat đặt món giữa quán và MỘT khách (Messenger / Facebook / Zalo), có thể nhiều ảnh, theo thứ tự cũ → mới. Tin của QUÁN thường nằm bên PHẢI (bong bóng có màu), tin của KHÁCH nằm bên TRÁI. Tên khách thường ở đầu màn hình. Ảnh vừa chụp, nên "chiều nay", "tối nay" là hôm nay; tin có mốc giờ / ngày thì dựa vào đó.
+(a) ẢNH CHỤP MÀN HÌNH đoạn chat đặt món giữa quán và MỘT khách (Messenger / Facebook / Zalo), có thể nhiều ảnh, theo thứ tự cũ → mới; đôi khi là ảnh chụp lại màn hình điện thoại bằng máy khác (nghiêng, loá, màn hình nứt) → vẫn đọc phần chữ trong khung chat. Ảnh vừa chụp, nên "chiều nay", "tối nay" là hôm nay; tin có mốc giờ / ngày thì dựa vào đó.
+NHẬN DIỆN GIAO DIỆN (để biết tin nào của khách, tin nào của quán):
+- MESSENGER (Facebook): đầu màn hình có ảnh đại diện + tên người đang chat (có thể kèm "Đoạn chat kinh doanh", "Đang hoạt động"), nút gọi điện và chữ (i) bên phải; tin của người cầm máy nằm bên PHẢI, bong bóng XANH DƯƠNG đậm; tin của người kia nằm bên TRÁI, bong bóng XÁM (nền tối thì xám đậm) kèm ảnh đại diện nhỏ; ô nhập "Nhắn tin" / "Aa", nút like 👍 xanh.
+- ZALO: thanh trên cùng màu XANH (có mũi tên quay lại, tên người chat, có thể ghi "Tài khoản Bot" / "Vừa truy cập"); nền xanh xám nhạt; tin của người cầm máy bên PHẢI, bong bóng XANH NHẠT; tin của người kia bên TRÁI, bong bóng TRẮNG kèm ảnh đại diện; giờ nhỏ dưới mỗi tin ("15:34"), dải giữa màn hình kiểu "17:37 Hôm nay"; ô nhập "Tin nhắn".
+- AI CẦM MÁY: tên ở ĐẦU màn hình là người ĐANG CHAT VỚI người cầm máy.
+  * Đầu màn hình là tên khách (không phải "Bé Nốc") → ảnh chụp từ máy QUÁN: bên PHẢI = QUÁN, bên TRÁI = KHÁCH, khach = tên đó.
+  * Đầu màn hình là "Bé Nốc", "Bé Nốc Ăn Vặt"… → ảnh chụp từ máy KHÁCH: bên PHẢI = KHÁCH, bên TRÁI = QUÁN / bot; khach = null (trừ khi khách tự xưng tên).
+- Tin trả lời tự động của bot cũ ("Em ghi nhận đơn của mình…", "Dạ em ghi nhận tin nhắn của mình, chủ quán sẽ trả lời…", "Dạ mình muốn đặt món cứ nhắn em…", "Giờ hẹn … đã qua rồi…") là của QUÁN, chỉ là tóm tắt, KHÔNG phải món khách gọi thêm.
+- Khách nhắn "đặt đơn mới", "đơn khác", "huỷ đơn kia" → BỎ các món trước câu đó, chỉ lấy đơn mới phía sau.
+- nguon: "messenger" nếu giao diện Messenger / Facebook, "zalo" nếu giao diện Zalo, "khac" nếu không nhận ra. Tin chữ của chủ quán → null.
+- GHI CHÚ: yêu cầu riêng của từng món ("thêm trứng" nếu không có lựa chọn tương ứng, "nhiều tương", "ít cay", "không hành") ghi vào note của ĐÚNG món đó; yêu cầu chung cả đơn ("lấy thêm đũa", "gọi trước khi giao", "để ở bảo vệ") ghi vào note của đơn.
+
 (b) TIN CHỮ do chủ quán gõ: lệnh sửa ĐƠN ĐANG GHI ("thêm 1 trà đào", "bỏ kimbap", "giờ 18h", "ship 12 ngõ 5…, sđt 09…"), hoặc cả một đơn chủ quán tự gõ khi chưa có đơn đang ghi.
 
 Nhiệm vụ: trả về TRẠNG THÁI ĐƠN ĐẦY ĐỦ, MỚI NHẤT dưới dạng JSON: gom mọi thông tin hai bên đã chốt; khách đổi ý thì lấy ý mới nhất; quán báo hết món / khách bỏ món thì bỏ khỏi danh sách.
@@ -209,7 +220,7 @@ QUY TẮC:
 - intent: "order" bình thường; "khong_phai_don" nếu ảnh không phải đoạn chat đặt món (ảnh món ăn, ảnh chuyển khoản, ảnh mờ không đọc được…).
 
 Chỉ trả về đúng một object JSON, không giải thích:
-{"intent":"order","same_order":false,"khach":null,"convo":[{"s":"khach","t":"..."}],"items":[{"m":1,"qty":2,"choices":[],"note":null}],"unknown":[],"dine_type":null,"date":null,"time":null,"address":null,"phone":null,"name":null,"note":null}`;
+{"intent":"order","same_order":false,"nguon":"messenger","khach":null,"convo":[{"s":"khach","t":"..."}],"items":[{"m":1,"qty":2,"choices":[],"note":null}],"unknown":[],"dine_type":null,"date":null,"time":null,"address":null,"phone":null,"name":null,"note":null}`;
 }
 
 export function userPrompt(o: { cur: Draft | null; nImages: number; text?: string | null; caption?: string | null }) {
@@ -497,6 +508,13 @@ export function draftReply(d: Draft, miss: string[], now: Date, updated: boolean
 }
 export const LOCKED = '🔒 Bếp / pha chế đã nhận đơn này nên bot không sửa được nữa. Sửa trên màn hình bếp (nút Sửa đơn) giúp em nha.';
 
+const NGUON: Record<string, string> = { messenger: 'Messenger', zalo: 'Zalo' };
+/* "Messenger · lấy thêm đũa": nguồn đứng đầu, không lặp */
+export function noteWithSource(note: string | null, nguon: string | null) {
+  const rest = (note || '').replace(/^(Messenger|Zalo)\s*(·\s*)?/, '').trim();
+  return [nguon, rest].filter(Boolean).join(' · ').slice(0, 300) || null;
+}
+
 async function isAllowed(sb: SupabaseClient, k: Kenh, chatId: string) {
   const { data } = await sb.from('bot_users').select('chat_id').eq('kenh', k).eq('chat_id', chatId).maybeSingle();
   return !!data;
@@ -593,6 +611,10 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   const anon = anonymizer({ names: [ai.khach, ai.name, base.customer_name], words: menuWords(menu) });
   const stateBefore = stateOf(base, anon);
   const d = applyAi(base, ai, menu, now, (ai.khach || '').trim().slice(0, 60) || null);
+  // Ghi nguồn (Messenger / Zalo) vào đầu ghi chú đơn để bếp, chủ quán biết khách nhắn ở đâu
+  const src0 = (same && cur.note && /^(Messenger|Zalo)\b/.exec(cur.note)?.[1]) || null;
+  const nguon = NGUON[String(ai.nguon || '')] || src0;
+  d.note = noteWithSource(d.note, nguon);
   const miss = missingOf(d, now, open, close);
   const newConvo = (ai.convo || []).filter(x => x && (x.s === 'khach' || x.s === 'quan') && String(x.t || '').trim()).slice(0, 40).map(x => ({ s: x.s, t: String(x.t).slice(0, 500) }));
   const oldConvo: any[] = same ? (cur.convo || []) : [];

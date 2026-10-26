@@ -330,6 +330,20 @@ Deno.test('ảnh mới khi đơn trước bếp đã nhận → đơn mới; tê
   assertEquals(t.orders.length, 3); assertStringIncludes(r2.sent.at(-1)!, '✅ Đã gửi bếp · Huy');
 });
 
+Deno.test('prompt dạy nhận diện Messenger / Zalo, ai cầm máy; ghi nguồn vào ghi chú đơn', async () => {
+  const sp = bot.systemPrompt(menu, NOW, '07:00', '22:00');
+  for (const x of ['MESSENGER', 'ZALO', 'AI CẦM MÁY', 'đặt đơn mới', '"nguon"']) assertStringIncludes(sp, x);
+  assertEquals(bot.noteWithSource('lấy thêm đũa', 'Zalo'), 'Zalo · lấy thêm đũa');
+  assertEquals(bot.noteWithSource('Zalo · lấy thêm đũa', 'Messenger'), 'Messenger · lấy thêm đũa');
+  assertEquals(bot.noteWithSource(null, null), null);
+  const t = linked();
+  await run(t, { photo: 'https://zalo/a.jpg' }, { intent: 'order', nguon: 'messenger', khach: 'Lan', note: 'gọi trước khi giao', items: [{ m: num('Cơm gà viên'), note: 'nhiều tương' }], convo: [] });
+  assertEquals(t.fb_drafts[0].note, 'Messenger · gọi trước khi giao');
+  assertEquals(t.fb_drafts[0].items[0].note, 'nhiều tương');
+  await run(t, { text: 'giờ 18h' }, { intent: 'order', note: 'gọi trước khi giao', items: [{ m: num('Cơm gà viên'), note: 'nhiều tương' }] });   // sửa bằng chữ: giữ nguồn
+  assertEquals(t.fb_drafts[0].note, 'Messenger · gọi trước khi giao');
+});
+
 Deno.test('món hết hàng / không có món → báo lại, chưa gửi bếp', async () => {
   const t = linked(); (t as any).het = [menu.items.find(i => i.name === 'Cơm gà viên')!.id];
   const r = await run(t, { text: '1 cơm gà viên' }, { intent: 'order', items: [{ m: num('Cơm gà viên') }] });
