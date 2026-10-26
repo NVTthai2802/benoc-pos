@@ -50,7 +50,7 @@ function ticketCanvas(o, items, extra, set) {
   const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
   // Phiếu gọn để tiết kiệm giấy: loại đơn + số bàn / giờ giao, địa chỉ (ship), khách, giờ đặt, giờ nhận, món, ghi chú
   const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
-  const where = isDelivery(o) ? 'ĐI SHIP' + at : o.pickup ? 'ĐẾN LẤY' + at : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'Ở ĐÂY · BÀN ' + o.queue_number;
+  const where = (o.source === 'fb' ? 'ĐƠN ONLINE · ' : '') + (isDelivery(o) ? 'ĐI SHIP' + at : o.pickup ? 'ĐẾN LẤY' + at : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'Ở ĐÂY · BÀN ' + o.queue_number);
   text(where, 40, true, 'center', 2);
   if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
   text([o.customer_name, o.customer_phone].filter(Boolean).join(' · '), 24, true, 'center');
