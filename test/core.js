@@ -52,7 +52,7 @@ const qboxHtml = (o, extra) => isDelivery(o)
   ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>' + (isPickup(o) ? 'Đến lấy' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'Mang về') + '</span></div>'
   : isBooked(o)
   ? '<div class="qbox qbox--book' + (extra ? ' ' + extra : '') + '"><span>Đặt bàn</span><b class="num">' + (o.deliver_at ? hhmm(o.deliver_at) : '?') + '</b></div>'
-  : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Số</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
+  : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Bàn</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
 /* "số 12" hoặc "mang về của Lan" — dùng trong thông báo */
 const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isBooked(o) ? 'đặt bàn của ' + (o.customer_name || o.name || '') : isTakeaway(o) ? (isPickup(o) ? 'đến lấy của ' : 'mang về của ') + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
 
