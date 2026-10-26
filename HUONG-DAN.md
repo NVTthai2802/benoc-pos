@@ -61,7 +61,7 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 
 - **Máy bếp**: mở `bep.html`, đăng nhập tài khoản máy bếp, bấm **Bật chuông báo** (trình duyệt chỉ cho phát âm thanh sau khi bấm). Nên chọn "Thêm vào màn hình chính" để mở như app.
 - **Máy pha chế**: mở `phache.html`, đăng nhập tài khoản máy pha chế, cũng bấm **Bật chuông báo**.
-- **Tiếng chuông khi có đơn mới**: chuông 2 nốt (bếp và pha chế khác giai điệu) rồi giọng đọc **"Bé Nốc ơi, bé Nốc ơi"** (file `sound/be-noc.mp3`, tạo bằng giọng đọc tiếng Việt của Google). Khách gọi nhân viên thì chỉ kêu chuông, không có giọng. Muốn đổi giọng khác, thay file `sound/be-noc.mp3` bằng file mp3 mới cùng tên. Nhớ tăng âm lượng và tắt chế độ im lặng trên điện thoại.
+- **Tiếng chuông khi có đơn mới**: tiếng **"tinh tinh"** (file `sound/tinh-tinh.mp3`). Khách gọi nhân viên hoặc nhắc bấm in thì kêu chuông 2 nốt (bếp và pha chế khác giai điệu). Muốn đổi tiếng báo đơn, thay file `sound/tinh-tinh.mp3` (và `test/sound/tinh-tinh.mp3`) bằng file mp3 mới cùng tên. Nhớ tăng âm lượng và tắt chế độ im lặng trên điện thoại.
 - **In phiếu và tem dán ly (máy in nhiệt Bluetooth, Android)**: mỗi điện thoại cài **2 việc riêng**: **Phiếu món** và **Tem dán ly** (bật / tắt từng việc). Cách quán đang dùng:
   | Điện thoại | Màn hình | Phiếu món | Tem dán ly |
   |---|---|---|---|

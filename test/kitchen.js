@@ -619,11 +619,11 @@ function beep() {
     o.connect(g).connect(audio.destination); o.start(audio.currentTime + t); o.stop(audio.currentTime + t + 0.22);
   });
 }
-// Giọng đọc "Bé Nốc ơi, bé Nốc ơi" (sound/be-noc.mp3). Tải sẵn khi bật chuông; nếu lỗi thì quay về tiếng chuông cũ.
+// Tiếng báo đơn mới "tinh tinh" (sound/tinh-tinh.mp3). Tải sẵn khi bật chuông; nếu lỗi thì quay về tiếng chuông cũ.
 async function loadVoice() {
   if (voice || !audio) return;
   try {
-    const r = await fetch('sound/be-noc.mp3');
+    const r = await fetch('sound/tinh-tinh.mp3');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const buf = await r.arrayBuffer();
     voice = await new Promise((ok, no) => audio.decodeAudioData(buf, ok, no)); // dạng callback để chạy được cả trên Safari cũ
@@ -632,12 +632,12 @@ async function loadVoice() {
 function playVoice() {
   if (!audio || !voice) return false;
   const src = audio.createBufferSource(); src.buffer = voice; src.connect(audio.destination);
-  src.start(audio.currentTime + 0.5);
+  src.start(audio.currentTime);
   return true;
 }
 function alertNew(msg, withVoice) {
   ui.toast(msg);
-  if (state.sound) { beep(); if (withVoice && playVoice()) { /* chuông + giọng đọc */ } else setTimeout(beep, 700); }
+  if (state.sound) { if (withVoice && playVoice()) { /* đơn mới: tiếng tinh tinh */ } else { beep(); setTimeout(beep, 700); } }
   if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 }
 async function lockScreen() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { /* máy không hỗ trợ giữ màn hình sáng */ } }
