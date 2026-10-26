@@ -384,7 +384,7 @@ function openFbSettings(st) {
     '<p class="small muted" style="margin:-4px 0 0">Khách hẹn giờ ngoài khung này, bot nhắc khách chọn giờ khác.</p>' +
     '<label class="field" for="fsHello">Câu chào riêng (không bắt buộc)<textarea id="fsHello" rows="3" maxlength="400" placeholder="Để trống: Dạ Bé Nốc chào … ạ 🥰">' + esc(st.fb_hello || '') + '</textarea></label>' +
     '<p class="small muted" style="margin:0">Bot luôn gửi kèm mẫu đặt món sau câu chào. Khi bạn tự nhắn khách trong hộp thư Fanpage, bot im với khách đó 30 phút.</p>' +
-    '<div id="fsTrainBox" hidden><label class="check"><input type="checkbox" id="fsTrain"> Lưu đoạn chat (đã ẩn tên, SĐT, địa chỉ) để huấn luyện mô hình riêng của quán</label>' +
+    '<div id="fsTrainBox" hidden><label class="check"><input type="checkbox" id="fsTrain"> Lưu đoạn chat (đã ẩn tên, SĐT; giữ địa chỉ) để huấn luyện mô hình riêng của quán</label>' +
     '<p class="small muted" id="fsTrainInfo" style="margin:0"></p><div class="row"><button class="btn btn-line btn-sm" type="button" id="fsExport">Tải dữ liệu huấn luyện (.jsonl)</button></div></div>' +
     '<div class="row"><button class="btn btn-line btn-sm" type="button" id="fsTest">Kiểm tra kết nối bot</button><button class="btn btn-line btn-sm" type="button" id="fsProf">Cài nút “Bắt đầu” trên Messenger</button></div><p class="small" id="fsRes"></p>' +
     '<p class="msg" id="fsMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="fsSave">Lưu</button></div>', sh => {
@@ -400,7 +400,7 @@ function openFbSettings(st) {
         if (!rows.length) { r.textContent = 'Chưa có mẫu nào để tải.'; e.target.disabled = false; return; }
         const lines = menus.map(m => JSON.stringify({ type: 'menu', hash: m.hash, menu: m.menu })).concat(rows.map(x => JSON.stringify(Object.assign({ type: 'turn' }, x))));
         BNReport.download(new Blob([lines.join('\n') + '\n'], { type: 'application/x-ndjson' }), 'benoc-huan-luyen-' + new Date().toISOString().slice(0, 10) + '.jsonl');
-        r.textContent = '✅ Đã tải ' + rows.length + ' mẫu. File chứa đoạn chat của khách (đã ẩn thông tin cá nhân), đừng đăng công khai.';
+        r.textContent = '✅ Đã tải ' + rows.length + ' mẫu. File chứa đoạn chat của khách (đã ẩn tên, SĐT nhưng còn địa chỉ), đừng đăng công khai.';
       } catch (err) { r.textContent = '❌ ' + errText(err); }
       e.target.disabled = false;
     };

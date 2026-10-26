@@ -4,7 +4,7 @@ Mục tiêu: dần thay AI API (Gemini / Claude) bằng mô hình của riêng q
 
 ## Bước 0. Bot tự thu dữ liệu (đã có)
 
-Mỗi lần khách nhắn, bot lưu 1 mẫu vào bảng `fb_train` (SQL cập nhật 24): đoạn chat **đã ẩn tên, SĐT, địa chỉ, số tài khoản**, đơn đang ghi, đơn AI đọc ra.
+Mỗi lần khách nhắn, bot lưu 1 mẫu vào bảng `fb_train` (SQL cập nhật 24): đoạn chat **đã ẩn tên, SĐT, số tài khoản** (địa chỉ giữ nguyên), đơn đang ghi, đơn AI đọc ra.
 Khi chủ quán **Duyệt** đơn, mẫu cuối của đơn được gắn thêm **đơn chủ quán duyệt = đáp án đúng**, kèm danh sách chỗ chủ quán phải sửa (`edits`: món / hình thức / giờ).
 
 | Loại mẫu | Ý nghĩa | Dùng để |
@@ -13,7 +13,7 @@ Khi chủ quán **Duyệt** đơn, mẫu cuối của đơn được gắn thêm
 | silver | đơn AI đọc (chưa ai kiểm) | học thêm, không dùng chấm điểm |
 | huỷ | chủ quán huỷ đơn | bỏ |
 
-Tải file: **Quản lý → Facebook → Cài đặt bot → Tải dữ liệu huấn luyện (.jsonl)**. File chứa đoạn chat của khách (đã ẩn thông tin cá nhân nhưng chỉ là cố gắng hết sức): **đừng đăng công khai**.
+Tải file: **Quản lý → Facebook → Cài đặt bot → Tải dữ liệu huấn luyện (.jsonl)**. File chứa đoạn chat và **địa chỉ giao hàng** của khách (tên, SĐT đã ẩn nhưng chỉ là cố gắng hết sức): **đừng đăng công khai**, và cân nhắc trước khi đưa lên Colab / dịch vụ ngoài.
 
 ## Bước 1. Đo AI API đang đọc đúng bao nhiêu %
 
@@ -53,6 +53,6 @@ Chạy mô hình trên máy chủ riêng (Edge Function của Supabase không ch
 
 ## Lưu ý quan trọng
 
-- **Địa chỉ, SĐT, tên** đã bị ẩn trong dữ liệu (`<DIA_CHI>`, `<SDT>`, `<TEN>`), nên mô hình học từ file này chỉ biết "có địa chỉ / SĐT", không trích được nội dung. Khi chạy thật: SĐT lấy bằng regex, địa chỉ lấy từ câu khách trả lời khi bot hỏi địa chỉ. Muốn mô hình học trích địa chỉ thì phải train trên chính máy của bạn với dữ liệu chưa ẩn, không đưa lên Colab.
+- **SĐT và tên** bị ẩn (`<SDT>`, `<TEN>`), nên mô hình không học trích SĐT: khi chạy thật SĐT lấy bằng regex. **Địa chỉ được giữ nguyên**, mô hình học trích địa chỉ từ chính dữ liệu này (`output` có trường `address` là đoạn địa chỉ khách gửi).
 - Trong lúc còn dùng API, tin nhắn khách vẫn gửi cho Google / Anthropic. Gemini gói miễn phí có thể dùng dữ liệu đó để cải thiện sản phẩm; bật Cloud Billing cho khoá hoặc dùng Claude API để tránh.
 - Khách nhắn "xoá dữ liệu của tôi" thì bot xoá cả mẫu huấn luyện của khách đó. Dữ liệu đã tải về máy bạn thì bạn tự xoá.

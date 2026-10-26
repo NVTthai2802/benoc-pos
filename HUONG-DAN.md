@@ -166,7 +166,7 @@ Chạy trong Supabase → **SQL Editor** → dán toàn bộ file → **Run**. C
 - `sql/cap-nhat-18-tai-khoan-ngan-hang.sql`: lưu tài khoản nhận chuyển khoản (ngân hàng, số tài khoản, tên chủ, mẫu nội dung chuyển khoản) trong Cài đặt để đổi được mà không sửa code. Mặc định MB Bank 0393247469.
 - `sql/cap-nhat-21-ma-vach-kho.sql`: thêm **mã vạch cho kho** (quét để nhập / lấy dùng / kiểm kho, máy nhớ mã cho lần sau). Chỉ thêm bảng mới. Chạy sau cập nhật 16. Giao diện mới chạy được cả trước khi chạy file này (chỉ là chưa có nút Quét mã).
 - `sql/cap-nhat-22-don-facebook.sql`: thêm **đơn đặt qua Facebook** (bảng hội thoại, đơn nháp chờ duyệt, hàm duyệt `fb_approve`, cài đặt bot) và cho phép đơn **ăn tại quán đặt trước** chưa có số bàn. Chỉ thêm bảng / cột / hàm, không đụng đơn cũ.
-- `sql/cap-nhat-24-du-lieu-huan-luyen.sql`: bot **lưu dữ liệu huấn luyện** (đoạn chat đã ẩn tên, SĐT, địa chỉ + đơn bot đọc + đơn chủ quán duyệt) để đo độ chính xác của AI và sau này tự build mô hình. Chỉ thêm bảng / cột / hàm, chạy sau cập nhật 22. Có công tắc tắt lưu ở Cài đặt bot.
+- `sql/cap-nhat-24-du-lieu-huan-luyen.sql`: bot **lưu dữ liệu huấn luyện** (đoạn chat đã ẩn tên, SĐT, giữ địa chỉ + đơn bot đọc + đơn chủ quán duyệt) để đo độ chính xác của AI và sau này tự build mô hình. Chỉ thêm bảng / cột / hàm, chạy sau cập nhật 22. Có công tắc tắt lưu ở Cài đặt bot.
 - `sql/cap-nhat-19-den-lay-bo-ma-don.sql`: đánh dấu đơn **Đến lấy** (quán tạo bằng nút Qua lấy) để phân biệt với Mang về; nội dung chuyển khoản mặc định bỏ mã đơn (`BENOC {ban} {ten}`). Chạy sau cập nhật 18.
 
 ## Xoá dữ liệu thử trước khi dùng thật

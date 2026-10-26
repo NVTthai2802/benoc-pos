@@ -133,12 +133,12 @@ Deno.test('Gemini: chỉ có GEMINI_API_KEY → tự dùng Gemini, model không 
 });
 
 Deno.test('ẩn thông tin cá nhân trước khi lưu mẫu', () => {
-  const anon = bot.anonymizer({ names: ['Nguyễn Lan', null], addresses: ['12 ngõ 5 Nguyễn Trãi, Hà Đông'], words: bot.menuWords(menu) });
+  const anon = bot.anonymizer({ names: ['Nguyễn Lan', null], words: bot.menuWords(menu) });
   assertEquals(anon('sdt 0912.345.678 nhé'), 'sdt <SDT> nhé');
   assertEquals(anon('gọi +84 912 345 678'), 'gọi <SDT>');
   assertEquals(anon('stk 0393247469123'), 'stk <SO>');
   assertEquals(anon('mail lan.nguyen@gmail.com'), 'mail <EMAIL>');
-  assertEquals(anon('ship tới 12 ngo 5 nguyen trai, ha dong giúp'), 'ship tới <DIA_CHI> giúp');   // không dấu, khác hoa thường vẫn cắt
+  assertEquals(anon('ship tới 12 ngõ 5 Nguyễn Trãi, Hà Đông giúp'), 'ship tới 12 ngõ 5 Nguyễn Trãi, Hà Đông giúp');   // địa chỉ giữ nguyên, kể cả khi họ khách trùng tên đường
   assertEquals(anon('mình tên Lan, nguyễn lan'), 'mình tên <TEN>, <TEN>');
   assertEquals(anon('Lan ơi'), '<TEN> ơi');
   assertEquals(anon('2 ts tcdd 6r tối'), '2 ts tcdd 6r tối');                  // không cắt nhầm tin đặt món
@@ -150,7 +150,7 @@ Deno.test('ẩn thông tin cá nhân trước khi lưu mẫu', () => {
 });
 
 Deno.test('mẫu huấn luyện không chứa tên, SĐT, địa chỉ thật', () => {
-  const anon = bot.anonymizer({ names: ['Nguyễn Lan'], addresses: ['12 ngõ 5 Nguyễn Trãi'], words: bot.menuWords(menu) });
+  const anon = bot.anonymizer({ names: ['Nguyễn Lan'], words: bot.menuWords(menu) });
   const before = bot.stateOf(empty(), anon);
   const d = bot.applyAi(empty(), { intent: 'order', dine_type: 'giao_hang', time: '19:30', address: '12 ngõ 5 Nguyễn Trãi', phone: '0912345678', name: 'Lan',
     items: [{ m: num('Cơm gà viên'), qty: 2, note: 'giao cho chị Lan 0912345678' }] }, menu, NOW, 'Nguyễn Lan');
@@ -159,13 +159,14 @@ Deno.test('mẫu huấn luyện không chứa tên, SĐT, địa chỉ thật', 
     convo: [{ sender: 'khach', text: '2 cơm gà viên, ship 12 ngõ 5 Nguyễn Trãi, sdt 0912345678', at: NOW.toISOString() }, { sender: 'bot', text: 'Dạ Lan ơi, giao 12 ngõ 5 Nguyễn Trãi nhé', at: NOW.toISOString() }],
   });
   const s = JSON.stringify(row);
-  for (const bad of ['0912345678', 'Nguyễn Trãi', 'ngõ 5', 'Nguyễn Lan', 'chị Lan']) assert(!s.includes(bad), 'còn lộ: ' + bad);
+  for (const bad of ['0912345678', 'Nguyễn Lan', 'chị Lan']) assert(!s.includes(bad), 'còn lộ: ' + bad);
+  assert(s.includes('12 ngõ 5 Nguyễn Trãi'));   // địa chỉ được giữ
   assertEquals(row.now_vn, '2026-10-24 15:00');
-  assertEquals(row.target!.address, '<DIA_CHI>');
+  assertEquals(row.target!.address, '12 ngõ 5 Nguyễn Trãi');
   assertEquals(row.target!.phone, '<SDT>');
   assertEquals(row.target!.time, '19:30');
   assertEquals(row.target!.items[0].name, 'Cơm gà viên');
-  assertEquals(row.convo[0].t, '2 cơm gà viên, ship <DIA_CHI>, sdt <SDT>');
+  assertEquals(row.convo[0].t, '2 cơm gà viên, ship 12 ngõ 5 Nguyễn Trãi, sdt <SDT>');
   assertEquals(row.convo[0].h, '15:00');
   // intent human: không có đáp án đơn
   assertEquals(bot.trainSample({ thread: 'abc', now: NOW, anon, before, after: d, ai: { intent: 'human' }, model: 'x', menuHash: 'm1', convo: [] }).target, null);
@@ -254,9 +255,9 @@ Deno.test('bot ghi mẫu huấn luyện: đơn ship đủ ý', async () => {
   assertEquals(s.intent, 'order');
   assertEquals(s.model, 'gemini-3.8-flash');
   assertEquals(s.target.items[0].qty, 2);
-  assertEquals(s.convo[0].t, '2 cơm gà viên, ship <DIA_CHI>, sdt <SDT>');
+  assertEquals(s.convo[0].t, '2 cơm gà viên, ship 12 ngõ 5 Nguyễn Trãi, sdt <SDT>');
   assertEquals(s.state_before.items, []);
-  assert(!JSON.stringify(s).includes('0912345678') && !JSON.stringify(s).includes('Nguyễn Trãi'));
+  assert(!JSON.stringify(s).includes('0912345678'));
   assertEquals(t.fb_train_menu.length, 1);
   assertEquals(t.fb_train_menu[0].hash, s.menu_hash);
   assert(sent.length >= 1);

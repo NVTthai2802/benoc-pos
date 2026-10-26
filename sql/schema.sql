@@ -1987,7 +1987,7 @@ begin
                 'note', nullif(regexp_replace(coalesce(i.note, ''), '\d{9,}', '<SO>', 'g'), '')) order by i.id)
               from order_items i where i.order_id = d.order_id), '[]'::jsonb),
     'dine_type', d.dine_type, 'date', v_date, 'time', v_time,
-    'address', case when d.address is not null then '<DIA_CHI>' end,
+    'address', d.address,
     'phone',   case when d.customer_phone is not null then '<SDT>' end);
   -- Chủ quán sửa gì so với bot? (so với đơn nháp bot đã ghi: d.items vẫn là bản của bot)
   if private.fb_items_sig(d.items) is distinct from private.fb_items_sig(p_items) then v_edits := array_append(v_edits, 'items'); end if;

@@ -194,7 +194,7 @@ Bot đọc tin khách bằng AI API (Gemini / Claude). Để dần thay bằng m
 1. Chạy `sql/cap-nhat-24-du-lieu-huan-luyen.sql` trong SQL Editor (chạy sau cập nhật 22).
 2. Đưa lại bot: Supabase → Edge Functions → `fb-bot` → dán code mới từ `supabase/functions/fb-bot/index.ts` → Deploy (vẫn tắt Verify JWT).
 
-**Bot lưu gì:** mỗi lượt AI đọc tin khách, bot lưu đoạn chat (đã ẩn tên, SĐT, địa chỉ, số tài khoản) + đơn đang ghi + đơn AI đọc ra. Chủ quán bấm **Duyệt** thì đơn đã duyệt được gắn vào làm **đáp án đúng**, kèm chỗ chủ quán phải sửa. Đơn bị huỷ không dùng làm đáp án.
+**Bot lưu gì:** mỗi lượt AI đọc tin khách, bot lưu đoạn chat (đã ẩn tên, SĐT, số tài khoản; **địa chỉ giữ nguyên** để mô hình học trích địa chỉ) + đơn đang ghi + đơn AI đọc ra. Chủ quán bấm **Duyệt** thì đơn đã duyệt được gắn vào làm **đáp án đúng**, kèm chỗ chủ quán phải sửa. Đơn bị huỷ không dùng làm đáp án.
 
 **Dùng thế nào:**
 - **Quản lý → Facebook → Cài đặt bot**: xem số mẫu, tỉ lệ bot đọc đúng, bật / tắt lưu, **Tải dữ liệu huấn luyện (.jsonl)**.
@@ -202,6 +202,6 @@ Bot đọc tin khách bằng AI API (Gemini / Claude). Để dần thay bằng m
 - Khách nhắn **“xoá dữ liệu của tôi”**: bot xoá tin nhắn, đơn nháp và mẫu huấn luyện của khách đó rồi nhắn lại xác nhận (hoá đơn đã duyệt vẫn giữ để đối soát doanh thu).
 
 **Lưu ý riêng tư:**
-- Việc ẩn tên, SĐT, địa chỉ là cố gắng hết sức, không đảm bảo tuyệt đối. File tải về chỉ để bạn dùng, đừng đăng công khai.
+- Việc ẩn tên, SĐT là cố gắng hết sức, không đảm bảo tuyệt đối. File tải về còn **địa chỉ khách**, chỉ để bạn dùng, đừng đăng công khai hay đưa lên dịch vụ ngoài.
 - Khi còn dùng API, tin nhắn khách vẫn gửi cho Google / Anthropic. Gemini gói miễn phí có thể dùng dữ liệu để cải thiện sản phẩm; muốn tránh thì bật **Cloud Billing** cho khoá Gemini hoặc dùng Claude API.
 - Trang chính sách riêng tư (`chinh-sach.html`) đã ghi rõ việc lưu dữ liệu huấn luyện và cách xoá.

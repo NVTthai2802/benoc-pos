@@ -309,7 +309,7 @@ export async function verifySignature(raw: string, header: string | null, secret
 
 // ---------------------------------------------------------------------
 // Dữ liệu huấn luyện: mỗi lượt AI đọc tin khách lưu 1 mẫu vào fb_train (cập nhật 24),
-// ĐÃ ẩn tên, SĐT, địa chỉ, số tài khoản. Khi chủ quán duyệt đơn, SQL gắn thêm đáp án đúng.
+// ĐÃ ẩn tên, SĐT, số tài khoản (địa chỉ giữ nguyên để mô hình học trích địa chỉ). Khi chủ quán duyệt đơn, SQL gắn thêm đáp án đúng.
 // Dùng để đo AI đọc đúng bao nhiêu % và sau này tự huấn luyện mô hình riêng của quán.
 // ---------------------------------------------------------------------
 const foldChar = (c: string) => (c.length > 1 ? c : c === 'đ' || c === 'Đ' ? 'd' : c.normalize('NFD').charAt(0).toLowerCase());
@@ -330,13 +330,12 @@ export function menuWords(menu: Menu): Set<string> {
   return w;
 }
 
-/* Trả về hàm ẩn thông tin cá nhân. Cắt chắc chắn: SĐT, email, dãy số dài, địa chỉ + tên đã biết.
+/* Trả về hàm ẩn thông tin cá nhân. Cắt: SĐT, email, dãy số dài, tên đã biết. Địa chỉ giữ nguyên (chủ quán đồng ý).
    Chỉ là "cố gắng hết sức": dữ liệu vẫn nằm trong Supabase của quán, đừng đăng công khai. */
-export function anonymizer(o: { names?: (string | null | undefined)[]; addresses?: (string | null | undefined)[]; words?: Set<string> }) {
+export function anonymizer(o: { names?: (string | null | undefined)[]; words?: Set<string> }) {
   const names = [...new Set((o.names || []).map(x => String(x || '').trim()).filter(x => Array.from(x).length >= 2))];
-  const addrs = [...new Set((o.addresses || []).map(x => String(x || '').trim()).filter(x => x.length >= 5))].sort((a, b) => b.length - a.length);
   const words = o.words || new Set<string>();
-  const tokens = [...new Set(names.flatMap(n => n.split(/\s+/)))].filter(t => Array.from(t).length >= 3 && !NAME_STOP.has(fold(t)) && !words.has(fold(t)));
+  const tokens = [...new Set(names.map(n => n.split(/\s+/).pop() || ''))].filter(t => Array.from(t).length >= 3 && !NAME_STOP.has(fold(t)) && !words.has(fold(t)));
   return (text: string | null | undefined): string => {
     let t = String(text ?? '').normalize('NFC');
     const blank = (needle: string, tag: string) => {
@@ -346,7 +345,6 @@ export function anonymizer(o: { names?: (string | null | undefined)[]; addresses
       t = res + t.slice(i);
     };
     t = t.replace(PHONE_RE, '<SDT>').replace(LONGNUM_RE, '<SO>').replace(EMAIL_RE, '<EMAIL>');
-    for (const a of addrs) blank(a, '<DIA_CHI>');
     for (const n of names) blank(n, '<TEN>');
     for (const tok of tokens) t = t.replace(new RegExp('(?<![\\p{L}\\p{N}])' + reEsc(tok.normalize('NFC')) + '(?![\\p{L}\\p{N}])', 'gu'), '<TEN>');
     return t;
@@ -359,7 +357,7 @@ export function stateOf(d: Draft, anon: (s: string | null | undefined) => string
   return {
     items: d.items.map(i => ({ menu_item_id: i.menu_item_id, name: i.name, qty: i.qty, choice_ids: i.choice_ids, choices: i.choices, note: i.note ? anon(i.note) : null })),
     unknown: d.unknown.map(anon), dine_type: d.dine_type, date: at ? vnDate(at) : null, time: at ? vnTime(at) : null,
-    address: d.address ? '<DIA_CHI>' : null, phone: d.customer_phone ? '<SDT>' : null, note: d.note ? anon(d.note) : null,
+    address: d.address, phone: d.customer_phone ? '<SDT>' : null, note: d.note ? anon(d.note) : null,
   };
 }
 
@@ -533,7 +531,7 @@ export async function handleThread(sb: SupabaseClient, psid: string) {
   }
 
   // Chuẩn bị mẫu huấn luyện (chụp đơn TRƯỚC khi applyAi sửa vào d). Lưu sau khi đã trả lời khách.
-  const anon = anonymizer({ names: [th.name, d.customer_name, ai.name], addresses: [d.address, ai.address], words: menuWords(menu) });
+  const anon = anonymizer({ names: [th.name, d.customer_name, ai.name], words: menuWords(menu) });
   const stateBefore = stateOf(d, anon);
   const log = async (after: Draft | null, draftId?: string | null) => {
     try {

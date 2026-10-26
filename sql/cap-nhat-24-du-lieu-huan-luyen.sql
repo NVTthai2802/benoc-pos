@@ -1,7 +1,7 @@
 -- =====================================================================
 -- CẬP NHẬT 24: DỮ LIỆU HUẤN LUYỆN CHO MÔ HÌNH ĐỌC ĐƠN
 --   * Mỗi lần bot nhờ AI đọc tin khách, lưu lại 1 "mẫu": đoạn chat (ĐÃ ẨN tên, SĐT,
---     địa chỉ, số tài khoản) + đơn bot tách ra.
+--     số tài khoản; địa chỉ giữ nguyên) + đơn bot tách ra.
 --   * Khi chủ quán DUYỆT đơn: mẫu cuối của đơn được gắn thêm "bản chủ quán duyệt"
 --     (đáp án đúng) và danh sách chỗ chủ quán phải sửa so với bot.
 --     Khi chủ quán HUỶ đơn: các mẫu của đơn đánh dấu huỷ (không dùng làm đáp án).
@@ -28,7 +28,7 @@ create table if not exists fb_train (
   thread_hash  text not null,                 -- băm của PSID: gom mẫu cùng 1 khách, không lần ngược ra khách được
   draft_id     uuid,                          -- đơn nháp của mẫu (trống nếu lượt này chưa thành đơn)
   now_vn       text not null,                 -- "2026-10-24 15:00" giờ Việt Nam lúc khách nhắn
-  convo        jsonb not null default '[]',   -- [{"s":"khach|bot|quan","t":"…"}] đã ẩn thông tin cá nhân
+  convo        jsonb not null default '[]',   -- [{"s":"khach|bot|quan","t":"…"}] đã ẩn tên, SĐT, số tài khoản
   state_before jsonb not null default '{}',   -- đơn đang ghi trước tin mới
   intent       text,                          -- order | question | human | other
   target       jsonb,                         -- đơn bot tách ra sau khi kiểm lại theo menu (null nếu intent = human)
@@ -83,7 +83,7 @@ begin
                 'note', nullif(regexp_replace(coalesce(i.note, ''), '\d{9,}', '<SO>', 'g'), '')) order by i.id)
               from order_items i where i.order_id = d.order_id), '[]'::jsonb),
     'dine_type', d.dine_type, 'date', v_date, 'time', v_time,
-    'address', case when d.address is not null then '<DIA_CHI>' end,
+    'address', d.address,
     'phone',   case when d.customer_phone is not null then '<SDT>' end);
   -- Chủ quán sửa gì so với bot? (so với đơn nháp bot đã ghi: d.items vẫn là bản của bot)
   if private.fb_items_sig(d.items) is distinct from private.fb_items_sig(p_items) then v_edits := array_append(v_edits, 'items'); end if;
