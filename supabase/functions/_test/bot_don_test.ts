@@ -318,6 +318,18 @@ Deno.test('ảnh khách khác (same_order = false) → đơn mới; ảnh không
   assertStringIncludes(r.sent.at(-1)!, 'không thấy đoạn chat đặt món');
 });
 
+Deno.test('ảnh mới khi đơn trước bếp đã nhận → đơn mới; tên khách khác → đơn mới', async () => {
+  const t = linked();
+  await run(t, { photo: 'https://zalo/a.jpg' }, { intent: 'order', khach: 'Lan', items: [{ m: num('Cơm gà viên') }], convo: [] });
+  t.orders[0].nhan = true;
+  const r = await run(t, { photo: 'https://zalo/b.jpg' }, { intent: 'order', same_order: true, khach: 'Mai', items: [{ m: num('Hồng trà sữa trân châu') }], convo: [] });
+  assertStringIncludes(r.ai[0].contents[0].parts[0].text, 'Chưa có đơn đang ghi');     // không đưa đơn cũ cho AI
+  assertEquals(t.orders.length, 2); assertStringIncludes(r.sent.at(-1)!, '✅ Đã gửi bếp');
+  // đơn trước chưa nhận nhưng AI đọc ra tên khác → vẫn là đơn mới
+  const r2 = await run(t, { photo: 'https://zalo/c.jpg' }, { intent: 'order', same_order: true, khach: 'Huy', items: [{ m: 1 }], convo: [] });
+  assertEquals(t.orders.length, 3); assertStringIncludes(r2.sent.at(-1)!, '✅ Đã gửi bếp · Huy');
+});
+
 Deno.test('món hết hàng / không có món → báo lại, chưa gửi bếp', async () => {
   const t = linked(); (t as any).het = [menu.items.find(i => i.name === 'Cơm gà viên')!.id];
   const r = await run(t, { text: '1 cơm gà viên' }, { intent: 'order', items: [{ m: num('Cơm gà viên') }] });

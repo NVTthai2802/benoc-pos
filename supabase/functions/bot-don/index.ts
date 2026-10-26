@@ -205,7 +205,7 @@ QUY TẮC:
 - address: địa chỉ giao hàng nguyên văn. phone: số điện thoại khách đưa. name: tên người nhận nếu khách tự xưng. note: ghi chú chung cho cả đơn.
 - khach: tên khách hiện trên đầu đoạn chat (tên Facebook / Zalo) nếu thấy trong ảnh, không thì null.
 - convo: CHỈ với ảnh: chép lại các tin LIÊN QUAN tới đơn theo thứ tự [{"s":"khach" hoặc "quan","t":"nội dung"}], tối đa 30 tin, bỏ tin không liên quan. Tin chữ của chủ quán thì để [].
-- same_order: CHỈ khi có ĐƠN ĐANG GHI: true nếu ảnh / tin mới là của CÙNG khách, cùng đơn đó (bổ sung, sửa) — khi đó trả về trạng thái đã gộp cả thông tin cũ; false nếu là khách khác / đơn khác. Tin chữ của chủ quán luôn là true nếu có đơn đang ghi.
+- same_order: CHỈ khi có ĐƠN ĐANG GHI: true khi CHẮC CHẮN ảnh mới là phần tiếp của CÙNG cuộc trò chuyện với CÙNG khách (cùng tên / ảnh đại diện, tin nối tiếp, khách bổ sung / sửa đơn đó) — khi đó trả về trạng thái đã gộp cả thông tin cũ. Còn lại (khách khác, tên khác, đơn mới, không chắc) → false, chỉ đọc đơn trong ảnh mới. Tin chữ của chủ quán luôn là true nếu có đơn đang ghi.
 - intent: "order" bình thường; "khong_phai_don" nếu ảnh không phải đoạn chat đặt món (ảnh món ăn, ảnh chuyển khoản, ảnh mờ không đọc được…).
 
 Chỉ trả về đúng một object JSON, không giải thích:
@@ -569,6 +569,8 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   ]);
   // Nhắn chữ sửa đơn mà bếp đã nhận: báo luôn, khỏi gọi AI
   if (src.text && cur?.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
+  // Ảnh mới mà đơn trước bếp đã nhận rồi: chắc chắn là đơn mới, không đưa đơn cũ cho AI gộp
+  const curAi = src.refs && cur?.order_id && cur._open === false ? null : cur;
   const open = st?.fb_open || '07:00', close = st?.fb_close || '22:00';
   const menuRaw: any[] = menuRes.data || [];
   const menu = buildMenu(menuRaw);
@@ -577,12 +579,14 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   if (src.refs && !imgs.length) { await say(m.kenh, m.chatId, 'Bot chưa tải được ảnh, gửi lại giúp em nha (ảnh JPG / PNG, dưới 8MB).'); return; }
 
   let ai: AiOut;
-  try { ai = await askAi(systemPrompt(menu, now, open, close), userPrompt({ cur, nImages: imgs.length, text: src.text, caption: src.caption }), imgs.map(i => ({ mime: i.mime, b64: b64(i.bytes) }))); }
+  try { ai = await askAi(systemPrompt(menu, now, open, close), userPrompt({ cur: curAi, nImages: imgs.length, text: src.text, caption: src.caption }), imgs.map(i => ({ mime: i.mime, b64: b64(i.bytes) }))); }
   catch (e) { console.error('AI lỗi', e); await say(m.kenh, m.chatId, 'AI đang quá tải, chưa đọc được. Gửi lại sau ít phút giúp em nha.'); return; }
   lap('AI', tAi); const tDb = Date.now();
   if (ai.intent === 'khong_phai_don') { await say(m.kenh, m.chatId, 'Ảnh này không thấy đoạn chat đặt món. Chụp màn hình phần tin nhắn có món, giờ hẹn… rồi gửi lại nha.'); return; }
 
-  const same = !!cur && (src.text ? true : ai.same_order === true);
+  // Ảnh: chỉ gộp khi AI chắc là cùng khách và tên khách (nếu đọc được ở cả hai) trùng nhau
+  const nameClash = !!(ai.khach && curAi?.customer_name && fold(String(ai.khach)).trim() !== fold(String(curAi.customer_name)).trim());
+  const same = !!curAi && (src.text ? true : ai.same_order === true && !nameClash);
   if (same && cur.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const base: Draft = same ? JSON.parse(JSON.stringify(cur))
     : { psid: null as any, status: 'cho_duyet', dine_type: null, at: null, customer_name: null, customer_phone: null, address: null, note: null, items: [], unknown: [], missing: [], total_est: 0, asked: [] };
