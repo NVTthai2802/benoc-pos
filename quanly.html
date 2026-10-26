@@ -82,6 +82,10 @@
 .pbig figcaption { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
 .qr { background: #fff; padding: 14px; border-radius: 16px; border: 2px solid var(--line); width: max-content; max-width: 100%; }
 .qr img, .qr canvas { display: block; max-width: 100%; }
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 12px 0; }
+.qr-cell { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.qr-cell .qr { padding: 10px; }
+.qr-cell figcaption { font-weight: 800; font-size: 16px; }
 .inline-confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-weight: 600; font-size: 14px; }
 .pill-gift { background: #FFE7B8; color: #8a4b00; }
 .inv-pr { display: inline; padding: 1px 6px; border-radius: 6px; background: #FFF3C4; }
@@ -195,6 +199,7 @@ const choiceText = g => g.choices.map(c => c.name + (c.price_delta ? ' +' + K(c.
 const QRS = [
   { key: 'chung', query: '', color: 'vang', title: 'Mã QR gọi món · menu chung', desc: 'Dán ở bàn, quầy, khu bếp đều được. Khách quét thấy cả đồ ăn và đồ uống trong một menu. Món ăn tự về màn hình bếp, trà sữa / cà phê / đồ uống tự về quầy pha chế. Mã QR cũ của bếp và pha chế đã in vẫn dùng được, cũng mở menu chung.', screen: 'bep.html', screenName: 'bếp' }
 ];
+const qrTables = () => { try { return Number(localStorage.getItem('benoc.qrTables')) || 12; } catch (e) { return 12; } };
 const QRS_OLD = [
   { key: 'an', query: '?menu=an', color: 'vang', title: 'Mã QR bếp nóng · menu Ăn vặt', desc: 'Dán ở khu bếp. Khách quét thấy cơm, mì, kimbap, đồ ăn vặt và nước uống của bếp. Đơn về màn hình bếp, bếp thu tiền.', screen: 'bep.html', screenName: 'bếp' },
   { key: 'tra', query: '?menu=tra', color: 'hong', title: 'Mã QR quầy pha chế · menu Trà · Cà phê', desc: 'Dán ở quầy pha chế. Khách quét thấy trà sữa, trà hoa quả, cà phê, matcha. Đơn về màn hình pha chế, quầy pha chế thu tiền.', screen: 'phache.html', screenName: 'pha chế' }
@@ -1454,10 +1459,12 @@ async function renderSettings(main) {
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
     (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
-    QRS.map(q => '<section class="box cc-' + q.color + '"><h2 class="box-title"><span>' + q.title + '</span></h2><div class="row" style="align-items:flex-start;gap:18px"><div class="qr" id="qr-' + q.key + '"><p class="loading">Đang tạo mã…</p></div>' +
-      '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">' + q.desc + '</p><label class="field" for="qUrl-' + q.key + '">Địa chỉ mã này mở ra<input id="qUrl-' + q.key + '" value="' + esc(orderUrl + q.query) + '"></label>' +
-      (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') +
-      '<div class="row"><a class="btn btn-sm btn-line" href="index.html' + q.query + '" target="_blank">Mở menu này</a><a class="btn btn-sm btn-line" href="' + q.screen + '" target="_blank">Mở màn hình ' + q.screenName + '</a></div></div></div></section>').join('') +
+    '<section class="box cc-vang"><h2 class="box-title"><span>Mã QR gọi món theo bàn</span></h2>' +
+      '<p style="margin:0 0 10px">Mỗi bàn một mã. Khách quét là tự điền số bàn, gọi cả đồ ăn và đồ uống; món ăn về bếp, đồ uống về quầy pha chế, nhân viên mang tới đúng bàn. Mã QR cũ (thẻ số) vẫn dùng được.</p>' +
+      '<div class="row" style="align-items:flex-end"><label class="field" for="qN" style="max-width:160px">Số bàn<input id="qN" class="num" type="number" min="1" max="60" value="' + qrTables() + '"></label>' +
+      '<a class="btn btn-sm btn-line" href="index.html?ban=1" target="_blank">Thử mã bàn 1</a></div>' +
+      '<div class="qr-grid" id="qrGrid"></div>' +
+      (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') + '</section>' +
     (DEMO ? '<section class="box"><h2 class="box-title">Dữ liệu xem thử</h2><p class="muted" style="margin-top:0">Đưa mọi thứ về như lúc đầu: menu, đơn, ca làm.</p><button class="btn btn-danger" type="button" id="reset">Xoá dữ liệu xem thử</button>' + confirmBox('Xoá toàn bộ thay đổi trong bản xem thử?', 'Xoá và tải lại', 'resetBox') + '</section>' : '');
   const readRule = () => ({ round_minutes: $('#sRoundOn', main).checked ? Number($('#sStep', main).value) : 1, round_mode: $('#sMode', main).value, pay_round: Number($('#sPay', main).value) });
   const ex = () => {
@@ -1480,14 +1487,16 @@ async function renderSettings(main) {
     $('[data-no]', box).onclick = () => { box.hidden = true; };
     $('[data-yes]', box).onclick = () => { api.demoReset(); location.reload(); };
   }
-  const drawQr = async q => {
-    const el = $('#qr-' + q.key, main);
+  const drawQrs = async () => {
+    const n = Math.max(1, Math.min(60, Number($('#qN', main).value) || 12)), grid = $('#qrGrid', main);
+    try { localStorage.setItem('benoc.qrTables', String(n)); } catch (e) { /* bỏ qua */ }
+    grid.innerHTML = Array.from({ length: n }, (_, i) => '<figure class="qr-cell"><div class="qr" id="qrb-' + (i + 1) + '"></div><figcaption>Bàn ' + (i + 1) + '</figcaption></figure>').join('');
     try {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
-      el.innerHTML = ''; new window.QRCode(el, { text: $('#qUrl-' + q.key, main).value.trim() || orderUrl + q.query, width: 220, height: 220, colorDark: '#3B2A24', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
-    } catch (err) { el.innerHTML = '<p class="msg">Không tạo được mã QR (cần mạng).</p>'; }
+      for (let i = 1; i <= n; i++) new window.QRCode($('#qrb-' + i, main), { text: orderUrl + '?ban=' + i, width: 150, height: 150, colorDark: '#3B2A24', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+    } catch (err) { grid.innerHTML = '<p class="msg">Không tạo được mã QR (cần mạng).</p>'; }
   };
-  QRS.forEach(q => { drawQr(q); $('#qUrl-' + q.key, main).onchange = () => drawQr(q); });
+  drawQrs(); $('#qN', main).onchange = drawQrs;
 }
 })();
 </script>

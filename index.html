@@ -331,6 +331,8 @@ const state = {
   staff: null, giao: { name: '', phone: '', address: '', time: '', paid: false, kind: BN.store.get('giaoKind', 'ship') === 'lay' ? 'lay' : 'ship' }
 };
 const GIAO = state.kind === 'giao';
+/* Mã QR theo bàn: ?ban=5 → khách ngồi bàn 5, tự điền số bàn, ăn tại quán (vẫn đổi sang mang về được) */
+const BAN = GIAO ? 0 : (n => n >= 1 && n <= 999 ? n : 0)(parseInt(BN.PARAMS.get('ban'), 10));
 if (GIAO) state.orders = []; // trang tạo đơn không theo dõi đơn như khách
 const MENU = {
   bep: { hero: 'BÉ NỐC ĂN VẶT', tag: 'Ăn ngon · Giá xinh · Ship nhanh', query: '?menu=an', link: 'Ăn vặt', linkDesc: 'Cơm trộn · Mì trộn · Kimbap · Đồ ăn vặt' },
@@ -364,7 +366,8 @@ function thumbHtml(it, size) {
 }
 
 /* ---------- Vé số thứ tự ---------- */
-const queueNum = () => parseInt(state.info.queue, 10);
+const queueNum = () => BAN || parseInt(state.info.queue, 10);
+if (BAN && (String(state.info.queue) !== String(BAN) || !state.info.dine)) { state.info.queue = String(BAN); state.info.dine = 'tai_quan'; state.info.dineAt = Date.now(); store.set('info', state.info); }
 /* Ăn tại quán / mang về. Hỏi lại nếu lần chọn trước đã quá 4 giờ (khách quay lại hôm khác). */
 const DINE_TTL = 4 * 3600e3;
 /* Trang tạo đơn: 'lay' = khách qua lấy (đơn mang về, không cần giờ), 'ship' = đơn đi ship */
@@ -375,7 +378,7 @@ const isTake = () => dineMode() === 'mang_ve';
 function setDine(d) { state.info.dine = d; state.info.dineAt = Date.now(); saveInfo(); }
 const infoReady = () => !!dineMode() && state.info.name.trim() !== '' && (isTake() || queueNum() > 0);
 const dinePickHtml = () => '<p class="dp-title">Bạn ăn tại quán hay mang về?</p><div class="dp-btns">' +
-  '<button class="dp-btn" type="button" data-dine="tai_quan">' + ICON.bowl + '<b>Ăn tại quán</b><span>Lấy thẻ số ở quầy</span></button>' +
+  '<button class="dp-btn" type="button" data-dine="tai_quan">' + ICON.bowl + '<b>Ăn tại quán</b><span>' + (BAN ? 'Phục vụ tại bàn ' + BAN : 'Lấy thẻ số ở quầy') + '</span></button>' +
   '<button class="dp-btn" type="button" data-dine="mang_ve">' + ICON_BAG + '<b>Mang về</b><span>Không cần thẻ số</span></button></div>';
 /* Chưa chọn ăn tại quán / mang về thì hỏi trước, chọn xong mới làm tiếp (thêm món, mở món…) */
 function needDine(then) {
@@ -389,7 +392,7 @@ function renderChip() {
   if (GIAO) { c.className = 'chip'; c.textContent = isLay() ? 'Qua lấy' : 'Đi ship'; c.removeAttribute('aria-label'); return; }
   if (!dineMode()) { c.className = 'chip chip--warn'; c.textContent = 'Ăn ở đây hay mang về?'; c.setAttribute('aria-label', 'Chưa chọn ăn tại quán hay mang về, bấm để chọn'); }
   else if (isTake()) { c.className = 'chip'; c.innerHTML = 'Mang về'; c.setAttribute('aria-label', 'Đơn mang về, bấm để sửa'); }
-  else if (queueNum() > 0) { c.className = 'chip'; c.innerHTML = 'Số <b class="num">' + esc(queueNum()) + '</b>'; c.setAttribute('aria-label', 'Số thứ tự ' + queueNum() + ', bấm để sửa'); }
+  else if (queueNum() > 0) { c.className = 'chip'; c.innerHTML = (BAN ? 'Bàn' : 'Số') + ' <b class="num">' + esc(queueNum()) + '</b>'; c.setAttribute('aria-label', 'Số thứ tự ' + queueNum() + ', bấm để sửa'); }
   else { c.className = 'chip chip--warn'; c.textContent = 'Chưa có số'; c.setAttribute('aria-label', 'Chưa nhập số thứ tự, bấm để nhập'); }
 }
 function renderTicket() {
@@ -437,27 +440,27 @@ function renderTicket() {
     wireSwitch(); return;
   }
   if (infoReady() && !state.editingInfo) {
-    el.innerHTML = '<div class="tk-num"><span class="tk-label">Số của bạn</span><b class="num">' + esc(queueNum()) + '</b></div>' +
-      '<div class="tk-body"><span class="tk-name">' + esc(state.info.name) + '</span><span class="tk-hint">Nhân viên sẽ mang món tới chỗ có thẻ số này.</span>' +
-      '<div class="tk-links"><button class="link" type="button" id="tkEdit">Sửa số hoặc tên</button>' + switchLink + '</div></div>';
-    $('#tkEdit').onclick = () => { state.editingInfo = true; renderTicket(); $('#inQueue').focus(); };
+    el.innerHTML = '<div class="tk-num"><span class="tk-label">' + (BAN ? 'Bàn' : 'Số của bạn') + '</span><b class="num">' + esc(queueNum()) + '</b></div>' +
+      '<div class="tk-body"><span class="tk-name">' + esc(state.info.name) + '</span><span class="tk-hint">' + (BAN ? 'Nhân viên sẽ mang món tới bàn ' + BAN + '.' : 'Nhân viên sẽ mang món tới chỗ có thẻ số này.') + '</span>' +
+      '<div class="tk-links"><button class="link" type="button" id="tkEdit">' + (BAN ? 'Sửa tên' : 'Sửa số hoặc tên') + '</button>' + switchLink + '</div></div>';
+    $('#tkEdit').onclick = () => { state.editingInfo = true; renderTicket(); ($('#inQueue') || $('#inName')).focus(); };
     wireSwitch(); return;
   }
-  el.innerHTML = '<div class="tk-num"><label class="tk-label" for="inQueue">Số trên thẻ</label>' +
-    '<input id="inQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" autocomplete="off" value="' + esc(state.info.queue) + '"></div>' +
-    '<div class="tk-body"><p class="tk-title">Lấy thẻ số ở quầy bếp, nhập số trên thẻ và tên của bạn.</p>' +
+  el.innerHTML = (BAN ? '<div class="tk-num"><span class="tk-label">Bàn</span><b class="num">' + BAN + '</b></div>' : '<div class="tk-num"><label class="tk-label" for="inQueue">Số trên thẻ</label>' +
+    '<input id="inQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" autocomplete="off" value="' + esc(state.info.queue) + '"></div>') +
+    '<div class="tk-body"><p class="tk-title">' + (BAN ? 'Bạn đang ngồi bàn ' + BAN + '. Nhập tên để quán gọi khi cần.' : 'Lấy thẻ số ở quầy bếp, nhập số trên thẻ và tên của bạn.') + '</p>' +
     '<label class="field" for="inName">Tên của bạn <input id="inName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
     '<p class="msg" id="tkMsg" hidden></p>' +
     '<div class="row"><button class="btn btn-sm" type="button" id="tkSave">Lưu</button>' + (state.editingInfo ? '' : '<span class="tk-hint">Bạn có thể xem menu trước.</span>') + '</div><div class="tk-links">' + switchLink + '</div></div>';
   wireSwitch();
   const q = $('#inQueue'), n = $('#inName');
-  q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderChip(); };
+  if (q) q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderChip(); };
   n.oninput = () => { state.info.name = n.value; saveInfo(); };
   $('#tkSave').onclick = () => {
     const m = $('#tkMsg');
     if (!(queueNum() > 0)) { m.textContent = ERR.MISSING_QUEUE_NUMBER; m.hidden = false; q.focus(); return; }
     if (!state.info.name.trim()) { m.textContent = ERR.MISSING_NAME; m.hidden = false; n.focus(); return; }
-    state.editingInfo = false; renderTicket(); ui.toast('Đã lưu số ' + queueNum());
+    state.editingInfo = false; renderTicket(); ui.toast(BAN ? 'Đã lưu · bàn ' + BAN : 'Đã lưu số ' + queueNum());
   };
 }
 $('#chip').onclick = () => {
@@ -868,7 +871,7 @@ function openCart() {
     '<div class="dine-seg wide" role="radiogroup" aria-label="Ăn tại quán hay mang về" id="fDine">' +
     '<label><input type="radio" name="cDine" value="tai_quan"' + (dineMode() === 'tai_quan' ? ' checked' : '') + '>' + ICON.bowl + 'Ăn tại quán</label>' +
     '<label><input type="radio" name="cDine" value="mang_ve"' + (isTake() ? ' checked' : '') + '>' + ICON_BAG + 'Mang về</label></div>' +
-    '<label class="field" id="fQueue" for="cQueue"' + (isTake() ? ' hidden' : '') + '>Số trên thẻ <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(state.info.queue) + '"></label>' +
+    '<label class="field" id="fQueue" for="cQueue"' + (isTake() ? ' hidden' : '') + '>' + (BAN ? 'Bàn' : 'Số trên thẻ') + ' <span class="req">*</span><input id="cQueue" class="num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="00" value="' + esc(BAN || state.info.queue) + '"' + (BAN ? ' readonly' : '') + '></label>' +
     '<label class="field" id="fName" for="cName">Tên của bạn <span class="req">*</span><input id="cName" maxlength="40" autocomplete="given-name" placeholder="Để quán gọi khi cần" value="' + esc(state.info.name) + '"></label>' +
     '<label class="field wide" id="fPhone" for="cPhone">Số điện thoại <span class="req">*</span><input id="cPhone" type="tel" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
     '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300">' + esc(state.cartNote) + '</textarea></label>' +
@@ -974,7 +977,7 @@ async function sendOrder(sh, confirm) {
   btn.disabled = true; btn.textContent = 'Đang gửi…';
   try {
     const res = await api.placeOrder({
-      queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine,
+      queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), phone: state.info.phone.trim(), note: state.cartNote.trim(), confirm: confirm || mine || !!BAN, // cùng bàn nhiều người gọi riêng là bình thường
       items: orderPayload()
     });
     state.orders.unshift({ token: res.access_token, id: res.order_id, queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), paid: false }); saveOrders();

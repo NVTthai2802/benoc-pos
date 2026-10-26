@@ -13,6 +13,7 @@ Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**
 
 ## Một menu chung
 
+- **Mã QR theo bàn**: mỗi bàn một mã (`?ban=1` … `?ban=12`), in từ **Quản lý → Cài đặt → Mã QR gọi món theo bàn** (đổi số bàn được). Khách quét là tự điền **Bàn 5**, chỉ cần nhập tên; vẫn đổi sang mang về được. Nhiều người cùng bàn gọi riêng không bị hỏi trùng số. Bếp / pha chế / phiếu in hiện **BÀN 5**.
 - Mọi mã QR (kể cả mã cũ của bếp và của quầy pha chế đã in) đều mở **một menu chung**: đồ ăn ở trên (cơm trộn, mì trộn, kimbap, đồ ăn vặt, nước uống), đồ uống ở dưới (trà sữa, trà hoa quả, cà phê, matcha…). Khách gọi cả đồ ăn và đồ uống trong một đơn.
 - Món nào làm ở đâu theo **danh mục** của món: danh mục của bếp → về màn hình **bếp**, danh mục của pha chế → về màn hình **pha chế**. Đơn có cả hai thì mỗi nơi thấy và làm phần của mình. Đổi trong **Quản lý → Menu → Danh mục → Thuộc menu nào**.
 - **Bếp và pha chế thao tác giống nhau**: nơi nào có món trong đơn cũng **Sửa đơn**, **Thu tiền**, **Nhận đơn**, **Huỷ** được. Thu tiền ở một nơi thì nơi kia thấy "Đã thu".
