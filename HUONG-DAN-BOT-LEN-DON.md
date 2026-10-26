@@ -11,11 +11,13 @@
 
 Chưa rõ hình thức thì bot tạm để **Mang về**; chưa có tên khách thì để **Khách online**.
 
+Bot nhận ra giao diện **Messenger** và **Zalo**, và biết ảnh chụp từ máy quán hay máy khách: đầu màn hình là tên khách thì bên phải là quán; đầu màn hình là "Bé Nốc" thì bên phải là khách. Ghi chú đơn tự có nguồn (vd **"Messenger · gọi trước khi giao"**); yêu cầu riêng ("nhiều tương", "không hành") ghi vào đúng món. Ảnh chụp lại màn hình điện thoại bằng máy khác cũng đọc được, nhưng ảnh chụp màn hình thẳng (screenshot) vẫn chính xác nhất.
+
 Bot không nhắn gì cho khách, nên không cần Meta duyệt app hay xác minh doanh nghiệp. Chỉ tài khoản Zalo đã **kết nối bằng mã** lấy trong Quản lý mới dùng được bot.
 
 | Nhắn cho bot | Bot làm gì |
 |---|---|
-| Ảnh chụp đoạn chat (gửi liền nhiều ảnh cũng được) | Gom ảnh, đọc, gửi đơn vào bếp. Ảnh của cùng khách gửi tiếp trong 90 phút thì sửa đơn đó |
+| Ảnh chụp đoạn chat (gửi một lần nhiều ảnh, nhiều khách cũng được, tối đa 30 ảnh) | Gom ảnh, tự nhóm theo khách: **mỗi khách 1 đơn** vào bếp, **mỗi đơn 1 tin** trả lời. Ảnh của cùng khách gửi tiếp trong 90 phút (bếp chưa nhận) thì sửa đơn đó |
 | "thêm 1 trà đào", "bỏ kimbap", "giờ 18h30", "ship 12 ngõ 5 Quang Trung, sđt 09…" | Sửa đơn vừa lên. Bếp đã bấm Nhận thì bot báo, sửa trên màn hình bếp (Sửa đơn) |
 | Cả đơn gõ bằng chữ (khi chưa có đơn vừa lên) | Lên đơn từ chữ |
 | "huỷ" | Huỷ đơn vừa lên (khi bếp chưa nhận) |

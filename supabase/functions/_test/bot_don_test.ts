@@ -119,7 +119,7 @@ Deno.test('Gemini: quá tải / không có model → thử model kế; sai khoá
     const a = await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]);
     assertEquals([a.intent, a._model], ['order', 'gemini-2.5-flash']);
     assertEquals(body.generationConfig.thinkingConfig, { thinkingBudget: 0 });   // tắt suy nghĩ cho nhanh
-    assertEquals(body.contents[0].parts[1], { inlineData: { mimeType: 'image/png', data: 'QUJD' } });
+    assertEquals(body.contents[0].parts.slice(1), [{ text: 'Ảnh 1:' }, { inlineData: { mimeType: 'image/png', data: 'QUJD' } }]);
 
     seen = [];
     globalThis.fetch = (async (url: string) => { seen.push(model(url)); return seen.length <= 3 ? new Response('busy', { status: 429 }) : aiOk({ intent: 'order' }); }) as typeof fetch;
@@ -266,7 +266,7 @@ Deno.test('gửi ảnh → đơn thật vào thẳng bếp, lưu ảnh, chép đ
     items: [{ m: num('Cơm gà viên'), qty: 2 }], convo: [{ s: 'khach', t: '2 cơm gà viên ship 12 ngõ 5 Nguyễn Trãi sdt 0912345678' }, { s: 'quan', t: 'Dạ vâng ạ' }, { s: 'bot', t: 'lạ' }],
   });
   assertEquals(r.ai.length, 1);
-  assertEquals(r.ai[0].contents[0].parts[1].inlineData.mimeType, 'image/jpeg');   // đoán đúng loại ảnh dù Zalo trả octet-stream
+  assertEquals(r.ai[0].contents[0].parts.find((p: any) => p.inlineData).inlineData.mimeType, 'image/jpeg');   // đoán đúng loại ảnh dù Zalo trả octet-stream
   assertEquals(t.bot_photos[0].done, true);
   const d = t.fb_drafts[0];
   assertEquals([d.kenh, d.chat_id, d.nguoi_gui, d.status, d.customer_name, d.total_est], ['zalo', 'c1', 'Ngọc', 'da_duyet', 'Nguyễn Lan', 60000]);
@@ -316,6 +316,71 @@ Deno.test('ảnh khách khác (same_order = false) → đơn mới; ảnh không
   const r = await run(t, { photo: 'https://zalo/c.jpg' }, { intent: 'khong_phai_don' });
   assertEquals(t.fb_drafts.length, 2);
   assertStringIncludes(r.sent.at(-1)!, 'không thấy đoạn chat đặt món');
+});
+
+Deno.test('ảnh mới khi đơn trước bếp đã nhận → đơn mới; tên khách khác → đơn mới', async () => {
+  const t = linked();
+  await run(t, { photo: 'https://zalo/a.jpg' }, { intent: 'order', khach: 'Lan', items: [{ m: num('Cơm gà viên') }], convo: [] });
+  t.orders[0].nhan = true;
+  const r = await run(t, { photo: 'https://zalo/b.jpg' }, { intent: 'order', same_order: true, khach: 'Mai', items: [{ m: num('Hồng trà sữa trân châu') }], convo: [] });
+  assertStringIncludes(r.ai[0].contents[0].parts[0].text, 'Chưa có đơn đang ghi');     // không đưa đơn cũ cho AI
+  assertEquals(t.orders.length, 2); assertStringIncludes(r.sent.at(-1)!, '✅ Đã gửi bếp');
+  // đơn trước chưa nhận nhưng AI đọc ra tên khác → vẫn là đơn mới
+  const r2 = await run(t, { photo: 'https://zalo/c.jpg' }, { intent: 'order', same_order: true, khach: 'Huy', items: [{ m: 1 }], convo: [] });
+  assertEquals(t.orders.length, 3); assertStringIncludes(r2.sent.at(-1)!, '✅ Đã gửi bếp · Huy');
+});
+
+Deno.test('prompt dạy nhận diện Messenger / Zalo, ai cầm máy; ghi nguồn vào ghi chú đơn', async () => {
+  const sp = bot.systemPrompt(menu, NOW, '07:00', '22:00');
+  for (const x of ['MESSENGER', 'ZALO', 'AI CẦM MÁY', 'đặt đơn mới', '"nguon"']) assertStringIncludes(sp, x);
+  assertEquals(bot.noteWithSource('lấy thêm đũa', 'Zalo'), 'Zalo · lấy thêm đũa');
+  assertEquals(bot.noteWithSource('Zalo · lấy thêm đũa', 'Messenger'), 'Messenger · lấy thêm đũa');
+  assertEquals(bot.noteWithSource(null, null), null);
+  const t = linked();
+  await run(t, { photo: 'https://zalo/a.jpg' }, { intent: 'order', nguon: 'messenger', khach: 'Lan', note: 'gọi trước khi giao', items: [{ m: num('Cơm gà viên'), note: 'nhiều tương' }], convo: [] });
+  assertEquals(t.fb_drafts[0].note, 'Messenger · gọi trước khi giao');
+  assertEquals(t.fb_drafts[0].items[0].note, 'nhiều tương');
+  await run(t, { text: 'giờ 18h' }, { intent: 'order', note: 'gọi trước khi giao', items: [{ m: num('Cơm gà viên'), note: 'nhiều tương' }] });   // sửa bằng chữ: giữ nguồn
+  assertEquals(t.fb_drafts[0].note, 'Messenger · gọi trước khi giao');
+});
+
+Deno.test('nhiều ảnh của nhiều khách → mỗi khách 1 đơn, mỗi đơn 1 tin; ảnh gắn đúng đơn', async () => {
+  const t = linked();
+  // giả lập gửi 2 ảnh liền nhau: ảnh đầu chờ, ảnh sau đọc cả lô
+  t.bot_photos = [{ id: -1, kenh: 'zalo', chat_id: 'c1', ref: 'https://zalo/1.jpg', done: false, created_at: new Date().toISOString() }];
+  const r = await run(t, { photo: 'https://zalo/2.jpg' }, { orders: [
+    { anh: [1], intent: 'order', nguon: 'zalo', khach: 'Thanhh Hienn', dine_type: 'giao_hang', address: 'ktx C1', items: [{ m: num('Cơm heo chiên xù') }], convo: [] },
+    { anh: [2], intent: 'order', nguon: 'messenger', khach: 'Bìm Sữa Xuân Mai', dine_type: 'giao_hang', address: 'kidsplaza', phone: '0968870906', items: [{ m: num('Hồng trà sữa trân châu') }, { m: num('Kimbap chiên') }], convo: [] },
+  ] });
+  assertStringIncludes(r.sent[0], 'Đang đọc 2 ảnh');
+  assertEquals(t.fb_drafts.map(d => d.customer_name).sort(), ['Bìm Sữa Xuân Mai', 'Thanhh Hienn']);
+  assertEquals(t.orders.length, 2);
+  const replies = r.sent.filter(x => x.startsWith('✅'));
+  assertEquals(replies.length, 2);
+  for (const d of t.fb_drafts) assertEquals(d.anh.length, 1);
+  assertEquals(t.fb_drafts.find(d => d.customer_name === 'Thanhh Hienn').note, 'Zalo');
+  assertEquals(bot.splitOrders({ orders: [{ anh: [9] }, { anh: [] }] } as any, 2).map(x => x.imgIdx), [[], []]);   // số ảnh sai → không gắn bừa
+  assertEquals(bot.splitOrders({ intent: 'order' } as any, 3)[0].imgIdx, [0, 1, 2]);                             // 1 đơn kiểu cũ → mọi ảnh
+});
+
+Deno.test('nhiều hơn 6 ảnh → chia nhóm, gọi AI song song', async () => {
+  gem(); Deno.env.set('ZALO_BOT_TOKEN', 'zt');
+  const t = linked(); t.shop_settings = [{ id: 1, fb_open: '00:00', fb_close: '23:59' }];
+  const now = new Date().toISOString();
+  t.bot_photos = Array.from({ length: 7 }, (_, i) => ({ id: -10 + i, kenh: 'zalo', chat_id: 'c1', ref: 'https://zalo/' + i + '.jpg', done: false, created_at: now }));
+  const calls: number[] = []; const sent: string[] = []; const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: any) => {
+    const u = String(url);
+    if (u.includes('generativelanguage')) { const n = JSON.parse(init.body).contents[0].parts.filter((p: any) => p.inlineData).length; calls.push(n);
+      return aiOk({ orders: [{ anh: [...Array(n).keys()].map(i => i + 1), intent: 'order', khach: 'Khách ' + calls.length, items: [{ m: 1 }], convo: [] }] }); }
+    if (u.endsWith('/sendMessage')) { sent.push(JSON.parse(init.body).text); return new Response('{"ok":true}'); }
+    if (u.startsWith('https://zalo/')) return new Response(new Uint8Array([0xff, 0xd8, 0xff, 1]));
+    return new Response('{}');
+  }) as typeof fetch;
+  try { await bot.handleIncoming(fakeSb(t).sb, { kenh: 'zalo', chatId: 'c1', name: 'Ngọc', text: null, photo: 'https://zalo/7.jpg', caption: null }, 0); } finally { globalThis.fetch = real; }
+  assertEquals(calls.sort(), [2, 6]);            // 8 ảnh → nhóm 6 + nhóm 2
+  assertEquals(t.orders.length, 2);
+  assertStringIncludes(sent[0], 'Đang đọc 8 ảnh');
 });
 
 Deno.test('món hết hàng / không có món → báo lại, chưa gửi bếp', async () => {
