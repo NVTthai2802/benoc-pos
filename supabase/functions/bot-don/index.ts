@@ -24,7 +24,8 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 const env = (k: string, d = '') => (globalThis as any).Deno?.env.get(k) ?? d;
 const PHOTO_WAIT_MS = 3000;     // chủ quán hay gửi nhiều ảnh liền nhau: đợi gom đủ rồi đọc một lượt
-const MAX_PHOTOS = 8;           // tối đa 8 ảnh / đơn
+const MAX_PHOTOS = 30;          // tối đa 30 ảnh / lần gửi (nhiều khách, mỗi khách 1 đơn)
+const PHOTOS_PER_AI = 6;        // mỗi lần gọi AI đọc tối đa 6 ảnh; nhiều hơn thì chia nhóm, đọc song song
 const MAX_PHOTO_BYTES = 8e6;    // ảnh lớn hơn 8MB thì bỏ
 const OPEN_MINUTES = 90;        // đơn nháp gửi trong 90 phút gần nhất coi là "đơn đang ghi" (nhắn chữ là sửa đơn này)
 export const KENH = { zalo: 'zalo', tele: 'tele' } as const;
@@ -88,7 +89,7 @@ export type Draft = {
 export type AiOut = {
   intent?: string; items?: { m: number; qty?: number; choices?: number[]; note?: string }[]; unknown?: string[];
   dine_type?: string | null; date?: string | null; time?: string | null; address?: string | null; phone?: string | null; name?: string | null; note?: string | null; answer?: string | null;
-  same_order?: boolean; khach?: string | null; convo?: { s: string; t: string }[]; nguon?: string | null;
+  same_order?: boolean; khach?: string | null; convo?: { s: string; t: string }[]; nguon?: string | null; anh?: number[]; orders?: AiOut[];
   _model?: string;   // máy chủ gắn thêm: model nào đã đọc (không phải AI trả)
 };
 
@@ -183,6 +184,11 @@ NHẬN DIỆN GIAO DIỆN (để biết tin nào của khách, tin nào của qu
 - nguon: "messenger" nếu giao diện Messenger / Facebook, "zalo" nếu giao diện Zalo, "khac" nếu không nhận ra. Tin chữ của chủ quán → null.
 - GHI CHÚ: yêu cầu riêng của từng món ("thêm trứng" nếu không có lựa chọn tương ứng, "nhiều tương", "ít cay", "không hành") ghi vào note của ĐÚNG món đó; yêu cầu chung cả đơn ("lấy thêm đũa", "gọi trước khi giao", "để ở bảo vệ") ghi vào note của đơn.
 
+NHIỀU ẢNH / NHIỀU KHÁCH:
+- Các ảnh (đánh số Ảnh 1, Ảnh 2…) có thể là đoạn chat của NHIỀU KHÁCH KHÁC NHAU, mỗi khách là MỘT đơn riêng.
+- Nhóm ảnh theo cuộc trò chuyện: các ảnh có CÙNG tên / ảnh đại diện ở đầu màn hình, tin nối tiếp nhau là của cùng 1 khách → 1 đơn. Tên ở đầu màn hình khác nhau → đơn khác nhau. KHÔNG trộn món của khách này sang đơn khách kia.
+- Mỗi đơn có "anh": [số thứ tự các ảnh thuộc đơn đó].
+
 (b) TIN CHỮ do chủ quán gõ: lệnh sửa ĐƠN ĐANG GHI ("thêm 1 trà đào", "bỏ kimbap", "giờ 18h", "ship 12 ngõ 5…, sđt 09…"), hoặc cả một đơn chủ quán tự gõ khi chưa có đơn đang ghi.
 
 Nhiệm vụ: trả về TRẠNG THÁI ĐƠN ĐẦY ĐỦ, MỚI NHẤT dưới dạng JSON: gom mọi thông tin hai bên đã chốt; khách đổi ý thì lấy ý mới nhất; quán báo hết món / khách bỏ món thì bỏ khỏi danh sách.
@@ -219,8 +225,8 @@ QUY TẮC:
 - same_order: CHỈ khi có ĐƠN ĐANG GHI: true khi CHẮC CHẮN ảnh mới là phần tiếp của CÙNG cuộc trò chuyện với CÙNG khách (cùng tên / ảnh đại diện, tin nối tiếp, khách bổ sung / sửa đơn đó) — khi đó trả về trạng thái đã gộp cả thông tin cũ. Còn lại (khách khác, tên khác, đơn mới, không chắc) → false, chỉ đọc đơn trong ảnh mới. Tin chữ của chủ quán luôn là true nếu có đơn đang ghi.
 - intent: "order" bình thường; "khong_phai_don" nếu ảnh không phải đoạn chat đặt món (ảnh món ăn, ảnh chuyển khoản, ảnh mờ không đọc được…).
 
-Chỉ trả về đúng một object JSON, không giải thích:
-{"intent":"order","same_order":false,"nguon":"messenger","khach":null,"convo":[{"s":"khach","t":"..."}],"items":[{"m":1,"qty":2,"choices":[],"note":null}],"unknown":[],"dine_type":null,"date":null,"time":null,"address":null,"phone":null,"name":null,"note":null}`;
+Chỉ trả về đúng một object JSON dạng {"orders":[ … ]}, mỗi phần tử là MỘT đơn (một khách); tin chữ của chủ quán thì "orders" có đúng 1 phần tử. Không giải thích. Mẫu một đơn:
+{"anh":[1],"intent":"order","same_order":false,"nguon":"messenger","khach":null,"convo":[{"s":"khach","t":"..."}],"items":[{"m":1,"qty":2,"choices":[],"note":null}],"unknown":[],"dine_type":null,"date":null,"time":null,"address":null,"phone":null,"name":null,"note":null}`;
 }
 
 export function userPrompt(o: { cur: Draft | null; nImages: number; text?: string | null; caption?: string | null }) {
@@ -229,9 +235,9 @@ export function userPrompt(o: { cur: Draft | null; nImages: number; text?: strin
     khach: c.customer_name, items: c.items.map(i => ({ ten: i.name, qty: i.qty, tuy_chon: i.choices, note: i.note })), dine_type: c.dine_type,
     gio_hen: c.at ? vnDate(new Date(c.at)) + ' ' + vnTime(new Date(c.at)) : null, address: c.address, phone: c.customer_phone, note: c.note,
   } : null;
-  return (cur ? 'ĐƠN ĐANG GHI (lên cách đây chưa lâu): ' + JSON.stringify(cur) + '\n\n' : 'Chưa có đơn đang ghi.\n\n') +
+  return (cur ? 'ĐƠN ĐANG GHI (lên cách đây chưa lâu, CHỈ đơn nào chắc chắn là cùng khách này mới đặt same_order = true): ' + JSON.stringify(cur) + '\n\n' : 'Chưa có đơn đang ghi.\n\n') +
     (o.nImages ? 'Chủ quán gửi ' + o.nImages + ' ảnh chụp màn hình (theo thứ tự cũ → mới).' + (o.caption ? ' Chủ quán ghi kèm: "' + o.caption + '"' : '') : 'Chủ quán nhắn: "' + (o.text || '') + '"') +
-    '\n\nTrả về JSON trạng thái đơn mới nhất.';
+    '\n\nTrả về JSON {"orders":[…]}, mỗi khách một đơn, trạng thái mới nhất.';
 }
 
 export function parseJson(t: string): AiOut {
@@ -265,7 +271,7 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
     // Model lỗi (không có, quá tải 503, hết lượt 429, chậm quá) thì thử model kế tiếp. Cả lượt đều quá tải: đợi chút, thử lại 1 vòng.
     // Sai khoá (401) thì dừng luôn.
     const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : GEMINI_MODELS;
-    const parts: any[] = [{ text: user }, ...images.map(im => ({ inlineData: { mimeType: im.mime, data: im.b64 } }))];
+    const parts: any[] = [{ text: user }, ...images.flatMap((im, i) => [{ text: 'Ảnh ' + (i + 1) + ':' }, { inlineData: { mimeType: im.mime, data: im.b64 } }])];
     let err = '';
     for (let round = 0; round < 2 && !used; round++) {
       if (round) await new Promise(r => setTimeout(r, AI_RETRY_MS));
@@ -294,7 +300,7 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
     }
     if (err) throw new Error(err);
   } else {
-    const content: any[] = [...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.mime, data: im.b64 } })), { type: 'text', text: user }];
+    const content: any[] = [...images.flatMap((im, i) => [{ type: 'text', text: 'Ảnh ' + (i + 1) + ':' }, { type: 'image', source: { type: 'base64', media_type: im.mime, data: im.b64 } }]), { type: 'text', text: user }];
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: env('CLAUDE_MODEL', 'claude-haiku-5-5'), max_tokens: 3000, temperature: 0, system, messages: [{ role: 'user', content }] }),
@@ -486,7 +492,7 @@ const MISS_TEXT: Record<string, string> = {
   at_hours: 'giờ hẹn ngoài giờ nhận đơn', address: 'địa chỉ ship', phone: 'SĐT người nhận',
 };
 export const HELP = 'Đây là bot lên đơn của Bé Nốc 🥰\n\n' +
-  '📸 Chụp màn hình đoạn chat đặt món với khách rồi gửi vào đây (nhiều ảnh gửi liền nhau cũng được) → bot lên đơn, gửi thẳng vào bếp / pha chế.\n' +
+  '📸 Chụp màn hình đoạn chat đặt món với khách rồi gửi vào đây → bot lên đơn, gửi thẳng vào bếp / pha chế. Gửi một lần nhiều ảnh của nhiều khách cũng được (tối đa 30 ảnh): mỗi khách thành 1 đơn, mỗi đơn bot nhắn 1 tin.\n' +
   '✏️ Nhắn chữ để sửa đơn vừa lên: "thêm 1 trà đào", "bỏ kimbap", "giờ 18h30", "ship 12 ngõ 5 Quang Trung, sđt 09…".\n' +
   '⌨️ Gõ thẳng cả đơn bằng chữ cũng được.\n' +
   '🗑 Nhắn "huỷ" để huỷ đơn vừa lên.\n\n' +
@@ -572,6 +578,17 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
 }
 
 /* Đọc ảnh / tin chữ bằng AI → tạo mới hoặc sửa đơn nháp */
+/* Kết quả AI → danh sách đơn. AI trả {"orders":[…]} (mới) hoặc 1 đơn (cũ). Gắn ảnh cho từng đơn theo "anh" */
+export function splitOrders(ai: AiOut, nImg: number): { out: AiOut; imgIdx: number[] }[] {
+  const list = Array.isArray(ai.orders) && ai.orders.length ? ai.orders.map(o => Object.assign({ _model: ai._model }, o)) : [ai];
+  return list.map(out => {
+    let idx = (Array.isArray(out.anh) ? out.anh : []).map(Number).filter(n => Number.isInteger(n) && n >= 1 && n <= nImg).map(n => n - 1);
+    if (!idx.length) idx = list.length === 1 ? [...Array(nImg).keys()] : [];
+    return { out, imgIdx: [...new Set(idx)] };
+  });
+}
+
+type Img2 = { bytes: Uint8Array; mime: string };
 async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { refs?: string[]; caption?: string | null; text?: string }) {
   const t0 = Date.now(), tm: string[] = [];
   const lap = (what: string, since: number) => tm.push(what + ' ' + (Date.now() - since) + 'ms');
@@ -587,24 +604,48 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   ]);
   // Nhắn chữ sửa đơn mà bếp đã nhận: báo luôn, khỏi gọi AI
   if (src.text && cur?.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
-  // Ảnh mới mà đơn trước bếp đã nhận rồi: chắc chắn là đơn mới, không đưa đơn cũ cho AI gộp
-  const curAi = src.refs && cur?.order_id && cur._open === false ? null : cur;
   const open = st?.fb_open || '07:00', close = st?.fb_close || '22:00';
   const menuRaw: any[] = menuRes.data || [];
   const menu = buildMenu(menuRaw);
-  const imgs = got.filter((x): x is { bytes: Uint8Array; mime: string } => !!x);
+  const imgs = got.filter((x): x is Img2 => !!x);
   lap('chuẩn bị + tải ảnh', t0); const tAi = Date.now();
   if (src.refs && !imgs.length) { await say(m.kenh, m.chatId, 'Bot chưa tải được ảnh, gửi lại giúp em nha (ảnh JPG / PNG, dưới 8MB).'); return; }
+  if (src.refs && imgs.length < src.refs.length) say(m.kenh, m.chatId, '⚠️ ' + (src.refs.length - imgs.length) + ' ảnh không tải được, gửi lại riêng ảnh đó giúp em nha.');
 
-  let ai: AiOut;
-  try { ai = await askAi(systemPrompt(menu, now, open, close), userPrompt({ cur: curAi, nImages: imgs.length, text: src.text, caption: src.caption }), imgs.map(i => ({ mime: i.mime, b64: b64(i.bytes) }))); }
-  catch (e) { console.error('AI lỗi', e); await say(m.kenh, m.chatId, 'AI đang quá tải, chưa đọc được. Gửi lại sau ít phút giúp em nha.'); return; }
-  lap('AI', tAi); const tDb = Date.now();
-  if (ai.intent === 'khong_phai_don') { await say(m.kenh, m.chatId, 'Ảnh này không thấy đoạn chat đặt món. Chụp màn hình phần tin nhắn có món, giờ hẹn… rồi gửi lại nha.'); return; }
+  // Ảnh chia nhóm (mỗi nhóm tối đa PHOTOS_PER_AI ảnh), đọc song song. Đơn trước bếp đã nhận, hoặc nhiều nhóm → không đưa đơn cũ cho AI gộp
+  const chunks: Img2[][] = [];
+  for (let i = 0; i < imgs.length; i += PHOTOS_PER_AI) chunks.push(imgs.slice(i, i + PHOTOS_PER_AI));
+  if (!chunks.length) chunks.push([]);   // tin chữ
+  const curAi = (src.refs && cur?.order_id && cur._open === false) || chunks.length > 1 ? null : cur;
+  const sys = systemPrompt(menu, now, open, close);
+  const results = await Promise.all(chunks.map(ch => askAi(sys, userPrompt({ cur: curAi, nImages: ch.length, text: src.text, caption: src.caption }), ch.map(i => ({ mime: i.mime, b64: b64(i.bytes) })))
+    .then(ai => splitOrders(ai, ch.length).map(x => ({ out: x.out, imgs: x.imgIdx.map(k => ch[k]) })))
+    .catch(e => { console.error('AI lỗi', e); return null; })));
+  lap('AI ' + chunks.length + ' lượt', tAi);
+  if (results.every(r => r === null)) { await say(m.kenh, m.chatId, 'AI đang quá tải, chưa đọc được. Gửi lại sau ít phút giúp em nha.'); return; }
+  if (results.some(r => r === null)) say(m.kenh, m.chatId, '⚠️ Có ảnh AI chưa đọc được (quá tải), gửi lại riêng ảnh đó giúp em nha.');
+  const orders = results.flatMap(r => r || []);
+  const real = orders.filter(o => o.out.intent !== 'khong_phai_don');
+  if (!real.length) { await say(m.kenh, m.chatId, 'Ảnh này không thấy đoạn chat đặt món. Chụp màn hình phần tin nhắn có món, giờ hẹn… rồi gửi lại nha.'); return; }
+  if (real.length < orders.length && src.refs) say(m.kenh, m.chatId, '⚠️ Có ' + (orders.length - real.length) + ' ảnh không thấy đoạn chat đặt món, bot bỏ qua.');
 
-  // Ảnh: chỉ gộp khi AI chắc là cùng khách và tên khách (nếu đọc được ở cả hai) trùng nhau
-  const nameClash = !!(ai.khach && curAi?.customer_name && fold(String(ai.khach)).trim() !== fold(String(curAi.customer_name)).trim());
-  const same = !!curAi && (src.text ? true : ai.same_order === true && !nameClash);
+  // Chỉ 1 đơn được gộp vào đơn đang ghi (đơn đầu tiên AI chắc là cùng khách)
+  let mergeUsed = false;
+  await Promise.all(real.map((o, k) => {
+    const ai = o.out;
+    const nameClash = !!(ai.khach && curAi?.customer_name && fold(String(ai.khach)).trim() !== fold(String(curAi.customer_name)).trim());
+    let same = !!curAi && (src.text ? k === 0 : ai.same_order === true && !nameClash);
+    if (same && mergeUsed) same = false; if (same) mergeUsed = true;
+    return placeOne(sb, m, now, { menu, menuRaw, open, close, cur, same, ai, imgs: o.imgs, src, tm, multi: real.length > 1 });
+  }));
+  console.log('⏱ ' + (src.refs ? src.refs.length + ' ảnh → ' + real.length + ' đơn' : 'chữ') + ' · ' + tm.join(' · ') + ' · tổng ' + (Date.now() - t0) + 'ms (' + (orders[0]?.out._model || '') + ')');
+}
+
+/* Một đơn: ghi bản bot đọc, gửi thẳng vào bếp, nhắn chủ quán, lưu ảnh + mẫu huấn luyện */
+async function placeOne(sb: SupabaseClient, m: Incoming, now: Date, c: { menu: Menu; menuRaw: any[]; open: string; close: string; cur: any; same: boolean; ai: AiOut; imgs: Img2[];
+  src: { refs?: string[]; text?: string }; tm: string[]; multi: boolean }) {
+  const { menu, menuRaw, open, close, cur, same, ai, imgs, src } = c;
+  const tDb = Date.now();
   if (same && cur.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const base: Draft = same ? JSON.parse(JSON.stringify(cur))
     : { psid: null as any, status: 'cho_duyet', dine_type: null, at: null, customer_name: null, customer_phone: null, address: null, note: null, items: [], unknown: [], missing: [], total_est: 0, asked: [] };
@@ -613,8 +654,7 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   const d = applyAi(base, ai, menu, now, (ai.khach || '').trim().slice(0, 60) || null);
   // Ghi nguồn (Messenger / Zalo) vào đầu ghi chú đơn để bếp, chủ quán biết khách nhắn ở đâu
   const src0 = (same && cur.note && /^(Messenger|Zalo)\b/.exec(cur.note)?.[1]) || null;
-  const nguon = NGUON[String(ai.nguon || '')] || src0;
-  d.note = noteWithSource(d.note, nguon);
+  d.note = noteWithSource(d.note, NGUON[String(ai.nguon || '')] || src0);
   const miss = missingOf(d, now, open, close);
   const newConvo = (ai.convo || []).filter(x => x && (x.s === 'khach' || x.s === 'quan') && String(x.t || '').trim()).slice(0, 40).map(x => ({ s: x.s, t: String(x.t).slice(0, 500) }));
   const oldConvo: any[] = same ? (cur.convo || []) : [];
@@ -631,23 +671,23 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
 
   // Gửi thẳng vào bếp / pha chế (tạo đơn thật, hoặc thay đơn thật khi bếp chưa nhận)
   let sent: any = null, fail = '';
-  if (!d.items.length) fail = '⚠️ Chưa thấy món nào trong ' + (src.refs ? 'ảnh' : 'tin') + ', chưa gửi bếp. Nhắn món giúp em (vd "2 cơm trộn, 1 trà sữa").';
+  const who = d.customer_name ? ' của ' + d.customer_name : '';
+  if (!d.items.length) fail = '⚠️ Chưa thấy món nào trong ' + (src.refs ? 'ảnh' + who : 'tin') + ', chưa gửi bếp. Nhắn món giúp em (vd "2 cơm trộn, 1 trà sữa").';
   else if (draftId) {
     const { data, error } = await sb.rpc('bot_dat_don', { p_draft: draftId });
     if (error) {
       console.error('Gửi bếp lỗi', error);
       const gone = /ITEM_UNAVAILABLE/.test(error.message || '') ? d.items.find(i => i.menu_item_id === (error as any).hint) : null;
-      fail = gone ? '⚠️ Món “' + gone.name + '” đang tạm hết, chưa gửi bếp. Nhắn "bỏ ' + gone.name + '" hoặc đổi món khác giúp em.' : '⚠️ Chưa gửi được bếp (' + (error.message || 'lỗi') + '). Nhắn lại giúp em nha.';
+      fail = gone ? '⚠️ Đơn' + who + ': món “' + gone.name + '” đang tạm hết, chưa gửi bếp. Nhắn "bỏ ' + gone.name + '" hoặc đổi món khác giúp em.' : '⚠️ Đơn' + who + ' chưa gửi được bếp (' + (error.message || 'lỗi') + '). Nhắn lại giúp em nha.';
     } else sent = data;
     if (sent?.action === 'locked') fail = LOCKED;
   }
-  lap('ghi đơn + gửi bếp', tDb);
+  c.tm.push('đơn ' + (d.customer_name || '?') + ' ' + (Date.now() - tDb) + 'ms');
   // Trả lời chủ quán ngay; lưu ảnh và mẫu huấn luyện làm song song sau đó (không bắt chủ quán chờ)
-  const tSay = Date.now();
   if (sent?.total) d.total_est = sent.total;   // giá thật ở bếp (có ưu đãi, tuỳ chọn)
-  const replied = say(m.kenh, m.chatId, fail || draftReply(d, miss, now, sent?.action === 'updated')).then(() => lap('nhắn Zalo', tSay));
+  const replied = say(m.kenh, m.chatId, fail || draftReply(d, miss, now, sent?.action === 'updated'));
 
-  // Lưu ảnh để đối chiếu khi duyệt (lỗi thì bỏ qua, đơn vẫn lên)
+  // Lưu ảnh để đối chiếu (lỗi thì bỏ qua, đơn vẫn lên)
   const saveImgs = (async () => {
     if (!draftId || !imgs.length) return;
     const paths = (await Promise.all(imgs.map(async (im, i) => {
@@ -665,12 +705,11 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
       const menuHash = (await sha(JSON.stringify(menuRaw))).slice(0, 16);
       const at = now.toISOString();
       await saveSample(sb, trainSample({ thread: await threadHash(m.kenh + ':' + (d.customer_name || draftId)), draftId, now, anon, before: stateBefore, after: d,
-        ai: Object.assign({}, ai, { intent: 'order' }), model: ai._model || aiProvider(), menuHash,
+        ai: Object.assign({}, ai, { intent: 'order', orders: undefined }), model: ai._model || aiProvider(), menuHash,
         convo: convo.map(x => ({ sender: x.s === 'sua' ? 'quan' : x.s, text: x.t, at })) }), menuRaw);
     } catch (e) { console.error('Chuẩn bị mẫu lỗi', e); }
   })();
   await Promise.all([replied, saveImgs, saveTrain]);
-  console.log('⏱ ' + (src.refs ? src.refs.length + ' ảnh' : 'chữ') + ' · ' + tm.join(' · ') + ' · tổng ' + (Date.now() - t0) + 'ms (' + (ai._model || '') + ')');
 }
 
 // ---------------------------------------------------------------------

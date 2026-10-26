@@ -17,7 +17,7 @@ Bot không nhắn gì cho khách, nên không cần Meta duyệt app hay xác mi
 
 | Nhắn cho bot | Bot làm gì |
 |---|---|
-| Ảnh chụp đoạn chat (gửi liền nhiều ảnh cũng được) | Gom ảnh, đọc, gửi đơn vào bếp. Ảnh của cùng khách gửi tiếp trong 90 phút thì sửa đơn đó |
+| Ảnh chụp đoạn chat (gửi một lần nhiều ảnh, nhiều khách cũng được, tối đa 30 ảnh) | Gom ảnh, tự nhóm theo khách: **mỗi khách 1 đơn** vào bếp, **mỗi đơn 1 tin** trả lời. Ảnh của cùng khách gửi tiếp trong 90 phút (bếp chưa nhận) thì sửa đơn đó |
 | "thêm 1 trà đào", "bỏ kimbap", "giờ 18h30", "ship 12 ngõ 5 Quang Trung, sđt 09…" | Sửa đơn vừa lên. Bếp đã bấm Nhận thì bot báo, sửa trên màn hình bếp (Sửa đơn) |
 | Cả đơn gõ bằng chữ (khi chưa có đơn vừa lên) | Lên đơn từ chữ |
 | "huỷ" | Huỷ đơn vừa lên (khi bếp chưa nhận) |
