@@ -282,6 +282,22 @@ Deno.test('gửi ảnh → đơn thật vào thẳng bếp, lưu ảnh, chép đ
   assertStringIncludes(s, '12 ngõ 5 Nguyễn Trãi');
 });
 
+Deno.test('ảnh: tên khách là tên đầu màn hình, AI nhặt nhầm tên chủ quán trong khung trích dẫn thì bỏ', async () => {
+  const t = linked();
+  await run(t, { photo: 'https://zalo/a.jpg' }, {
+    intent: 'order', khach: 'Thanhh Hienn', name: 'Hồng Ngọc', dine_type: 'giao_hang', time: '09:45', address: 'ktx C1',
+    items: [{ m: num('Cơm gà viên'), qty: 1 }], convo: [{ s: 'khach', t: '1 cơm gà viên ship ktx C1' }],
+  });
+  assertEquals(t.fb_drafts[0].customer_name, 'Thanhh Hienn');
+  assertEquals(t.orders[0].customer_name ?? 'Thanhh Hienn', 'Thanhh Hienn');
+});
+
+Deno.test('prompt: tên khách chỉ lấy ở thanh tiêu đề, không lấy tên trong khung trích dẫn', () => {
+  const p = bot.systemPrompt(menu, new Date('2026-05-12T04:00:00Z'), '07:00', '22:00');
+  assertStringIncludes(p, 'KHUNG TRÍCH DẪN');
+  assertStringIncludes(p, 'CHỈ khi khách tự xưng');
+});
+
 Deno.test('nhắn chữ → sửa đơn ở bếp; "huỷ" → huỷ đơn; bếp đã nhận thì khoá', async () => {
   const t = linked();
   await run(t, { photo: 'https://zalo/a.jpg' }, { intent: 'order', khach: 'Lan', dine_type: 'mang_ve', time: '18:00', items: [{ m: num('Cơm gà viên') }], convo: [{ s: 'khach', t: '1 cơm gà' }] });

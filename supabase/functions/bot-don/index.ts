@@ -177,6 +177,7 @@ NHẬN DIỆN GIAO DIỆN (để biết tin nào của khách, tin nào của qu
 - MESSENGER (Facebook): đầu màn hình có ảnh đại diện + tên người đang chat (có thể kèm "Đoạn chat kinh doanh", "Đang hoạt động"), nút gọi điện và chữ (i) bên phải; tin của người cầm máy nằm bên PHẢI, bong bóng XANH DƯƠNG đậm; tin của người kia nằm bên TRÁI, bong bóng XÁM (nền tối thì xám đậm) kèm ảnh đại diện nhỏ; ô nhập "Nhắn tin" / "Aa", nút like 👍 xanh.
 - ZALO: thanh trên cùng màu XANH (có mũi tên quay lại, tên người chat, có thể ghi "Tài khoản Bot" / "Vừa truy cập"); nền xanh xám nhạt; tin của người cầm máy bên PHẢI, bong bóng XANH NHẠT; tin của người kia bên TRÁI, bong bóng TRẮNG kèm ảnh đại diện; giờ nhỏ dưới mỗi tin ("15:34"), dải giữa màn hình kiểu "17:37 Hôm nay"; ô nhập "Tin nhắn".
 - AI CẦM MÁY: tên ở ĐẦU màn hình là người ĐANG CHAT VỚI người cầm máy.
+- TÊN KHÁCH CHỈ LẤY Ở THANH TIÊU ĐỀ trên cùng màn hình. Tên in đậm trong KHUNG TRÍCH DẪN (khung có vạch dọc, hiện khi ai đó "trả lời" một tin nhắn, ví dụ "Hồng Ngọc / C ship cổng phụ nhé") là tên NGƯỜI GỬI tin được trích — rất hay là chính chủ quán — KHÔNG phải tên khách. Tên dưới ảnh đại diện nhỏ cạnh bong bóng cũng không dùng. Tên trong khung trích dẫn thuộc bên QUÁN (hoặc trùng tên đầu màn hình) thì tuyệt đối không đưa vào khach / name.
   * Đầu màn hình là tên khách (không phải "Bé Nốc") → ảnh chụp từ máy QUÁN: bên PHẢI = QUÁN, bên TRÁI = KHÁCH, khach = tên đó.
   * Đầu màn hình là "Bé Nốc", "Bé Nốc Ăn Vặt"… → ảnh chụp từ máy KHÁCH: bên PHẢI = KHÁCH, bên TRÁI = QUÁN / bot; khach = null (trừ khi khách tự xưng tên).
 - Tin trả lời tự động của bot cũ ("Em ghi nhận đơn của mình…", "Dạ em ghi nhận tin nhắn của mình, chủ quán sẽ trả lời…", "Dạ mình muốn đặt món cứ nhắn em…", "Giờ hẹn … đã qua rồi…") là của QUÁN, chỉ là tóm tắt, KHÔNG phải món khách gọi thêm.
@@ -219,7 +220,7 @@ QUY TẮC:
 - dine_type: "mang_ve" khi khách tự qua lấy / ghé lấy / mang về; "tai_quan" khi ăn tại quán / ngồi quán / đặt bàn; "giao_hang" khi ship / giao / gửi tới địa chỉ. Chưa rõ thì null.
 - time: giờ hẹn dạng "HH:MM" 24 giờ (6h chiều = 18:00, 7r tối = 19:30, 11h trưa = 11:00). "Bây giờ", "luôn", "ngay", "sớm nhất" → "now". Không nói giờ → null. Giờ mơ hồ ("chiều nay", "tối") → null.
 - date: "YYYY-MM-DD" nếu hẹn ngày khác hôm nay ("mai", "thứ 7"), không thì null.
-- address: địa chỉ giao hàng nguyên văn. phone: số điện thoại khách đưa. name: tên người nhận nếu khách tự xưng. note: ghi chú chung cho cả đơn.
+- address: địa chỉ giao hàng nguyên văn. phone: số điện thoại khách đưa. name: tên người nhận CHỈ khi khách tự xưng ngay trong lời nhắn ("em tên Lan", "đặt cho bạn Minh"); KHÔNG lấy từ đầu màn hình hay khung trích dẫn (cái đó là khach), không chắc thì null. note: ghi chú chung cho cả đơn.
 - khach: tên khách hiện trên đầu đoạn chat (tên Facebook / Zalo) nếu thấy trong ảnh, không thì null.
 - convo: CHỈ với ảnh: chép lại các tin LIÊN QUAN tới đơn theo thứ tự [{"s":"khach" hoặc "quan","t":"nội dung"}], tối đa 30 tin, bỏ tin không liên quan. Tin chữ của chủ quán thì để [].
 - same_order: CHỈ khi có ĐƠN ĐANG GHI: true khi CHẮC CHẮN ảnh mới là phần tiếp của CÙNG cuộc trò chuyện với CÙNG khách (cùng tên / ảnh đại diện, tin nối tiếp, khách bổ sung / sửa đơn đó) — khi đó trả về trạng thái đã gộp cả thông tin cũ. Còn lại (khách khác, tên khác, đơn mới, không chắc) → false, chỉ đọc đơn trong ảnh mới. Tin chữ của chủ quán luôn là true nếu có đơn đang ghi.
@@ -641,10 +642,14 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   console.log('⏱ ' + (src.refs ? src.refs.length + ' ảnh → ' + real.length + ' đơn' : 'chữ') + ' · ' + tm.join(' · ') + ' · tổng ' + (Date.now() - t0) + 'ms (' + (orders[0]?.out._model || '') + ')');
 }
 
+const ai0Khach = (a: AiOut) => !!String(a.khach || '').trim();
+
 /* Một đơn: ghi bản bot đọc, gửi thẳng vào bếp, nhắn chủ quán, lưu ảnh + mẫu huấn luyện */
 async function placeOne(sb: SupabaseClient, m: Incoming, now: Date, c: { menu: Menu; menuRaw: any[]; open: string; close: string; cur: any; same: boolean; ai: AiOut; imgs: Img2[];
   src: { refs?: string[]; text?: string }; tm: string[]; multi: boolean }) {
-  const { menu, menuRaw, open, close, cur, same, ai, imgs, src } = c;
+  const { menu, menuRaw, open, close, cur, same, imgs, src } = c;
+  // Ảnh có tên ở thanh tiêu đề (khach) thì đó là tên đơn; tên AI nhặt ở nơi khác (khung trích dẫn…) hay là tên chủ quán → bỏ
+  const ai: AiOut = src.refs && ai0Khach(c.ai) ? { ...c.ai, name: null } : c.ai;
   const tDb = Date.now();
   if (same && cur.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const base: Draft = same ? JSON.parse(JSON.stringify(cur))
