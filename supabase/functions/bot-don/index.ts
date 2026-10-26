@@ -92,6 +92,13 @@ export type AiOut = {
   _model?: string;   // máy chủ gắn thêm: model nào đã đọc (không phải AI trả)
 };
 
+/* Ghi chú có phải chỉ nhắc lại một lựa chọn không: bỏ dấu, bỏ từ đệm ("thêm", "1", "phần", "cho"), các chữ còn lại đều nằm trong tên lựa chọn */
+const FILLER = new Set(['them', '1', 'mot', 'phan', 'cho', 'lay', 'nhe', 'a']);
+export function sameAsChoice(note: string, choice: string) {
+  const w = (t: string) => fold(t).split(/[^a-z0-9]+/).filter(x => x && !FILLER.has(x));
+  const a = w(note), b = new Set(w(choice));
+  return a.length > 0 && a.every(x => b.has(x));
+}
 /* Kiểm lại kết quả AI theo menu thật: món phải có, lựa chọn phải thuộc nhóm của món, đủ số lượng tối thiểu */
 export function applyAi(d: Draft, ai: AiOut, menu: Menu, now: Date, firstName: string | null) {
   const items: DItem[] = [];
@@ -106,7 +113,9 @@ export function applyAi(d: Draft, ai: AiOut, menu: Menu, now: Date, firstName: s
       if (!pick.length && g.min > 0 && g.choices[0]) pick = [g.choices[0]];
       for (const c of pick) { ids.push(c.id); extra += c.price; if (!c.default || want.has(c.id)) names.push(c.name); }
     }
-    items.push({ menu_item_id: it.id, name: it.name, qty, choice_ids: ids, choices: [...new Set(names)], note: (x.note || '').trim().slice(0, 120) || null, price: it.price + extra, drink: it.drink });
+    let note: string | null = (x.note || '').trim().slice(0, 120) || null;
+    if (note && names.some(n => sameAsChoice(note!, n))) note = null;   // ghi chú chỉ lặp lại tuỳ chọn đã chọn (vd "thêm mì" khi đã chọn "Thêm 1 phần mì")
+    items.push({ menu_item_id: it.id, name: it.name, qty, choice_ids: ids, choices: [...new Set(names)], note, price: it.price + extra, drink: it.drink });
   }
   d.items = items;
   d.unknown = (ai.unknown || []).map(s => String(s).trim()).filter(Boolean).slice(0, 5);
@@ -172,6 +181,15 @@ CHỐNG ĐẾM TRÙNG (rất quan trọng):
   Ví dụ: "Cho em 1 cơm trộn ạ" … "Alo ạ" … "Cho em 1ts cốm, 1 cơm trộn HQ ạ" → đơn là 1 Cơm trộn Hàn Quốc + 1 Trà sữa cốm (KHÔNG phải 2 cơm trộn). Tin sau đầy đủ hơn thì lấy tin sau.
 - Chỉ cộng thêm khi khách nói rõ là gọi THÊM: "thêm 1…", "1… nữa", "cho thêm", "gọi thêm", hoặc quán hỏi "mình lấy thêm gì không" và khách gọi món mới.
 - Tin của quán hoặc bot (bên phải) nhắc lại / tóm tắt đơn thì KHÔNG phải món mới.
+- "TỔNG rồi CHIA CHI TIẾT": "2 cơm trộn, 1 cơm trộn nhiều cơm, 1 cơm trộn không trứng" = 2 phần cơm trộn chia thành 2 dòng (1 nhiều cơm + 1 không trứng), KHÔNG phải 4 phần. Số ở đầu là tổng, các dòng sau là cách chia của chính tổng đó.
+
+LỆNH SỬA CỦA CHỦ QUÁN (tin chữ):
+- "sửa A thành B" / "đổi A thành B": bỏ A khỏi đơn, thay bằng B (giữ số lượng của A nếu không nói số mới).
+- "thêm ...": thêm món mới; "bỏ ..." / "không lấy ...": bỏ món đó.
+- Một tin có thể có nhiều lệnh nối bằng dấu phẩy / "và"; làm lần lượt từng lệnh trên ĐƠN ĐANG GHI, rồi trả về cả đơn sau khi sửa.
+  Ví dụ: đơn đang ghi [1 Cơm trộn Hàn Quốc, 1 Hồng trà sữa cốm tươi]; chủ quán nhắn "sửa cơm trộn thành mỳ nem thêm mỳ, thêm cơm băm và 2 cơm trộn, 1 cơm trộn nhiều cơm, 1 cơm trộn không trứng"
+  → [1 Mì nem chua rán (lựa chọn "Thêm 1 phần mì"), 1 Cơm thịt băm trứng, 1 Cơm trộn Hàn Quốc note "nhiều cơm", 1 Cơm trộn Hàn Quốc note "không trứng", 1 Hồng trà sữa cốm tươi].
+- Yêu cầu khớp một lựa chọn # của món (thêm mì, ít đá, size L…) thì chọn lựa chọn đó, KHÔNG ghi lặp vào note. Yêu cầu không có trong lựa chọn ("nhiều cơm", "không trứng", "ít cay") thì ghi vào note của đúng món đó.
 
 ${menuText(menu)}
 
@@ -228,7 +246,8 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
   if (provider === 'gemini') {
     // Model lỗi (không có, quá tải 503, hết lượt 429, chậm quá) thì thử model kế tiếp. Cả lượt đều quá tải: đợi chút, thử lại 1 vòng.
     // Sai khoá (401) thì dừng luôn.
-    const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : GEMINI_MODELS;
+    // Tin chữ (chủ quán sửa đơn) đọc nhanh nên dùng model mạnh trước cho chắc; ảnh thì model nhanh trước
+    const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : images.length ? GEMINI_MODELS : [GEMINI_MODELS[1], GEMINI_MODELS[0], GEMINI_MODELS[2]];
     const parts: any[] = [{ text: user }, ...images.map(im => ({ inlineData: { mimeType: im.mime, data: im.b64 } }))];
     let err = '';
     for (let round = 0; round < 2 && !used; round++) {

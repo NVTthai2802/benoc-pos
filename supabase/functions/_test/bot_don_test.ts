@@ -40,6 +40,20 @@ Deno.test('kiểm lại kết quả AI theo menu: giá, tuỳ chọn, thiếu g�
   assertMatch(bot.draftSummary(tmr, NOW), /Chủ nhật 25\/10 11:00/);
 });
 
+Deno.test('ghi chú chỉ lặp lại tuỳ chọn thì bỏ; ghi chú thật thì giữ', () => {
+  const mi = menu.items.find(i => i.name === 'Mì nem chua rán')!;
+  const them = mi.groups.find(g => g.title === 'Thêm mì')!.choices[0].id;
+  const d = bot.applyAi(empty(), { items: [{ m: mi.n, choices: [them], note: 'thêm mì' }, { m: num('Cơm trộn Hàn Quốc'), note: 'nhiều cơm' }, { m: num('Cơm trộn Hàn Quốc'), note: 'không trứng' }] }, menu, NOW, null);
+  assertEquals(d.items.map(i => [i.name, i.choices, i.note]), [['Mì nem chua rán', ['Thêm 1 phần mì'], null], ['Cơm trộn Hàn Quốc', [], 'nhiều cơm'], ['Cơm trộn Hàn Quốc', [], 'không trứng']]);
+  assert(bot.sameAsChoice('Thêm mì', 'Thêm 1 phần mì')); assert(!bot.sameAsChoice('mì cay', 'Thêm 1 phần mì')); assert(!bot.sameAsChoice('thêm', 'Thêm 1 phần mì'));
+});
+
+Deno.test('prompt dạy cách hiểu lệnh sửa và "tổng rồi chia chi tiết"', () => {
+  const sp = bot.systemPrompt(menu, NOW, '07:00', '22:00');
+  assertStringIncludes(sp, 'TỔNG rồi CHIA CHI TIẾT');
+  assertStringIncludes(sp, 'sửa A thành B');
+});
+
 Deno.test('câu bot nhắn lại: tóm tắt, món chưa rõ, còn thiếu', () => {
   const d = bot.applyAi(empty(), { dine_type: 'giao_hang', time: '19:30', items: [{ m: num('Cơm gà viên'), qty: 2 }], unknown: ['bún bò'] }, menu, NOW, 'Lan');
   const t = bot.draftReply(d, bot.missingOf(d, NOW), NOW, false);
@@ -83,6 +97,10 @@ const gem = () => { Deno.env.set('GEMINI_API_KEY', 'k'); Deno.env.delete('ANTHRO
 Deno.test('Gemini: quá tải / không có model → thử model kế; sai khoá → dừng; ảnh gửi kèm', async () => {
   gem(); const real = globalThis.fetch; const model = (url: string) => String(url).split('/models/')[1].split(':')[0];
   try {
+    // tin chữ: model mạnh trước
+    let tseen: string[] = [];
+    globalThis.fetch = (async (url: string) => { tseen.push(model(url)); return aiOk({ intent: 'order' }); }) as typeof fetch;
+    await bot.askAi('s', 'u'); assertEquals(tseen, ['gemini-3.8-flash']);
     let seen: string[] = []; let body: any = null;
     globalThis.fetch = (async (url: string, init?: any) => { seen.push(model(url)); body = JSON.parse(init.body); return seen.length === 1 ? new Response('x', { status: 503 }) : aiOk({ intent: 'order', items: [] }); }) as typeof fetch;
     const a = await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]);
@@ -91,12 +109,12 @@ Deno.test('Gemini: quá tải / không có model → thử model kế; sai khoá
 
     seen = [];
     globalThis.fetch = (async (url: string) => { seen.push(model(url)); return seen.length <= 3 ? new Response('busy', { status: 429 }) : aiOk({ intent: 'order' }); }) as typeof fetch;
-    assertEquals((await bot.askAi('s', 'u'))._model, 'gemini-3.5-flash-lite');
+    assertEquals((await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]))._model, 'gemini-3.5-flash-lite');
     assertEquals(seen.length, 4);
 
     seen = [];
     globalThis.fetch = (async (url: string) => { seen.push(model(url)); return new Response('bad key', { status: 401 }); }) as typeof fetch;
-    let threw = false; try { await bot.askAi('s', 'u'); } catch (_) { threw = true; }
+    let threw = false; try { await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]); } catch (_) { threw = true; }
     assert(threw); assertEquals(seen, ['gemini-3.5-flash-lite']);
   } finally { globalThis.fetch = real; }
 });
