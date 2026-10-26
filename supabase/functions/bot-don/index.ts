@@ -2,12 +2,12 @@
 // BÉ NỐC — BOT LÊN ĐƠN TỪ ẢNH CHỤP (Supabase Edge Function "bot-don")
 //
 //  Chủ quán nhắn khách trên Facebook như bình thường, rồi:
-//  ảnh chụp đoạn chat ──Zalo / Telegram──▶ bot-don ──AI đọc ảnh──▶ fb_drafts (đơn nháp, tab "Đơn online")
-//                                              │                          │
-//                                              └─ nhắn lại tóm tắt đơn     └─▶ chủ quán duyệt → đơn thật → bếp
+//  ảnh chụp đoạn chat ──Zalo / Telegram──▶ bot-don ──AI đọc ảnh──▶ đơn thật vào thẳng bếp / pha chế (nhãn ĐƠN ONLINE)
+//                                              └─ nhắn lại tóm tắt đơn cho chủ quán
+//  (fb_drafts vẫn lưu bản bot đọc để sửa tiếp và làm dữ liệu huấn luyện; cập nhật 27)
 //
 //  Nhắn chữ cho bot để sửa đơn vừa lên ("thêm 1 trà đào", "giờ 18h"), hoặc gõ thẳng cả đơn.
-//  Nhắn "huỷ" để bỏ đơn vừa lên. Chỉ tài khoản đã kết nối bằng mã (lấy trong Quản lý) mới dùng được.
+//  Nhắn "huỷ" để huỷ đơn vừa lên. Bếp đã bấm Nhận thì bot không sửa / huỷ nữa (sửa ở màn hình bếp). Chỉ tài khoản đã kết nối bằng mã (lấy trong Quản lý) mới dùng được.
 //
 //  Biến môi trường (Supabase → Edge Functions → Secrets):
 //    ZALO_BOT_TOKEN       token bot Zalo (tạo ở https://bot.zapps.me)          ┐ cần ít nhất 1 trong 2
@@ -475,25 +475,27 @@ const MISS_TEXT: Record<string, string> = {
   at_hours: 'giờ hẹn ngoài giờ nhận đơn', address: 'địa chỉ ship', phone: 'SĐT người nhận',
 };
 export const HELP = 'Đây là bot lên đơn của Bé Nốc 🥰\n\n' +
-  '📸 Chụp màn hình đoạn chat đặt món với khách rồi gửi vào đây (nhiều ảnh gửi liền nhau cũng được) → bot lên đơn nháp.\n' +
+  '📸 Chụp màn hình đoạn chat đặt món với khách rồi gửi vào đây (nhiều ảnh gửi liền nhau cũng được) → bot lên đơn, gửi thẳng vào bếp / pha chế.\n' +
   '✏️ Nhắn chữ để sửa đơn vừa lên: "thêm 1 trà đào", "bỏ kimbap", "giờ 18h30", "ship 12 ngõ 5 Quang Trung, sđt 09…".\n' +
   '⌨️ Gõ thẳng cả đơn bằng chữ cũng được.\n' +
-  '🗑 Nhắn "huỷ" để bỏ đơn vừa lên.\n\n' +
-  'Duyệt đơn trong Quản lý → Đơn online.';
+  '🗑 Nhắn "huỷ" để huỷ đơn vừa lên.\n\n' +
+  'Sửa / huỷ qua bot được khi bếp chưa bấm Nhận đơn. Bếp nhận rồi thì sửa trên màn hình bếp.';
 export const NOT_LINKED = 'Tài khoản này chưa được dùng bot lên đơn của Bé Nốc.\nChủ quán vào Quản lý → Đơn online → Cài đặt bot → "Lấy mã kết nối", rồi nhắn mã 6 số đó vào đây.';
 const isCancel = (t: string) => /^\/?(huy|xoa|bo)(\s+(don|đơn))?\s*[.!]*$/.test(fold(t).trim());
 const isHelp = (t: string) => /^\/?(start|help|hd|huong\s*dan|menu|hi|hello|chao|alo)\b/.test(fold(t).trim()) && fold(t).trim().length < 20;
 
-/* Câu bot nhắn lại sau khi lên / sửa đơn */
+/* Câu bot nhắn lại sau khi gửi / sửa đơn ở bếp */
 export function draftReply(d: Draft, miss: string[], now: Date, updated: boolean) {
-  const out = [(updated ? '🔄 Đã cập nhật đơn' : '📝 Đơn nháp mới') + ' · ' + (d.customer_name || 'Khách')];
+  const out = [(updated ? '🔄 Đã sửa đơn ở bếp' : '✅ Đã gửi bếp') + ' · ' + (d.customer_name || 'Khách online')];
   if (d.items.length || d.dine_type || d.at) out.push(draftSummary(d, now));
-  if (d.unknown.length) out.push('❓ Chưa rõ món: ' + d.unknown.map(u => '“' + u + '”').join(', '));
-  const m = miss.map(x => MISS_TEXT[x]).filter(Boolean);
-  if (m.length) out.push('⚠️ Còn thiếu: ' + m.join(', '));
-  out.push('👉 Duyệt trong Quản lý → Đơn online. Nhắn thêm để sửa, nhắn "huỷ" để bỏ đơn này.');
+  if (!d.dine_type) out.push('ℹ️ Chưa rõ qua lấy / ăn tại quán / ship nên tạm để Mang về.');
+  if (d.unknown.length) out.push('❓ Chưa rõ món: ' + d.unknown.map(u => '“' + u + '”').join(', ') + ' (chưa đưa vào đơn)');
+  const m = miss.filter(x => x !== 'dine_type').map(x => MISS_TEXT[x]).filter(Boolean);
+  if (m.length) out.push('⚠️ Còn thiếu: ' + m.join(', ') + '. Nhắn thêm để bổ sung.');
+  out.push('Nhắn thêm để sửa, nhắn "huỷ" để huỷ (khi bếp chưa nhận đơn).');
   return out.join('\n\n');
 }
+export const LOCKED = '🔒 Bếp / pha chế đã nhận đơn này nên bot không sửa được nữa. Sửa trên màn hình bếp (nút Sửa đơn) giúp em nha.';
 
 async function isAllowed(sb: SupabaseClient, k: Kenh, chatId: string) {
   const { data } = await sb.from('bot_users').select('chat_id').eq('kenh', k).eq('chat_id', chatId).maybeSingle();
@@ -504,7 +506,7 @@ async function openDraft(sb: SupabaseClient, k: Kenh, chatId: string, now: Date)
   const since = new Date(now.getTime() - OPEN_MINUTES * 60e3).toISOString();
   const { data } = await sb.from('fb_drafts').select('*').eq('kenh', k).eq('chat_id', chatId).gte('updated_at', since).order('updated_at', { ascending: false }).limit(1);
   const d = data && data[0];
-  return d && (d.status === 'cho_duyet' || d.status === 'dang_hoi') ? d : null;
+  return d && d.status !== 'huy' ? d : null;   // đơn bot đã gửi bếp (da_duyet) vẫn sửa / huỷ được khi bếp chưa nhận
 }
 
 /* Một tin từ Zalo / Telegram. Ảnh thì gom rồi đọc sau PHOTO_WAIT_MS */
@@ -541,9 +543,11 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
   if (isHelp(text)) { await say(m.kenh, m.chatId, HELP); return; }
   if (isCancel(text)) {
     const d = await openDraft(sb, m.kenh, m.chatId, now);
-    if (!d) { await say(m.kenh, m.chatId, 'Không có đơn nháp nào vừa lên để huỷ. Đơn cũ hơn thì huỷ trong Quản lý → Đơn online nha.'); return; }
-    await sb.from('fb_drafts').update({ status: 'huy', updated_at: now.toISOString() }).eq('id', d.id);
-    await say(m.kenh, m.chatId, '🗑 Đã huỷ đơn nháp của ' + (d.customer_name || 'khách') + '.');
+    if (!d) { await say(m.kenh, m.chatId, 'Không có đơn nào vừa lên để huỷ. Đơn cũ hơn thì huỷ trên màn hình bếp nha.'); return; }
+    const { data: r, error } = await sb.rpc('bot_huy_don', { p_draft: d.id });
+    if (error) { console.error('Huỷ đơn lỗi', error); await say(m.kenh, m.chatId, 'Chưa huỷ được, thử lại giúp em nha.'); return; }
+    await say(m.kenh, m.chatId, r?.action === 'locked' ? '🔒 Bếp / pha chế đã nhận đơn của ' + (d.customer_name || 'khách') + ', bot không huỷ được nữa. Huỷ trên màn hình bếp giúp em nha.'
+      : '🗑 Đã huỷ đơn của ' + (d.customer_name || 'khách') + (d.order_id ? ', bếp không còn thấy đơn này.' : '.'));
     return;
   }
   await buildDraft(sb, m, now, { text });
@@ -556,10 +560,15 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   // Lấy cài đặt, đơn đang ghi, menu và tải ảnh cùng lúc cho nhanh
   const [{ data: st }, cur, menuRes, got] = await Promise.all([
     sb.from('shop_settings').select('fb_open, fb_close').eq('id', 1).maybeSingle(),
-    openDraft(sb, m.kenh, m.chatId, now),
+    openDraft(sb, m.kenh, m.chatId, now).then(async d => {   // kèm luôn: đơn ở bếp còn sửa được không
+      if (d?.order_id) { const { data: ok } = await sb.rpc('bot_don_mo', { p_order: d.order_id }); d._open = ok !== false; }
+      return d;
+    }),
     sb.rpc('get_menu'),
     Promise.all((src.refs || []).map(ref => fetchImage(m.kenh, ref))),
   ]);
+  // Nhắn chữ sửa đơn mà bếp đã nhận: báo luôn, khỏi gọi AI
+  if (src.text && cur?.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const open = st?.fb_open || '07:00', close = st?.fb_close || '22:00';
   const menuRaw: any[] = menuRes.data || [];
   const menu = buildMenu(menuRaw);
@@ -574,6 +583,7 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   if (ai.intent === 'khong_phai_don') { await say(m.kenh, m.chatId, 'Ảnh này không thấy đoạn chat đặt món. Chụp màn hình phần tin nhắn có món, giờ hẹn… rồi gửi lại nha.'); return; }
 
   const same = !!cur && (src.text ? true : ai.same_order === true);
+  if (same && cur.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const base: Draft = same ? JSON.parse(JSON.stringify(cur))
     : { psid: null as any, status: 'cho_duyet', dine_type: null, at: null, customer_name: null, customer_phone: null, address: null, note: null, items: [], unknown: [], missing: [], total_est: 0, asked: [] };
   const anon = anonymizer({ names: [ai.khach, ai.name, base.customer_name], words: menuWords(menu) });
@@ -593,10 +603,23 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   if (draftId) await sb.from('fb_drafts').update(row).eq('id', draftId);
   else { const { data: ins, error } = await sb.from('fb_drafts').insert(Object.assign({ asked: [], anh: [] }, row)).select('id').single(); if (error) console.error('Lưu đơn lỗi', error); draftId = ins?.id || null; }
 
-  lap('ghi đơn', tDb);
+  // Gửi thẳng vào bếp / pha chế (tạo đơn thật, hoặc thay đơn thật khi bếp chưa nhận)
+  let sent: any = null, fail = '';
+  if (!d.items.length) fail = '⚠️ Chưa thấy món nào trong ' + (src.refs ? 'ảnh' : 'tin') + ', chưa gửi bếp. Nhắn món giúp em (vd "2 cơm trộn, 1 trà sữa").';
+  else if (draftId) {
+    const { data, error } = await sb.rpc('bot_dat_don', { p_draft: draftId });
+    if (error) {
+      console.error('Gửi bếp lỗi', error);
+      const gone = /ITEM_UNAVAILABLE/.test(error.message || '') ? d.items.find(i => i.menu_item_id === (error as any).hint) : null;
+      fail = gone ? '⚠️ Món “' + gone.name + '” đang tạm hết, chưa gửi bếp. Nhắn "bỏ ' + gone.name + '" hoặc đổi món khác giúp em.' : '⚠️ Chưa gửi được bếp (' + (error.message || 'lỗi') + '). Nhắn lại giúp em nha.';
+    } else sent = data;
+    if (sent?.action === 'locked') fail = LOCKED;
+  }
+  lap('ghi đơn + gửi bếp', tDb);
   // Trả lời chủ quán ngay; lưu ảnh và mẫu huấn luyện làm song song sau đó (không bắt chủ quán chờ)
   const tSay = Date.now();
-  const replied = say(m.kenh, m.chatId, draftReply(d, miss, now, same)).then(() => lap('nhắn Zalo', tSay));
+  if (sent?.total) d.total_est = sent.total;   // giá thật ở bếp (có ưu đãi, tuỳ chọn)
+  const replied = say(m.kenh, m.chatId, fail || draftReply(d, miss, now, sent?.action === 'updated')).then(() => lap('nhắn Zalo', tSay));
 
   // Lưu ảnh để đối chiếu khi duyệt (lỗi thì bỏ qua, đơn vẫn lên)
   const saveImgs = (async () => {
