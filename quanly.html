@@ -319,7 +319,6 @@ async function renderFacebook(main) {
 /* Xem đơn nháp: ảnh chụp + đoạn chat bot chép lại bên trái, đơn bot tách bên phải; sửa rồi duyệt */
 async function openFbDraft(d) {
   const f = { dine: d.dine_type || 'mang_ve', at: d.at ? toLocalInput(d.at) : '', name: d.customer_name || '', phone: d.customer_phone || '', address: d.address || '', note: d.note || '', items: JSON.parse(JSON.stringify(d.items || [])) };
-  const fromBot = d.chat_id && (d.kenh === 'zalo' || d.kenh === 'tele');
   let menu = null, adding = false, query = '';
   const total = () => f.items.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
   const convo = (d.convo || []).length ? d.convo.map(m => m.s === 'sua' ? '<p class="small muted fb-fix">✏️ Bạn nhắn bot: ' + esc(m.t) + '</p>' : '<div class="fb-msg fb-' + (m.s === 'quan' ? 'quan' : 'khach') + '"><span>' + esc(m.t).replace(/\n/g, '<br>') + '</span><small>' + (m.s === 'quan' ? 'Quán' : 'Khách') + '</small></div>').join('') : '<p class="small muted">Chưa có đoạn chat.</p>';
@@ -342,7 +341,6 @@ async function openFbDraft(d) {
       '<label class="field" for="fdNote">Ghi chú cho bếp<input id="fdNote" maxlength="300" value="' + esc(f.note) + '"></label>' +
       '<h3 class="og-head">Món</h3><div id="fdItems">' + itemsBox() + '</div>' +
       ((d.unknown || []).length ? '<p class="small fb-unk">Bot chưa rõ: ' + d.unknown.map(u => '“' + esc(u) + '”').join(', ') + ' — thêm tay nếu cần.</p>' : '') +
-      (fromBot ? '<label class="check"><input type="checkbox" id="fdNotify" checked> Gửi tin xác nhận về ' + KENH_TEXT[d.kenh] + ' để copy cho khách</label><label class="check"><input type="checkbox" id="fdBank" checked> Kèm số tài khoản để khách chuyển khoản trước</label>' : '') +
       '<p class="msg" id="fdMsg" hidden></p>' + confirmBox('Huỷ đơn nháp này? Khách không nhận được tin gì, bạn tự báo khách nếu cần.', 'Huỷ đơn', 'fdDelBox') + '</div></div>' +
     '<div class="sh-foot"><button class="btn btn-danger" type="button" id="fdDel">Huỷ đơn</button><button class="btn grow" type="button" id="fdOk">Duyệt → gửi bếp</button></div>', sh => {
     if ((d.anh || []).length) api.draftImages(d.anh).then(urls => {
@@ -373,10 +371,7 @@ async function openFbDraft(d) {
       try {
         const r = await api.fbApprove(d.id, { dine: f.dine, at: new Date(at).toISOString(), name, phone: $('#fdPhone', sh).value.trim(), address: f.dine === 'giao_hang' ? addr : null, note: $('#fdNote', sh).value.trim(),
           items: f.items.map(i => ({ menu_item_id: i.menu_item_id, qty: i.qty, choice_ids: i.choice_ids || [], note: i.note || null })) });
-        let extra = '';
-        const nt = $('#fdNotify', sh);
-        if (nt && nt.checked) { try { await api.fbCall({ action: 'approved', draft_id: d.id, with_bank: $('#fdBank', sh).checked }); extra = ' · đã gửi tin xác nhận về ' + KENH_TEXT[d.kenh]; } catch (err) { extra = ' · chưa gửi được tin xác nhận: ' + errText(err); } }
-        ui.close(); ui.toast('Đã duyệt, đơn sang bếp · ' + vnd(r.total) + extra); rerender(); refreshFbBadge();
+        ui.close(); ui.toast('Đã duyệt, đơn sang bếp · ' + vnd(r.total)); rerender(); refreshFbBadge();
       } catch (err) { say(errText(err)); btn.disabled = false; }
     };
   }, { wide: true });
