@@ -244,8 +244,16 @@ const bleName = k => (slots[k].dev && slots[k].dev.name) || store.get(nameKey(k)
 const bleEmit = () => bleSubs.forEach(f => { try { f(); } catch (e) { /* bỏ qua */ } });
 const canBle = () => !!navigator.bluetooth;
 const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+/* Lệnh nối có hạn giờ: trên iPhone (Bluefy) lệnh nối không tự hết hạn, treo mãi thì huỷ để lần sau nối được */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function gattConnect(dev, ms) {
+  let t;
+  return Promise.race([dev.gatt.connect(), new Promise((_, no) => { t = setTimeout(() => { try { dev.gatt.disconnect(); } catch (e) { /* bỏ qua */ } no(new Error('Máy in không phản hồi. Kiểm tra máy in đang bật và không nối với điện thoại khác.')); }, ms || 12000); })])
+    .finally(() => clearTimeout(t));
+}
 async function bleOpen(k) {
-  const b = slots[k], g = await b.dev.gatt.connect();
+  const b = slots[k], dev = b.dev, g = await gattConnect(dev);
+  try {
   const writable = [];
   for (const sv of await g.getPrimaryServices()) {
     let cs = []; try { cs = await sv.getCharacteristics(); } catch (e) { continue; }
@@ -253,7 +261,8 @@ async function bleOpen(k) {
   }
   b.ch = writable.find(c => /49535343-8841|bef8d6c9|ff02|ae01|2af1|fff2|ffe1/i.test(c.uuid)) || writable[0] || null;
   if (!b.ch) throw new Error('Máy này không nhận lệnh in qua Bluetooth');
-  store.set(nameKey(k), b.dev.name || ''); bleEmit();
+  } catch (e) { b.ch = null; try { dev.gatt.disconnect(); } catch (x) { /* bỏ qua */ } throw e; } // nối dở thì cắt hẳn
+  store.set(nameKey(k), dev.name || ''); bleEmit();
 }
 async function bleAttach(k, dev) {
   const b = slots[k];
@@ -265,11 +274,16 @@ async function bleAttach(k, dev) {
 const retry = { phieu: 0, tem: 0 };
 function autoReconnect(k) {
   const b = slots[k];
-  if (!b.dev || bleOk(k) || b.reconnecting) return;
+  if (!b.dev || bleOk(k) || b.reconnecting || b.manual) return;
   if (document.hidden) return; // visibilitychange sẽ gọi lại
+  const gen = b.gen = (b.gen || 0) + 1;
   b.reconnecting = true;
   bleOpen(k).then(() => { retry[k] = 0; }, () => { retry[k]++; })
-    .finally(() => { b.reconnecting = false; if (!bleOk(k) && retry[k] < 20) setTimeout(() => autoReconnect(k), Math.min(15000, 2000 * retry[k])); });
+    .finally(() => {
+      if (b.gen !== gen) return; // người dùng đã bấm Kết nối, bỏ lượt tự nối này
+      b.reconnecting = false;
+      if (!bleOk(k) && retry[k] < (isIOS() ? 8 : 20)) setTimeout(() => autoReconnect(k), Math.min(15000, 2000 * retry[k]));
+    });
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) Object.keys(slots).forEach(k => { retry[k] = 0; autoReconnect(k); }); });
 window.addEventListener('pageshow', () => Object.keys(slots).forEach(k => autoReconnect(k)));
@@ -283,7 +297,16 @@ async function bleConnect(k) {
     // Bluefy / trình duyệt không cho "chọn tất cả": lọc theo dịch vụ và tên máy in hay gặp
     dev = await navigator.bluetooth.requestDevice({ filters: BLE_SVCS.map(s => ({ services: [s] })).concat(['CT', 'MPT', 'Printer', 'BT', 'P', 'Q', 'X', 'M', 'C'].map(n => ({ namePrefix: n }))), optionalServices: BLE_SVCS });
   }
-  await bleAttach(k, dev); return dev.name;
+  // Bấm nối tay: dừng tự nối nền, huỷ lệnh nối đang treo rồi mới nối (iPhone kẹt nếu nối chồng)
+  const b = slots[k];
+  b.manual = true; b.gen = (b.gen || 0) + 1; b.reconnecting = false; retry[k] = 0;
+  try {
+    [b.dev, dev].forEach(d => { if (d && !(d.gatt && d.gatt.connected && b.dev === d && b.ch)) try { d.gatt.disconnect(); } catch (e) { /* bỏ qua */ } });
+    if (isIOS()) await sleep(400);
+    try { await bleAttach(k, dev); }
+    catch (e) { await sleep(800); try { dev.gatt.disconnect(); } catch (x) { /* bỏ qua */ } await sleep(300); await bleAttach(k, dev); } // thử lại 1 lần
+  } finally { b.manual = false; }
+  return dev.name;
 }
 /* Mở lại trang: nối lại máy đã chọn trước (nếu trình duyệt cho), không thì phải bấm Kết nối */
 async function bleRestore(k) {
