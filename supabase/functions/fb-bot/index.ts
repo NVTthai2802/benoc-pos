@@ -89,6 +89,7 @@ export type Draft = {
 export type AiOut = {
   intent?: string; items?: { m: number; qty?: number; choices?: number[]; note?: string }[]; unknown?: string[];
   dine_type?: string | null; date?: string | null; time?: string | null; address?: string | null; phone?: string | null; name?: string | null; note?: string | null; answer?: string | null;
+  _model?: string;   // máy chủ gắn thêm: model nào đã đọc (không phải AI trả)
 };
 
 /* Kiểm lại kết quả AI theo menu thật: món phải có, lựa chọn phải thuộc nhóm của món, đủ số lượng tối thiểu */
@@ -244,7 +245,7 @@ const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-
 export const aiProvider = () => (env('AI_PROVIDER') || (env('GEMINI_API_KEY') && !env('ANTHROPIC_API_KEY') ? 'gemini' : 'claude')).toLowerCase();
 export async function askAi(system: string, user: string): Promise<AiOut> {
   const provider = aiProvider();
-  let text = '';
+  let text = '', used = '';
   if (provider === 'gemini') {
     // Model không có / không được dùng (404, 403) thì thử model kế tiếp
     const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : GEMINI_MODELS;
@@ -254,7 +255,7 @@ export async function askAi(system: string, user: string): Promise<AiOut> {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
         body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }),
       });
-      if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; break; }
+      if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model; break; }
       err = 'Gemini ' + model + ' ' + r.status + ': ' + (await r.text()).slice(0, 300);
       if (r.status !== 404 && r.status !== 403 && r.status !== 400) break;
     }
@@ -265,9 +266,9 @@ export async function askAi(system: string, user: string): Promise<AiOut> {
       body: JSON.stringify({ model: env('CLAUDE_MODEL', 'claude-haiku-5-5'), max_tokens: 1500, temperature: 0, system, messages: [{ role: 'user', content: user }] }),
     });
     if (!r.ok) throw new Error('Claude ' + r.status + ': ' + (await r.text()).slice(0, 300));
-    const j = await r.json(); text = (j?.content || []).map((c: any) => c.text || '').join('');
+    const j = await r.json(); text = (j?.content || []).map((c: any) => c.text || '').join(''); used = env('CLAUDE_MODEL', 'claude-haiku-5-5');
   }
-  return parseJson(text);
+  return Object.assign(parseJson(text), { _model: used });
 }
 
 // ---------------------------------------------------------------------
@@ -304,6 +305,112 @@ export async function verifySignature(raw: string, header: string | null, secret
   if (got.length !== hex.length) return false;
   let diff = 0; for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ got.charCodeAt(i);
   return diff === 0;
+}
+
+// ---------------------------------------------------------------------
+// Dữ liệu huấn luyện: mỗi lượt AI đọc tin khách lưu 1 mẫu vào fb_train (cập nhật 24),
+// ĐÃ ẩn tên, SĐT, địa chỉ, số tài khoản. Khi chủ quán duyệt đơn, SQL gắn thêm đáp án đúng.
+// Dùng để đo AI đọc đúng bao nhiêu % và sau này tự huấn luyện mô hình riêng của quán.
+// ---------------------------------------------------------------------
+const foldChar = (c: string) => (c.length > 1 ? c : c === 'đ' || c === 'Đ' ? 'd' : c.normalize('NFD').charAt(0).toLowerCase());
+/* Bỏ dấu + chữ thường, giữ nguyên độ dài để cắt đúng chỗ trong chuỗi gốc */
+export const fold = (s: string) => Array.from(String(s).normalize('NFC')).map(foldChar).join('');
+
+const PHONE_RE = /(?<![\d])(?:\+?84|0)(?:[\s.\-]?\d){9}(?![\d])/g;
+const EMAIL_RE = /[\w.+\-]+@[\w\-]+\.[\w.\-]+/g;
+const LONGNUM_RE = /(?<![\d])\d{9,}(?![\d])/g;
+const NAME_STOP = new Set(['mai', 'nam', 'long', 'anh', 'chi', 'em', 'hoa', 'bao', 'minh', 'thanh', 'trang', 'hanh']); // tên trùng từ thường dùng: không cắt từng chữ
+const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export function menuWords(menu: Menu): Set<string> {
+  const w = new Set<string>();
+  const add = (s: string) => fold(s).split(/[^\p{L}\p{N}]+/u).forEach(x => x && w.add(x));
+  for (const it of menu.items) add(it.name);
+  for (const g of menu.groups.values()) for (const c of g.choices) add(c.name);
+  return w;
+}
+
+/* Trả về hàm ẩn thông tin cá nhân. Cắt chắc chắn: SĐT, email, dãy số dài, địa chỉ + tên đã biết.
+   Chỉ là "cố gắng hết sức": dữ liệu vẫn nằm trong Supabase của quán, đừng đăng công khai. */
+export function anonymizer(o: { names?: (string | null | undefined)[]; addresses?: (string | null | undefined)[]; words?: Set<string> }) {
+  const names = [...new Set((o.names || []).map(x => String(x || '').trim()).filter(x => Array.from(x).length >= 2))];
+  const addrs = [...new Set((o.addresses || []).map(x => String(x || '').trim()).filter(x => x.length >= 5))].sort((a, b) => b.length - a.length);
+  const words = o.words || new Set<string>();
+  const tokens = [...new Set(names.flatMap(n => n.split(/\s+/)))].filter(t => Array.from(t).length >= 3 && !NAME_STOP.has(fold(t)) && !words.has(fold(t)));
+  return (text: string | null | undefined): string => {
+    let t = String(text ?? '').normalize('NFC');
+    const blank = (needle: string, tag: string) => {
+      const f = fold(needle).trim(); if (f.length < 2) return;
+      const ft = fold(t); let res = '', i = 0;
+      for (let j = ft.indexOf(f); j >= 0; j = ft.indexOf(f, i)) { res += t.slice(i, j) + tag; i = j + f.length; }
+      t = res + t.slice(i);
+    };
+    t = t.replace(PHONE_RE, '<SDT>').replace(LONGNUM_RE, '<SO>').replace(EMAIL_RE, '<EMAIL>');
+    for (const a of addrs) blank(a, '<DIA_CHI>');
+    for (const n of names) blank(n, '<TEN>');
+    for (const tok of tokens) t = t.replace(new RegExp('(?<![\\p{L}\\p{N}])' + reEsc(tok.normalize('NFC')) + '(?![\\p{L}\\p{N}])', 'gu'), '<TEN>');
+    return t;
+  };
+}
+
+/* Đơn nháp → dạng lưu làm mẫu (không có địa chỉ, SĐT, tên thật) */
+export function stateOf(d: Draft, anon: (s: string | null | undefined) => string) {
+  const at = d.at ? new Date(d.at) : null;
+  return {
+    items: d.items.map(i => ({ menu_item_id: i.menu_item_id, name: i.name, qty: i.qty, choice_ids: i.choice_ids, choices: i.choices, note: i.note ? anon(i.note) : null })),
+    unknown: d.unknown.map(anon), dine_type: d.dine_type, date: at ? vnDate(at) : null, time: at ? vnTime(at) : null,
+    address: d.address ? '<DIA_CHI>' : null, phone: d.customer_phone ? '<SDT>' : null, note: d.note ? anon(d.note) : null,
+  };
+}
+
+export function trainSample(o: {
+  thread: string; draftId?: string | null; now: Date; convo: { sender: string; text: string; at: string }[];
+  anon: (s: string | null | undefined) => string; before: ReturnType<typeof stateOf>; after: Draft | null; ai: AiOut; model: string; menuHash: string;
+}) {
+  const intent = ['order', 'question', 'human', 'other'].includes(String(o.ai.intent)) ? String(o.ai.intent) : 'order';
+  return {
+    thread_hash: o.thread, draft_id: o.draftId || null, now_vn: vnDate(o.now) + ' ' + vnTime(o.now),
+    convo: o.convo.slice(-12).map(m => ({ s: m.sender, h: vnTime(new Date(m.at)), t: o.anon(m.text) })),
+    state_before: o.before, intent,
+    target: o.after && intent !== 'human' ? Object.assign(stateOf(o.after, o.anon), { name: o.ai.name ? '<TEN>' : null }) : null,
+    answer: intent === 'question' && o.ai.answer ? o.anon(o.ai.answer) : null,
+    model: o.model || null, menu_hash: o.menuHash,
+  };
+}
+
+async function sha(s: string) {
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+  return [...h].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+/* Mã băm của PSID: gom mẫu cùng 1 khách, nhưng không lần ngược ra khách */
+export const threadHash = async (psid: string) => (await sha('thread:' + psid + ':' + (env('FB_APP_SECRET') || 'benoc'))).slice(0, 16);
+
+const knownMenus = new Set<string>();
+/* Lưu mẫu. Lỗi gì cũng chỉ ghi log, không làm hỏng việc trả lời khách */
+async function saveSample(sb: SupabaseClient, row: Record<string, unknown>, menuRaw: any[]) {
+  try {
+    const { data: st, error: e0 } = await sb.from('shop_settings').select('fb_train_on').eq('id', 1).maybeSingle();
+    if (e0 || (st && st.fb_train_on === false)) return;   // chưa chạy cập nhật 24, hoặc chủ quán tắt lưu dữ liệu
+    const hash = String(row.menu_hash);
+    if (!knownMenus.has(hash)) {
+      const { error } = await sb.from('fb_train_menu').upsert({ hash, menu: menuRaw }, { onConflict: 'hash', ignoreDuplicates: true });
+      if (error) throw error; knownMenus.add(hash);
+    }
+    const { error } = await sb.from('fb_train').insert(row);
+    if (error) throw error;
+  } catch (e) { console.error('Lưu mẫu huấn luyện lỗi', e); }
+}
+
+/* Khách nhắn "xoá dữ liệu của tôi" (như chính sách riêng tư đã hứa) */
+export function isForgetRequest(text: string) {
+  const f = fold(text).trim();
+  return f.length <= 80 && /xoa\s+(het\s+|toan\s+bo\s+)?(du\s*lieu|thong\s*tin|tin\s*nhan)\s+(cua\s+)?(toi|minh|em|tui|con)\b/.test(f);
+}
+async function forgetThread(sb: SupabaseClient, psid: string) {
+  const { data: pend } = await sb.from('fb_drafts').select('id').eq('psid', psid).eq('status', 'cho_duyet').limit(1);
+  await sb.from('fb_train').delete().eq('thread_hash', await threadHash(psid));
+  await sb.from('fb_threads').delete().eq('psid', psid);   // tin nhắn và đơn nháp xoá theo
+  return !!(pend && pend.length);
 }
 
 // ---------------------------------------------------------------------
@@ -372,7 +479,7 @@ async function botSay(sb: SupabaseClient, psid: string, text: string, quick: str
   await sb.from('fb_messages').insert({ psid, sender: 'bot', text });
 }
 
-async function handleThread(sb: SupabaseClient, psid: string) {
+export async function handleThread(sb: SupabaseClient, psid: string) {
   const now = new Date();
   const [{ data: th }, { data: st }] = await Promise.all([
     sb.from('fb_threads').select('*').eq('psid', psid).single(),
@@ -405,9 +512,16 @@ async function handleThread(sb: SupabaseClient, psid: string) {
     await botSay(sb, psid, 'Dạ em đã nhận ' + lastK.slice(1, -1) + ', em báo chủ quán xem ngay ạ.', null); return;
   }
   if (lastK === '[sticker]') return;
+  if (isForgetRequest(lastK)) { // “xoá dữ liệu của tôi” như chính sách riêng tư đã hứa
+    const hadPending = await forgetThread(sb, psid);
+    await fbSend(psid, 'Dạ em đã xoá tin nhắn và thông tin đặt món của mình rồi ạ.' + (hadPending ? ' Đơn đang chờ quán xác nhận cũng đã huỷ, mình cần đặt thì nhắn lại em nha.' : '') +
+      ' Hoá đơn quán đã xác nhận thì quán vẫn phải lưu để đối soát doanh thu, mình thông cảm nha 🙏', null);
+    return;
+  }
 
   await fbAction(psid, 'typing_on');
-  const menu = buildMenu((await sb.rpc('get_menu')).data || []);
+  const menuRaw: any[] = (await sb.rpc('get_menu')).data || [];
+  const menu = buildMenu(menuRaw);
   let ai: AiOut;
   try {
     const appr = approved ? draftSummary(approved as Draft, now).replace(/\n/g, '; ') : null;
@@ -418,10 +532,21 @@ async function handleThread(sb: SupabaseClient, psid: string) {
     await botSay(sb, psid, 'Dạ em ghi nhận tin nhắn của mình, chủ quán sẽ trả lời mình ngay ạ.', null); return;
   }
 
+  // Chuẩn bị mẫu huấn luyện (chụp đơn TRƯỚC khi applyAi sửa vào d). Lưu sau khi đã trả lời khách.
+  const anon = anonymizer({ names: [th.name, d.customer_name, ai.name], addresses: [d.address, ai.address], words: menuWords(menu) });
+  const stateBefore = stateOf(d, anon);
+  const log = async (after: Draft | null, draftId?: string | null) => {
+    try {
+      const menuHash = (await sha(JSON.stringify(menuRaw))).slice(0, 16);
+      await saveSample(sb, trainSample({ thread: await threadHash(psid), draftId, now, convo, anon, before: stateBefore, after, ai, model: ai._model || aiProvider(), menuHash }), menuRaw);
+    } catch (e) { console.error('Chuẩn bị mẫu lỗi', e); }
+  };
+
   if (ai.intent === 'human') {
     const mins = Number(env('BOT_PAUSE_MINUTES', '30')) || 30;
     await sb.from('fb_threads').update({ need_human: true, paused_until: new Date(now.getTime() + mins * 60e3).toISOString() }).eq('psid', psid);
-    await botSay(sb, psid, 'Dạ em báo chủ quán trả lời mình ngay ạ, mình đợi em chút nha.', null); return;
+    await botSay(sb, psid, 'Dạ em báo chủ quán trả lời mình ngay ạ, mình đợi em chút nha.', null);
+    await log(null, d.id); return;
   }
   const before = JSON.stringify({ i: d.items, t: d.dine_type, a: d.at, ad: d.address, p: d.customer_phone });
   d.asked = d.asked || [];
@@ -435,7 +560,7 @@ async function handleThread(sb: SupabaseClient, psid: string) {
   if (ai.intent !== 'question' && ((wasPending && !changed) || (nothing && !firstBot))) {
     await botSay(sb, psid, wasPending ? 'Dạ đơn của mình đang chờ quán xác nhận ạ, có gì em nhắn mình ngay nha 🥰'
       : approved ? 'Dạ em cảm ơn mình ạ 🥰 Đơn của mình quán đã xác nhận rồi nha.' : 'Dạ mình muốn đặt món cứ nhắn em món ăn, đồ uống, qua lấy / ăn tại quán / ship và giờ hẹn nha 🥰', null);
-    return;
+    await log(d, d.id); return;
   }
   const r = composeReply(d, miss, { now, first: firstBot, name: firstName, answer: ai.intent === 'question' ? ai.answer : null, wasPending, changed, open, close, hello: st.fb_hello });
   const row: any = {
@@ -445,11 +570,13 @@ async function handleThread(sb: SupabaseClient, psid: string) {
     changed_after: wasPending && changed ? true : (d.changed_after || false),
   };
   const hasSomething = d.items.length || d.dine_type || d.at || d.unknown.length;
+  let draftId: string | null = d.id || null;
   if (hasSomething || d.id) {
     if (d.id) await sb.from('fb_drafts').update(row).eq('id', d.id);
-    else await sb.from('fb_drafts').insert(row);
+    else { const { data: ins } = await sb.from('fb_drafts').insert(row).select('id').single(); draftId = ins?.id || null; }
   }
   await botSay(sb, psid, r.text, r.quick);
+  await log(d, draftId);
 }
 
 // ---------------------------------------------------------------------

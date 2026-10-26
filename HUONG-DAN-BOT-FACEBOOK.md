@@ -18,6 +18,7 @@ Khách thiếu ý nào bot hỏi lại đúng ý đó. Đủ rồi, đơn hiện
 | Việc | Trạng thái |
 |---|---|
 | Chạy SQL cập nhật 21 (mã vạch kho) và 22 (đơn Facebook) trên Supabase TEST | ✅ Đã xong |
+| Chạy SQL cập nhật 24 (dữ liệu huấn luyện) trên Supabase TEST, đưa lại bot `fb-bot` bản mới | ⬜ Chưa (xem phần "Dữ liệu huấn luyện" cuối file) |
 | Đưa bot `fb-bot` lên Supabase TEST, tắt Verify JWT | ✅ Đã xong |
 | Trang web test có tab Facebook, nút Quét mã | ✅ Đã xong |
 | Lấy khoá AI | ⬜ Bước 1 |
@@ -182,3 +183,25 @@ Thử thêm các trường hợp:
 4. Đổi link đặt món trên nick cá nhân thành `m.me/<tên Fanpage>` để khách chuyển sang nhắn Fanpage.
 
 Bot không tự tạo đơn thật: mọi đơn đều qua chủ quán duyệt, giá tính lại ở máy chủ theo menu và ưu đãi hiện tại.
+
+---
+
+## Dữ liệu huấn luyện (để sau này tự build mô hình)
+
+Bot đọc tin khách bằng AI API (Gemini / Claude). Để dần thay bằng mô hình của riêng quán, bot tự thu dữ liệu từ bây giờ.
+
+**Cài đặt (Supabase TEST):**
+1. Chạy `sql/cap-nhat-24-du-lieu-huan-luyen.sql` trong SQL Editor (chạy sau cập nhật 22).
+2. Đưa lại bot: Supabase → Edge Functions → `fb-bot` → dán code mới từ `supabase/functions/fb-bot/index.ts` → Deploy (vẫn tắt Verify JWT).
+
+**Bot lưu gì:** mỗi lượt AI đọc tin khách, bot lưu đoạn chat (đã ẩn tên, SĐT, địa chỉ, số tài khoản) + đơn đang ghi + đơn AI đọc ra. Chủ quán bấm **Duyệt** thì đơn đã duyệt được gắn vào làm **đáp án đúng**, kèm chỗ chủ quán phải sửa. Đơn bị huỷ không dùng làm đáp án.
+
+**Dùng thế nào:**
+- **Quản lý → Facebook → Cài đặt bot**: xem số mẫu, tỉ lệ bot đọc đúng, bật / tắt lưu, **Tải dữ liệu huấn luyện (.jsonl)**.
+- Đo AI đọc đúng bao nhiêu % và các bước tự build mô hình: `tools/train/README.md`.
+- Khách nhắn **“xoá dữ liệu của tôi”**: bot xoá tin nhắn, đơn nháp và mẫu huấn luyện của khách đó rồi nhắn lại xác nhận (hoá đơn đã duyệt vẫn giữ để đối soát doanh thu).
+
+**Lưu ý riêng tư:**
+- Việc ẩn tên, SĐT, địa chỉ là cố gắng hết sức, không đảm bảo tuyệt đối. File tải về chỉ để bạn dùng, đừng đăng công khai.
+- Khi còn dùng API, tin nhắn khách vẫn gửi cho Google / Anthropic. Gemini gói miễn phí có thể dùng dữ liệu để cải thiện sản phẩm; muốn tránh thì bật **Cloud Billing** cho khoá Gemini hoặc dùng Claude API.
+- Trang chính sách riêng tư (`chinh-sach.html`) đã ghi rõ việc lưu dữ liệu huấn luyện và cách xoá.
