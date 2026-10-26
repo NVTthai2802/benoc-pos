@@ -132,6 +132,29 @@ Deno.test('Gemini: chỉ có GEMINI_API_KEY → tự dùng Gemini, model không 
   assertEquals(seen, ['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
 });
 
+Deno.test('Gemini quá tải (503) → thử model kế; cả lượt quá tải → đợi rồi thử lại; sai khoá (401) → dừng', async () => {
+  Deno.env.set('GEMINI_API_KEY', 'k'); Deno.env.delete('ANTHROPIC_API_KEY'); Deno.env.delete('AI_PROVIDER'); Deno.env.delete('GEMINI_MODEL');
+  const real = globalThis.fetch; const ok = () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"intent":"order","items":[]}' }] } }] }), { status: 200 });
+  const model = (url: string) => String(url).split('/models/')[1].split(':')[0];
+  try {
+    let seen: string[] = [];
+    globalThis.fetch = (async (url: string) => { seen.push(model(url)); return seen.length === 1 ? new Response('overloaded', { status: 503 }) : ok(); }) as typeof fetch;
+    const a = await bot.askAi('s', 'u');
+    assertEquals([a.intent, a._model], ['order', 'gemini-3.5-flash-lite']);
+
+    seen = [];
+    globalThis.fetch = (async (url: string) => { seen.push(model(url)); return seen.length <= 3 ? new Response('busy', { status: seen.length === 2 ? 429 : 503 }) : ok(); }) as typeof fetch;
+    const b = await bot.askAi('s', 'u');
+    assertEquals(seen, ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-flash']);
+    assertEquals(b._model, 'gemini-3.8-flash');
+
+    seen = [];
+    globalThis.fetch = (async (url: string) => { seen.push(model(url)); return new Response('bad key', { status: 401 }); }) as typeof fetch;
+    let threw = false; try { await bot.askAi('s', 'u'); } catch (_) { threw = true; }
+    assert(threw); assertEquals(seen, ['gemini-3.8-flash']);
+  } finally { globalThis.fetch = real; }
+});
+
 Deno.test('ẩn thông tin cá nhân trước khi lưu mẫu', () => {
   const anon = bot.anonymizer({ names: ['Nguyễn Lan', null], words: bot.menuWords(menu) });
   assertEquals(anon('sdt 0912.345.678 nhé'), 'sdt <SDT> nhé');

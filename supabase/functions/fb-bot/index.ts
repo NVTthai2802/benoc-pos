@@ -242,22 +242,36 @@ export function parseJson(t: string): AiOut {
 }
 
 const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+const AI_TIMEOUT_MS = 20000;   // 1 lần gọi AI quá 20 giây thì bỏ, thử model khác
+const AI_RETRY_MS = 2000;      // mọi model đều quá tải: đợi 2 giây rồi thử lại 1 vòng
 export const aiProvider = () => (env('AI_PROVIDER') || (env('GEMINI_API_KEY') && !env('ANTHROPIC_API_KEY') ? 'gemini' : 'claude')).toLowerCase();
 export async function askAi(system: string, user: string): Promise<AiOut> {
   const provider = aiProvider();
   let text = '', used = '';
   if (provider === 'gemini') {
-    // Model không có / không được dùng (404, 403) thì thử model kế tiếp
+    // Model lỗi (không có, quá tải 503, hết lượt 429, chậm quá) thì thử model kế tiếp. Cả lượt đều quá tải: đợi chút, thử lại 1 vòng.
+    // Sai khoá (401) thì dừng luôn.
     const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : GEMINI_MODELS;
     let err = '';
-    for (const model of models) {
-      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }),
-      });
-      if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model; break; }
-      err = 'Gemini ' + model + ' ' + r.status + ': ' + (await r.text()).slice(0, 300);
-      if (r.status !== 404 && r.status !== 403 && r.status !== 400) break;
+    for (let round = 0; round < 2 && !used; round++) {
+      if (round) await new Promise(r => setTimeout(r, AI_RETRY_MS));
+      let retry = false;
+      for (const model of models) {
+        let r: Response;
+        try {
+          r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+            method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }),
+            signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+          });
+        } catch (e) { err = 'Gemini ' + model + ': ' + String((e as Error)?.name === 'TimeoutError' ? 'quá ' + AI_TIMEOUT_MS / 1000 + ' giây' : e); retry = true; console.warn(err); continue; }
+        if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model; break; }
+        err = 'Gemini ' + model + ' ' + r.status + ': ' + (await r.text()).slice(0, 300);
+        console.warn(err);
+        if (r.status === 401) { retry = false; break; }
+        if (r.status === 429 || r.status >= 500) retry = true;
+      }
+      if (!retry) break;
     }
     if (err) throw new Error(err);
   } else {
