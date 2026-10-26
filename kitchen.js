@@ -58,6 +58,8 @@ function start() {
   // Mở Quản lý / Đơn giao hàng / nơi khác đè lên trên, không rời trang này → máy in Bluetooth vẫn nối, vẫn tự in
   $('#app').querySelector('.topbar').addEventListener('click', e => {
     const a = e.target.closest('a[href]'); if (!a || a.target || e.ctrlKey || e.metaKey) return;
+    // Chuyển Bếp ↔ Pha chế: đi thẳng sang trang kia (khung con không dùng được Bluetooth, và không cần nút quay lại)
+    if (/(^|\/)(bep|phache)(\.html)?($|[?#])/.test(a.getAttribute('href'))) return;
     e.preventDefault(); openOverlay(a.getAttribute('href'));
   });
   if (BN.FEATURES.print) {

@@ -1471,6 +1471,7 @@ if (window.BENOC_ENV === 'test' && !DEMO) {
     const a = e.target.closest && e.target.closest('a[href]'); if (!a || a.target) return;
     let u; try { u = new URL(a.href, location.href); } catch (err) { return; }
     if (u.origin === location.origin && u.pathname.replace(/\.html$/, '') === host.page) { e.preventDefault(); host.close(); }
+    else if (u.origin === location.origin && /\/(bep|phache)(\.html)?$/.test(u.pathname)) { e.preventDefault(); window.top.location.href = u.href; } // sang màn hình kia: đi thẳng, không mở lồng
   }, true);
 })();
 })();
