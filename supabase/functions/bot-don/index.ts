@@ -89,7 +89,7 @@ export type Draft = {
 export type AiOut = {
   intent?: string; items?: { m: number; qty?: number; choices?: number[]; note?: string }[]; unknown?: string[];
   dine_type?: string | null; date?: string | null; time?: string | null; address?: string | null; phone?: string | null; name?: string | null; note?: string | null; answer?: string | null;
-  same_order?: boolean; khach?: string | null; convo?: { s: string; t: string }[]; nguon?: string | null; anh?: number[]; orders?: AiOut[];
+  same_order?: boolean; khach?: string | null; nguon_ly_do?: string | null; convo?: { s: string; t: string }[]; nguon?: string | null; anh?: number[]; orders?: AiOut[];
   _model?: string;   // máy chủ gắn thêm: model nào đã đọc (không phải AI trả)
 };
 
@@ -174,15 +174,18 @@ Bây giờ là ${vnTime(now)} ${vnWeekday(now)} ngày ${vnDate(now)} (giờ Vi�
 Chủ quán gửi cho bạn MỘT trong hai loại:
 (a) ẢNH CHỤP MÀN HÌNH đoạn chat đặt món giữa quán và MỘT khách (Messenger / Facebook / Zalo), có thể nhiều ảnh, theo thứ tự cũ → mới; đôi khi là ảnh chụp lại màn hình điện thoại bằng máy khác (nghiêng, loá, màn hình nứt) → vẫn đọc phần chữ trong khung chat. Ảnh vừa chụp, nên "chiều nay", "tối nay" là hôm nay; tin có mốc giờ / ngày thì dựa vào đó.
 NHẬN DIỆN GIAO DIỆN (để biết tin nào của khách, tin nào của quán):
-- MESSENGER (Facebook): đầu màn hình có ảnh đại diện + tên người đang chat (có thể kèm "Đoạn chat kinh doanh", "Đang hoạt động"), nút gọi điện và chữ (i) bên phải; tin của người cầm máy nằm bên PHẢI, bong bóng XANH DƯƠNG đậm; tin của người kia nằm bên TRÁI, bong bóng XÁM (nền tối thì xám đậm) kèm ảnh đại diện nhỏ; ô nhập "Nhắn tin" / "Aa", nút like 👍 xanh.
-- ZALO: thanh trên cùng màu XANH (có mũi tên quay lại, tên người chat, có thể ghi "Tài khoản Bot" / "Vừa truy cập"); nền xanh xám nhạt; tin của người cầm máy bên PHẢI, bong bóng XANH NHẠT; tin của người kia bên TRÁI, bong bóng TRẮNG kèm ảnh đại diện; giờ nhỏ dưới mỗi tin ("15:34"), dải giữa màn hình kiểu "17:37 Hôm nay"; ô nhập "Tin nhắn".
+PHÂN BIỆT ZALO / MESSENGER — màu XANH xuất hiện ở CẢ HAI app nên KHÔNG được dựa vào "có màu xanh". Dựa vào các dấu hiệu sau, đếm dấu hiệu rồi kết luận:
+- ZALO: (1) thanh tiêu đề trên cùng TÔ NỀN XANH DƯƠNG đặc, chữ trắng, có mũi tên "<" + tên + 3 biểu tượng bên phải: ống nghe, camera quay phim, và biểu tượng DANH SÁCH ≡ (3 gạch); (2) GIỜ nằm BÊN TRONG bong bóng, ngay dưới chữ ("09:16", "09:29"); (3) bong bóng chữ nhật bo tròn nhẹ, tin của người cầm máy màu XANH NHẠT (xanh baby), tin người kia màu TRẮNG, nền khung chat xám-xanh nhạt; (4) thanh giữa màn hình kiểu "09:14 Hôm nay" nằm trong viên thuốc xám; (5) ô nhập ghi "Tin nhắn", icon mặt cười/sticker bên trái, "…", micro, ảnh bên phải; (6) tin trích dẫn có vạch xanh dọc + tên + nội dung trích; thả tim ❤️ có số bên cạnh; có "Đặt nhắc hẹn", "Đã nhận", "Đã xem".
+- MESSENGER: (1) thanh tiêu đề NỀN TRẮNG (hoặc đen khi chế độ tối), có ảnh đại diện tròn + tên (+ "Đang hoạt động" / "Đoạn chat kinh doanh"), biểu tượng gọi / video / (i) màu xanh hoặc tím; (2) GIỜ KHÔNG nằm trong bong bóng, chỉ hiện thành dòng giữa màn hình ("Thứ Hai 09:16") hoặc khi bấm vào tin; (3) bong bóng bo TRÒN nhiều (viên thuốc), tin của người cầm máy màu XANH DƯƠNG ĐẬM / tím-xanh chữ trắng, tin người kia màu XÁM kèm ảnh đại diện nhỏ; (4) ô nhập ghi "Nhắn tin" hoặc "Aa", có nút "+", camera, mic, nút like 👍 xanh; (5) có "Đã gửi" / "Đã xem" kiểu ảnh đại diện nhỏ ở cuối.
+- Thanh tiêu đề xanh đặc + giờ trong bong bóng + bong bóng của người cầm máy xanh NHẠT = ZALO (chữ đen), dù có nhiều màu xanh. Bong bóng của người cầm máy xanh ĐẬM chữ TRẮNG + tiêu đề trắng = MESSENGER.
+- Ảnh chụp lại màn hình bằng máy khác (nghiêng, loá, vỡ màn) vẫn áp dụng các dấu hiệu trên; không chắc thì nguon = "khac", KHÔNG đoán.
 - AI CẦM MÁY: tên ở ĐẦU màn hình là người ĐANG CHAT VỚI người cầm máy.
 - TÊN KHÁCH CHỈ LẤY Ở THANH TIÊU ĐỀ trên cùng màn hình. Tên in đậm trong KHUNG TRÍCH DẪN (khung có vạch dọc, hiện khi ai đó "trả lời" một tin nhắn, ví dụ "Hồng Ngọc / C ship cổng phụ nhé") là tên NGƯỜI GỬI tin được trích — rất hay là chính chủ quán — KHÔNG phải tên khách. Tên dưới ảnh đại diện nhỏ cạnh bong bóng cũng không dùng. Tên trong khung trích dẫn thuộc bên QUÁN (hoặc trùng tên đầu màn hình) thì tuyệt đối không đưa vào khach / name.
   * Đầu màn hình là tên khách (không phải "Bé Nốc") → ảnh chụp từ máy QUÁN: bên PHẢI = QUÁN, bên TRÁI = KHÁCH, khach = tên đó.
   * Đầu màn hình là "Bé Nốc", "Bé Nốc Ăn Vặt"… → ảnh chụp từ máy KHÁCH: bên PHẢI = KHÁCH, bên TRÁI = QUÁN / bot; khach = null (trừ khi khách tự xưng tên).
 - Tin trả lời tự động của bot cũ ("Em ghi nhận đơn của mình…", "Dạ em ghi nhận tin nhắn của mình, chủ quán sẽ trả lời…", "Dạ mình muốn đặt món cứ nhắn em…", "Giờ hẹn … đã qua rồi…") là của QUÁN, chỉ là tóm tắt, KHÔNG phải món khách gọi thêm.
 - Khách nhắn "đặt đơn mới", "đơn khác", "huỷ đơn kia" → BỎ các món trước câu đó, chỉ lấy đơn mới phía sau.
-- nguon: "messenger" nếu giao diện Messenger / Facebook, "zalo" nếu giao diện Zalo, "khac" nếu không nhận ra. Tin chữ của chủ quán → null.
+- nguon: "messenger" nếu giao diện Messenger / Facebook, "zalo" nếu giao diện Zalo, "khac" nếu không nhận ra. Làm theo mục PHÂN BIỆT ZALO / MESSENGER; ghi 1 câu ngắn lý do vào "nguon_ly_do" (vd "tiêu đề xanh đặc, giờ trong bong bóng"). Tin chữ của chủ quán → null.
 - GHI CHÚ: yêu cầu riêng của từng món ("thêm trứng" nếu không có lựa chọn tương ứng, "nhiều tương", "ít cay", "không hành") ghi vào note của ĐÚNG món đó; yêu cầu chung cả đơn ("lấy thêm đũa", "gọi trước khi giao", "để ở bảo vệ") ghi vào note của đơn.
 
 NHIỀU ẢNH / NHIỀU KHÁCH:
@@ -227,7 +230,7 @@ QUY TẮC:
 - intent: "order" bình thường; "khong_phai_don" nếu ảnh không phải đoạn chat đặt món (ảnh món ăn, ảnh chuyển khoản, ảnh mờ không đọc được…).
 
 Chỉ trả về đúng một object JSON dạng {"orders":[ … ]}, mỗi phần tử là MỘT đơn (một khách); tin chữ của chủ quán thì "orders" có đúng 1 phần tử. Không giải thích. Mẫu một đơn:
-{"anh":[1],"intent":"order","same_order":false,"nguon":"messenger","khach":null,"convo":[{"s":"khach","t":"..."}],"items":[{"m":1,"qty":2,"choices":[],"note":null}],"unknown":[],"dine_type":null,"date":null,"time":null,"address":null,"phone":null,"name":null,"note":null}`;
+{"anh":[1],"intent":"order","same_order":false,"nguon":"messenger","nguon_ly_do":"...","khach":null,"convo":[{"s":"khach","t":"..."}],"items":[{"m":1,"qty":2,"choices":[],"note":null}],"unknown":[],"dine_type":null,"date":null,"time":null,"address":null,"phone":null,"name":null,"note":null}`;
 }
 
 export function userPrompt(o: { cur: Draft | null; nImages: number; text?: string | null; caption?: string | null }) {
@@ -639,7 +642,7 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
     if (same && mergeUsed) same = false; if (same) mergeUsed = true;
     return placeOne(sb, m, now, { menu, menuRaw, open, close, cur, same, ai, imgs: o.imgs, src, tm, multi: real.length > 1 });
   }));
-  console.log('⏱ ' + (src.refs ? src.refs.length + ' ảnh → ' + real.length + ' đơn' : 'chữ') + ' · ' + tm.join(' · ') + ' · tổng ' + (Date.now() - t0) + 'ms (' + (orders[0]?.out._model || '') + ')');
+  console.log('⏱ ' + (src.refs ? src.refs.length + ' ảnh → ' + real.length + ' đơn' : 'chữ') + ' · ' + tm.join(' · ') + (src.refs ? ' · nguồn: ' + real.map(o => (o.out.nguon || '?') + '(' + String(o.out.nguon_ly_do || '').slice(0, 80) + ')').join('; ') : '') + ' · tổng ' + (Date.now() - t0) + 'ms (' + (orders[0]?.out._model || '') + ')');
 }
 
 const ai0Khach = (a: AiOut) => !!String(a.khach || '').trim();
