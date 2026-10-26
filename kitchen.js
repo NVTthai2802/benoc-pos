@@ -2,8 +2,8 @@
    MÀN HÌNH BẾP / QUẦY PHA CHẾ — dùng chung một mã.
    Trang đặt window.BENOC_STATION = 'bep' | 'pha_che' trước khi nạp file này.
    - Mỗi nơi chỉ thấy và làm phần món của mình trong đơn.
-   - Mỗi quầy thu tiền đơn của mình: đơn gọi từ menu Trà · Cà phê do quầy pha chế thu,
-     đơn từ menu Ăn vặt do bếp thu. (Đơn lỡ có cả hai loại món thì bếp thu.)
+   - Bếp và pha chế thao tác giống nhau: nơi nào có món trong đơn cũng sửa đơn, thu tiền,
+     nhận đơn, huỷ được (menu khách là menu chung, một đơn thường có cả đồ ăn và đồ uống).
    ===================================================================== */
 (function () {
 'use strict';
@@ -26,7 +26,8 @@ const part = (o, st) => (o.stations || []).find(x => x.station === st) || null;
 const mine = o => part(o, STATION);
 /* Quầy thu tiền của đơn: đơn chỉ có đồ uống → quầy pha chế; còn lại → bếp */
 const payer = o => (o.stations || []).length && o.stations.every(x => x.station === 'pha_che') ? 'pha_che' : 'bep';
-const isMinePay = o => payer(o) === STATION;
+/* Nơi nào có món trong đơn cũng thu tiền / huỷ / thanh toán được (bếp và pha chế giống nhau) */
+const isMinePay = o => payer(o) === STATION || (o.stations || []).some(x => x.station === STATION);
 /* Đã thu tiền chưa: none = chưa thu, full = đã thu đủ, more = sửa đơn tăng tiền (thu thêm), refund = sửa đơn giảm tiền (trả lại) */
 const paidState = o => o.paid_amount == null ? 'none' : o.paid_amount === o.total ? 'full' : o.paid_amount < o.total ? 'more' : 'refund';
 const dueOf = o => o.total - (o.paid_amount || 0); // còn phải thu (âm = phải trả lại khách)

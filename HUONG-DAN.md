@@ -11,12 +11,11 @@ Hệ thống gồm 4 trang web, chạy trên mọi điện thoại, máy tính b
 
 Khi `config.js` để trống, cả 4 trang chạy ở **chế độ xem thử**: dữ liệu lưu trong trình duyệt, chỉ để thử giao diện.
 
-## Hai mã QR, hai menu
+## Một menu chung
 
-- **Mã QR bếp nóng** mở menu **Ăn vặt** (cơm trộn, mì trộn, kimbap, đồ ăn vặt, nước uống). Đơn về màn hình bếp, bếp thu tiền.
-- **Mã QR quầy pha chế** mở menu **Trà · Cà phê** (trà sữa, trà hoa quả, sốt khoai môn tươi, cà phê, matcha · cacao · khoai môn, món nên thử). Đơn về màn hình pha chế, quầy pha chế thu tiền.
-- Quét mã nào chỉ xem được menu đó (quét món ăn chỉ thấy món ăn, không có nút sang menu kia). Khách muốn gọi cả đồ uống thì quét thêm mã QR quầy pha chế; hai đơn dùng chung một số thẻ.
-- Món nào thuộc menu nào là theo **danh mục**. Đổi trong **Quản lý → Menu → Danh mục → Thuộc menu nào**.
+- Mọi mã QR (kể cả mã cũ của bếp và của quầy pha chế đã in) đều mở **một menu chung**: đồ ăn ở trên (cơm trộn, mì trộn, kimbap, đồ ăn vặt, nước uống), đồ uống ở dưới (trà sữa, trà hoa quả, cà phê, matcha…). Khách gọi cả đồ ăn và đồ uống trong một đơn.
+- Món nào làm ở đâu theo **danh mục** của món: danh mục của bếp → về màn hình **bếp**, danh mục của pha chế → về màn hình **pha chế**. Đơn có cả hai thì mỗi nơi thấy và làm phần của mình. Đổi trong **Quản lý → Menu → Danh mục → Thuộc menu nào**.
+- **Bếp và pha chế thao tác giống nhau**: nơi nào có món trong đơn cũng **Sửa đơn**, **Thu tiền**, **Nhận đơn**, **Huỷ** được. Thu tiền ở một nơi thì nơi kia thấy "Đã thu".
 
 ## Hai môi trường: Product và Test
 
