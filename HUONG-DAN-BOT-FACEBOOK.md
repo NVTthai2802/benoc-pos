@@ -27,7 +27,8 @@ Khách thiếu ý nào bot hỏi lại đúng ý đó. Đủ rồi, đơn hiện
 | Nối webhook Facebook với bot | ⬜ Bước 4 |
 | Kiểm tra, nhắn thử | ⬜ Bước 5, 6 |
 | PRODUCT: chạy SQL 21, 22, 24 | ✅ Đã xong 26/10 |
-| PRODUCT: đưa bot, nhập secret, đưa giao diện, đổi webhook | ⬜ Phần "Đưa lên PRODUCT" (P1 → P6) |
+| PRODUCT: đưa bot `fb-bot` (tắt Verify JWT), đưa giao diện mới | ✅ Đã xong 26/10 |
+| PRODUCT: nhập secret, đổi webhook Meta, kiểm tra | ⬜ Phần "Đưa lên PRODUCT" (P2, P4, P5, P6) |
 
 **Địa chỉ bot (dùng ở Bước 4):**
 ```
@@ -179,16 +180,16 @@ Thử thêm các trường hợp:
 
 ## Đưa lên PRODUCT (quán thật)
 
-**Đã xong (26/10/2026):** chạy SQL 21, 22, 24 trên Supabase Product (`benoc-pos`). 5 đơn cũ còn nguyên, chưa có gì đổi với quán.
+**Đã xong (26/10/2026):**
+- Chạy SQL 21, 22, 24 trên Supabase Product (`benoc-pos`). Đơn cũ còn nguyên.
+- Đưa bot `fb-bot` lên Product, đã **tắt Verify JWT**. Link `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` hiện "Bé Nốc fb-bot đang chạy".
+- Đưa giao diện mới lên https://benoc-pos.pages.dev/ (tab Facebook, nút Quét mã ở kho).
 
-Phần còn lại làm **đúng thứ tự** dưới đây.
+**Bạn làm tiếp:** P2 → P4 → P5 → P6 (P1, P3 đã xong, giữ lại để tham khảo khi cài lại).
 
-### P1. Đưa bot `fb-bot` lên Supabase Product
-1. Supabase → chọn project **benoc-pos** (không phải benoc-pos-test) → **Edge Functions** → **Deploy a new function** → **Via Editor**.
-2. Tên function: `fb-bot` (đúng chữ thường, có gạch nối).
-3. Xoá code mẫu, dán toàn bộ nội dung file `supabase/functions/fb-bot/index.ts` (nhánh `test`) → **Deploy function**.
-4. Vào **fb-bot → Details** (hoặc Settings): **tắt "Verify JWT"** → Save. Không tắt thì Facebook gọi vào bị lỗi 401.
-5. Mở `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` trên trình duyệt: phải hiện **"Bé Nốc fb-bot đang chạy"**.
+### P1. Đưa bot `fb-bot` lên Supabase Product ✅
+1. Supabase → project **benoc-pos** → **Edge Functions** → **Deploy a new function** → **Via Editor**, tên `fb-bot`, dán code `supabase/functions/fb-bot/index.ts` → **Deploy function**.
+2. **fb-bot → Settings**: tắt **Verify JWT** → **Save changes**.
 
 ### P2. Nhập secret cho Product
 Supabase **benoc-pos** → **Edge Functions → Secrets** (secret của Test không tự sang Product, phải nhập lại). Nhập 4 dòng, giá trị giống bên Test:
@@ -200,7 +201,7 @@ Supabase **benoc-pos** → **Edge Functions → Secrets** (secret của Test kh�
 | `FB_PAGE_TOKEN` | Page access token của Fanpage Bé Nốc |
 | `GEMINI_API_KEY` hoặc `ANTHROPIC_API_KEY` | khoá AI |
 
-### P3. Đưa giao diện mới lên quán
+### P3. Đưa giao diện mới lên quán ✅
 Trong thư mục code (Git Bash / Terminal), nhánh `test` đã commit sạch:
 ```
 bash scripts/dua-len-product.sh
@@ -209,7 +210,8 @@ Khoảng 1 phút sau, https://benoc-pos.pages.dev/ có tab **Facebook** và nút
 
 ### P4. Chuyển webhook Meta sang Product
 1. Meta for Developers → app của quán → **Messenger → Messenger API Settings → Configure webhooks → Edit**.
-2. Callback URL: `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` · Verify token: đúng `FB_VERIFY_TOKEN` vừa nhập ở P2 → **Verify and save**.
+2. Callback URL (URL gọi lại): `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/fb-bot` (**hixdacnax…**, không phải bsnpcinoc… của Test) · Verify token (mã xác minh): đúng `FB_VERIFY_TOKEN` vừa nhập ở P2 → **Verify and save**.
+   Báo "Không thể xác thực URL gọi lại hoặc mã xác minh": URL đang trỏ sang Test, hoặc chưa nhập `FB_VERIFY_TOKEN` ở Product, hoặc mã có dấu cách thừa.
 3. **App settings → Basic → Privacy Policy URL**: `https://benoc-pos.pages.dev/chinh-sach.html` → Save.
 
 Một app Meta chỉ có 1 Callback URL: chuyển sang Product thì bot Test thôi nhận tin. Muốn thử lại trên Test thì đổi URL về `https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/fb-bot`.
