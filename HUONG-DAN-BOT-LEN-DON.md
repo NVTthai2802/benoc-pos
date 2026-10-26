@@ -24,7 +24,8 @@ Bot không nhắn gì cho khách, nên không cần Meta duyệt app hay xác mi
 |---|---|
 | Viết bot `bot-don`, SQL cập nhật 25, tab Đơn online | ✅ Xong (15/15 bài thử bot, chạy thử SQL trên Postgres, thử giao diện) |
 | Gỡ bot Fanpage cũ (`fb-bot`) khỏi code | ✅ Xong |
-| Supabase TEST / PRODUCT: chạy SQL 25, đưa bot `bot-don` lên, tắt Verify JWT, gỡ `fb-bot` | xem mục **Đã cài** cuối file |
+| Supabase TEST và PRODUCT: chạy SQL 25, đưa bot `bot-don` lên, tắt Verify JWT, gỡ `fb-bot` | ✅ Xong 26/10 |
+| Giao diện mới (tab **Đơn online**) trên trang test và trang quán | ✅ Xong 26/10 |
 | Tạo bot Zalo, nhập `ZALO_BOT_TOKEN` | ⬜ Bước 1–2 |
 | Cài webhook, kết nối Zalo chủ quán | ⬜ Bước 3–4 |
 
@@ -105,11 +106,5 @@ Trang chính sách hứa: khách nhắn "xoá dữ liệu của tôi" thì quán
 
 Bot Fanpage tự trả lời (cập nhật 22) đã bỏ. Bảng dữ liệu cũ giữ nguyên, không ảnh hưởng.
 
-- Supabase (Test và Product): xoá function `fb-bot`; xoá secret `FB_VERIFY_TOKEN`, `FB_APP_SECRET`, `FB_PAGE_TOKEN` (không bắt buộc).
-- Meta for Developers: app **Bé Nốc Bot** → Messenger API Settings → bỏ Callback URL, hoặc xoá hẳn app. Huỷ bản gửi xét duyệt nếu đã gửi.
-
----
-
-## Đã cài
-
-(xem cập nhật cuối của file này)
+- ✅ Đã xoá function `fb-bot` trên Supabase Test và Product (code cũ vẫn còn trong lịch sử git).
+- Còn lại (không bắt buộc): xoá secret `FB_VERIFY_TOKEN`, `FB_APP_SECRET`, `FB_PAGE_TOKEN` trên Supabase; Meta for Developers → app **Bé Nốc Bot**: huỷ bản gửi xét duyệt, bỏ Callback URL hoặc xoá hẳn app.

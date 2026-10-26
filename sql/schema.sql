@@ -2136,4 +2136,12 @@ drop policy if exists don_anh_view on storage.objects;
 create policy don_anh_view on storage.objects for select to authenticated
   using (bucket_id = 'don-anh' and public.my_role() = 'owner');
 
+
+-- ===== CẬP NHẬT 26: đơn online hiện ngay (realtime) =====
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'fb_drafts') then
+    alter publication supabase_realtime add table fb_drafts;
+  end if;
+end $$;
+
 revoke all on all functions in schema private from public;
