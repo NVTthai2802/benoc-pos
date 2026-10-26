@@ -40,6 +40,17 @@ Deno.test('kiểm lại kết quả AI theo menu: giá, tuỳ chọn, thiếu g�
   assertMatch(bot.draftSummary(tmr, NOW), /Chủ nhật 25\/10 11:00/);
 });
 
+Deno.test('chế độ suy nghĩ: lite không gửi, 2.5 tắt, 3.x giảm; model không nhận thì gọi lại không có', async () => {
+  assertEquals(bot.thinkCfg('gemini-3.5-flash-lite'), null);
+  assertEquals(bot.thinkCfg('gemini-2.5-flash'), { thinkingBudget: 0 });
+  assertEquals(bot.thinkCfg('gemini-3.8-flash'), { thinkingLevel: 'low' });
+  gem(); const real = globalThis.fetch; const bodies: any[] = [];
+  Deno.env.set('GEMINI_MODEL', 'gemini-3.8-flash');
+  globalThis.fetch = (async (_u: string, init?: any) => { const b = JSON.parse(init.body); bodies.push(b); return b.generationConfig.thinkingConfig ? new Response('bad', { status: 400 }) : aiOk({ intent: 'order' }); }) as typeof fetch;
+  try { assertEquals((await bot.askAi('s', 'u'))._model, 'gemini-3.8-flash'); } finally { globalThis.fetch = real; Deno.env.delete('GEMINI_MODEL'); }
+  assertEquals(bodies.length, 2); assertEquals(bodies[1].generationConfig.thinkingConfig, undefined);
+});
+
 Deno.test('ghi chú chỉ lặp lại tuỳ chọn thì bỏ; ghi chú thật thì giữ', () => {
   const mi = menu.items.find(i => i.name === 'Mì nem chua rán')!;
   const them = mi.groups.find(g => g.title === 'Thêm mì')!.choices[0].id;
@@ -97,14 +108,15 @@ const gem = () => { Deno.env.set('GEMINI_API_KEY', 'k'); Deno.env.delete('ANTHRO
 Deno.test('Gemini: quá tải / không có model → thử model kế; sai khoá → dừng; ảnh gửi kèm', async () => {
   gem(); const real = globalThis.fetch; const model = (url: string) => String(url).split('/models/')[1].split(':')[0];
   try {
-    // tin chữ: model mạnh trước
+    // tin chữ: cũng model nhanh trước
     let tseen: string[] = [];
     globalThis.fetch = (async (url: string) => { tseen.push(model(url)); return aiOk({ intent: 'order' }); }) as typeof fetch;
-    await bot.askAi('s', 'u'); assertEquals(tseen, ['gemini-3.8-flash']);
+    await bot.askAi('s', 'u'); assertEquals(tseen, ['gemini-3.5-flash-lite']);
     let seen: string[] = []; let body: any = null;
     globalThis.fetch = (async (url: string, init?: any) => { seen.push(model(url)); body = JSON.parse(init.body); return seen.length === 1 ? new Response('x', { status: 503 }) : aiOk({ intent: 'order', items: [] }); }) as typeof fetch;
     const a = await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]);
-    assertEquals([a.intent, a._model], ['order', 'gemini-3.8-flash']);
+    assertEquals([a.intent, a._model], ['order', 'gemini-2.5-flash']);
+    assertEquals(body.generationConfig.thinkingConfig, { thinkingBudget: 0 });   // tắt suy nghĩ cho nhanh
     assertEquals(body.contents[0].parts[1], { inlineData: { mimeType: 'image/png', data: 'QUJD' } });
 
     seen = [];
