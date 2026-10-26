@@ -399,6 +399,12 @@ function supabaseApi() {
       const threads = await q(c.from('fb_threads').select('*').gte('last_at', since).order('last_at', { ascending: false }).limit(200));
       return { drafts, threads };
     },
+    /* Nghe đơn online thay đổi (cập nhật 26: realtime). Trả về hàm huỷ nghe */
+    onFbChange(cb) {
+      let ch = null, stopped = false;
+      cl().then(c => { if (stopped) return; ch = c.channel('don-online').on('postgres_changes', { event: '*', schema: 'public', table: 'fb_drafts' }, () => cb()).subscribe(); });
+      return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
+    },
     async fbMessages(psid) { const c = await cl(); return (await q(c.from('fb_messages').select('*').eq('psid', psid).order('created_at', { ascending: false }).limit(60))).reverse(); },
     fbApprove: (id, f) => rpc('fb_approve', { p_draft: id, p_dine: f.dine, p_name: f.name, p_phone: f.phone || null, p_address: f.address || null, p_at: f.at, p_items: f.items, p_note: f.note || null }),
     async fbCancel(id) { const c = await cl(); await q(c.from('fb_drafts').update({ status: 'huy', updated_at: new Date().toISOString() }).eq('id', id)); },
@@ -1213,6 +1219,7 @@ function demoApi() {
 
     /* ---------- Đơn online (bản xem thử: dữ liệu mẫu, không nối Zalo thật) ---------- */
     async fbDrafts() { need('owner'); const db = load(); if (!db.fb_drafts || !db.bot_users) { demoFbSeed(db); save(); } return { drafts: db.fb_drafts.filter(d => d.status !== 'huy').map(d => JSON.parse(JSON.stringify(d))), threads: db.fb_threads.map(t => Object.assign({}, t)) }; },
+    onFbChange(cb) { const h = () => cb(); window.addEventListener('benoc-db', h); return () => window.removeEventListener('benoc-db', h); },
     async fbMessages(psid) { need('owner'); return (load().fb_messages || []).filter(m => m.psid === psid).map(m => Object.assign({}, m)); },
     async fbApprove(id, f) {
       const e = need('owner');

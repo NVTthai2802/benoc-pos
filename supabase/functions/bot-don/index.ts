@@ -522,14 +522,17 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
 
 /* Đọc ảnh / tin chữ bằng AI → tạo mới hoặc sửa đơn nháp */
 async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { refs?: string[]; caption?: string | null; text?: string }) {
-  const { data: st } = await sb.from('shop_settings').select('fb_open, fb_close').eq('id', 1).maybeSingle();
+  // Lấy cài đặt, đơn đang ghi, menu và tải ảnh cùng lúc cho nhanh
+  const [{ data: st }, cur, menuRes, got] = await Promise.all([
+    sb.from('shop_settings').select('fb_open, fb_close').eq('id', 1).maybeSingle(),
+    openDraft(sb, m.kenh, m.chatId, now),
+    sb.rpc('get_menu'),
+    Promise.all((src.refs || []).map(ref => fetchImage(m.kenh, ref))),
+  ]);
   const open = st?.fb_open || '07:00', close = st?.fb_close || '22:00';
-  const cur = await openDraft(sb, m.kenh, m.chatId, now);
-  const menuRaw: any[] = (await sb.rpc('get_menu')).data || [];
+  const menuRaw: any[] = menuRes.data || [];
   const menu = buildMenu(menuRaw);
-
-  const imgs: { bytes: Uint8Array; mime: string }[] = [];
-  for (const ref of src.refs || []) { const im = await fetchImage(m.kenh, ref); if (im) imgs.push(im); }
+  const imgs = got.filter((x): x is { bytes: Uint8Array; mime: string } => !!x);
   if (src.refs && !imgs.length) { await say(m.kenh, m.chatId, 'Bot chưa tải được ảnh, gửi lại giúp em nha (ảnh JPG / PNG, dưới 8MB).'); return; }
 
   let ai: AiOut;

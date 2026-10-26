@@ -253,7 +253,15 @@ function boot() {
     '<main class="page" id="main"></main>';
   $('.nav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
   go(state.tab);
-  if (isOwner()) { refreshFbBadge(); setInterval(() => { if (document.visibilityState === 'visible') refreshFbBadge(); }, 30000); }
+  if (isOwner()) {
+    refreshFbBadge(); setInterval(() => { if (document.visibilityState === 'visible') refreshFbBadge(); }, 30000);
+    // Bot lên / sửa đơn là số trên tab và danh sách cập nhật ngay (gom các thay đổi liền nhau trong 0,6 giây)
+    let fbT = null;
+    api.onFbChange(() => { clearTimeout(fbT); fbT = setTimeout(() => {
+      refreshFbBadge();
+      if (state.tab === 'facebook' && !ui.isOpen() && state.fbMain) renderFacebook(state.fbMain).catch(() => {});
+    }, 600); });
+  }
 }
 function go(tab) {
   state.tab = tab;
@@ -303,8 +311,10 @@ async function renderFacebook(main) {
     if (e.target.closest('#fbSet')) openFbSettings(st);
   };
   // Tự làm mới khi đang mở tab (không làm mới lúc đang xem một đơn)
+  // Đơn mới hiện ngay nhờ realtime (cập nhật 26); vẫn tự tải lại 60 giây một lần phòng khi mất kết nối
+  state.fbMain = main;
   clearInterval(state.fbTimer);
-  state.fbTimer = setInterval(() => { if (state.tab !== 'facebook') return clearInterval(state.fbTimer); if (!ui.isOpen() && document.visibilityState === 'visible') renderFacebook(main).catch(() => {}); }, 20000);
+  state.fbTimer = setInterval(() => { if (state.tab !== 'facebook') return clearInterval(state.fbTimer); if (!ui.isOpen() && document.visibilityState === 'visible') renderFacebook(main).catch(() => {}); }, 60000);
 }
 /* Xem đơn nháp: ảnh chụp + đoạn chat bot chép lại bên trái, đơn bot tách bên phải; sửa rồi duyệt */
 async function openFbDraft(d) {
