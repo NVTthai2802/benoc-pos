@@ -190,8 +190,12 @@ const OKIND = { do_uong: 'Đồ uống', do_an: 'Đồ ăn' };
 const gKind = g => (g.kind === 'do_uong' ? 'do_uong' : 'do_an');
 const isDrinkCat = c => !!c && (c.station === 'pha_che' || DRINK_CATS.test(c.name));
 const choiceText = g => g.choices.map(c => c.name + (c.price_delta ? ' +' + K(c.price_delta) : '')).join(', ');
-/* Hai mã QR gọi món: mỗi mã mở đúng một menu, đơn về đúng một quầy */
+/* Mã QR gọi món: một menu chung (đồ ăn + đồ uống). Món bếp về bếp, đồ uống về quầy pha chế.
+   Mã cũ (?menu=an / ?menu=tra) đã in vẫn dùng được, cũng mở menu chung. */
 const QRS = [
+  { key: 'chung', query: '', color: 'vang', title: 'Mã QR gọi món · menu chung', desc: 'Dán ở bàn, quầy, khu bếp đều được. Khách quét thấy cả đồ ăn và đồ uống trong một menu. Món ăn tự về màn hình bếp, trà sữa / cà phê / đồ uống tự về quầy pha chế. Mã QR cũ của bếp và pha chế đã in vẫn dùng được, cũng mở menu chung.', screen: 'bep.html', screenName: 'bếp' }
+];
+const QRS_OLD = [
   { key: 'an', query: '?menu=an', color: 'vang', title: 'Mã QR bếp nóng · menu Ăn vặt', desc: 'Dán ở khu bếp. Khách quét thấy cơm, mì, kimbap, đồ ăn vặt và nước uống của bếp. Đơn về màn hình bếp, bếp thu tiền.', screen: 'bep.html', screenName: 'bếp' },
   { key: 'tra', query: '?menu=tra', color: 'hong', title: 'Mã QR quầy pha chế · menu Trà · Cà phê', desc: 'Dán ở quầy pha chế. Khách quét thấy trà sữa, trà hoa quả, cà phê, matcha. Đơn về màn hình pha chế, quầy pha chế thu tiền.', screen: 'phache.html', screenName: 'pha chế' }
 ];

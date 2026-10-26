@@ -324,9 +324,10 @@ const state = {
   cart: [], cartNote: '',
   orders: store.get(DEMO ? 'demo.orders' : 'orders', []),
   orderData: {}, editingInfo: false, view: 'menu',
-  // ?menu=tra (mã QR quầy pha chế) → menu Trà · Cà phê; còn lại (?menu=an hoặc không có) → menu Ăn vặt của bếp
-  // ?dat=giao → chủ quán / nhân viên tạo đơn giao hàng (khách nhắn Facebook, gọi điện): đủ cả đồ ăn và đồ uống
-  kind: BN.PARAMS.get('dat') === 'giao' ? 'giao' : BN.PARAMS.get('menu') === 'tra' ? 'pha_che' : 'bep',
+  // Một menu chung cho mọi mã QR (kể cả mã cũ ?menu=an / ?menu=tra): đồ ăn + đồ uống.
+  // Món của bếp vẫn về bếp, đồ uống về quầy pha chế (theo danh mục của món).
+  // ?dat=giao → chủ quán / nhân viên tạo đơn giao hàng (khách nhắn Facebook, gọi điện)
+  kind: BN.PARAMS.get('dat') === 'giao' ? 'giao' : 'chung',
   staff: null, giao: { name: '', phone: '', address: '', time: '', paid: false, kind: BN.store.get('giaoKind', 'ship') === 'lay' ? 'lay' : 'ship' }
 };
 const GIAO = state.kind === 'giao';
@@ -334,11 +335,14 @@ if (GIAO) state.orders = []; // trang tạo đơn không theo dõi đơn như kh
 const MENU = {
   bep: { hero: 'BÉ NỐC ĂN VẶT', tag: 'Ăn ngon · Giá xinh · Ship nhanh', query: '?menu=an', link: 'Ăn vặt', linkDesc: 'Cơm trộn · Mì trộn · Kimbap · Đồ ăn vặt' },
   pha_che: { hero: 'BÉ NỐC TRÀ NGON', tag: 'Trà ngon · Vị thật · Giá yêu', query: '?menu=tra', link: 'Trà · Cà phê', linkDesc: 'Trà sữa · Trà hoa quả · Cà phê · Matcha' },
+  chung: { hero: 'BÉ NỐC', tag: 'Ăn vặt · Trà sữa · Cà phê · Giá yêu', query: '', link: '', linkDesc: '' },
   giao: { hero: 'ĐƠN GIAO HÀNG', tag: 'Tích món khách nhắn qua Facebook / điện thoại', query: '?dat=giao', link: '', linkDesc: '' }
 };
 const OTHER_KIND = state.kind === 'bep' ? 'pha_che' : 'bep';
-state.cart = store.get('cart.' + state.kind, []);
+state.cart = store.get('cart.' + state.kind, null);
 state.cartNote = store.get('cartNote.' + state.kind, '');
+// Gộp giỏ cũ của 2 menu (trước khi gộp menu) vào giỏ chung
+if (state.cart == null) { state.cart = state.kind === 'chung' ? store.get('cart.bep', []).concat(store.get('cart.pha_che', [])) : []; if (state.kind === 'chung') { state.cartNote = [store.get('cartNote.bep', ''), store.get('cartNote.pha_che', '')].filter(Boolean).join(' · '); store.del('cart.bep'); store.del('cart.pha_che'); store.del('cartNote.bep'); store.del('cartNote.pha_che'); } }
 const saveInfo = () => store.set('info', state.info);
 const saveCart = () => { store.set('cart.' + state.kind, state.cart); store.set('cartNote.' + state.kind, state.cartNote); };
 const saveOrders = () => { if (!GIAO) store.set(DEMO ? 'demo.orders' : 'orders', state.orders); };
@@ -477,7 +481,10 @@ function addBtnHtml(it) {
 function shownCats() {
   // Mỗi mã QR chỉ xem được menu của nó (quét món ăn chỉ thấy món ăn) — không còn nút sang menu kia
   ['#otherTop', '#otherEnd'].forEach(id => { $(id).hidden = true; });
-  if (GIAO) return state.menu; // trang chủ quán tạo đơn: đủ cả đồ ăn và đồ uống
+  if (GIAO || state.kind === 'chung') { // menu chung: đồ ăn trước, đồ uống sau (giữ thứ tự trong từng nhóm)
+    const st = c => (c.station || 'bep') === 'bep' ? 0 : 1;
+    return state.menu.map((c, i) => [c, i]).sort((a, b) => st(a[0]) - st(b[0]) || a[1] - b[1]).map(x => x[0]);
+  }
   const mineCats = state.menu.filter(c => (c.station || 'bep') === state.kind);
   return mineCats.length ? mineCats : state.menu;
 }
