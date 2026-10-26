@@ -40,6 +40,17 @@ Deno.test('kiểm lại kết quả AI theo menu: giá, tuỳ chọn, thiếu g�
   assertMatch(bot.draftSummary(tmr, NOW), /Chủ nhật 25\/10 11:00/);
 });
 
+Deno.test('chế độ suy nghĩ: lite không gửi, 2.5 tắt, 3.x giảm; model không nhận thì gọi lại không có', async () => {
+  assertEquals(bot.thinkCfg('gemini-3.5-flash-lite'), null);
+  assertEquals(bot.thinkCfg('gemini-2.5-flash'), { thinkingBudget: 0 });
+  assertEquals(bot.thinkCfg('gemini-3.8-flash'), { thinkingLevel: 'low' });
+  gem(); const real = globalThis.fetch; const bodies: any[] = [];
+  Deno.env.set('GEMINI_MODEL', 'gemini-3.8-flash');
+  globalThis.fetch = (async (_u: string, init?: any) => { const b = JSON.parse(init.body); bodies.push(b); return b.generationConfig.thinkingConfig ? new Response('bad', { status: 400 }) : aiOk({ intent: 'order' }); }) as typeof fetch;
+  try { assertEquals((await bot.askAi('s', 'u'))._model, 'gemini-3.8-flash'); } finally { globalThis.fetch = real; Deno.env.delete('GEMINI_MODEL'); }
+  assertEquals(bodies.length, 2); assertEquals(bodies[1].generationConfig.thinkingConfig, undefined);
+});
+
 Deno.test('ghi chú chỉ lặp lại tuỳ chọn thì bỏ; ghi chú thật thì giữ', () => {
   const mi = menu.items.find(i => i.name === 'Mì nem chua rán')!;
   const them = mi.groups.find(g => g.title === 'Thêm mì')!.choices[0].id;
@@ -57,11 +68,13 @@ Deno.test('prompt dạy cách hiểu lệnh sửa và "tổng rồi chia chi ti�
 Deno.test('câu bot nhắn lại: tóm tắt, món chưa rõ, còn thiếu', () => {
   const d = bot.applyAi(empty(), { dine_type: 'giao_hang', time: '19:30', items: [{ m: num('Cơm gà viên'), qty: 2 }], unknown: ['bún bò'] }, menu, NOW, 'Lan');
   const t = bot.draftReply(d, bot.missingOf(d, NOW), NOW, false);
-  assertStringIncludes(t, '📝 Đơn nháp mới · Lan');
+  assertStringIncludes(t, '✅ Đã gửi bếp · Lan');
   assertStringIncludes(t, '2 Cơm gà viên');
   assertStringIncludes(t, '“bún bò”');
   assertStringIncludes(t, 'Còn thiếu: địa chỉ ship, SĐT người nhận');
-  assertStringIncludes(bot.draftReply(d, [], NOW, true), '🔄 Đã cập nhật đơn');
+  assertStringIncludes(bot.draftReply(d, [], NOW, true), '🔄 Đã sửa đơn ở bếp');
+  const noDine = bot.applyAi(empty(), { items: [{ m: num('Cơm gà viên') }] }, menu, NOW, null);
+  assertStringIncludes(bot.draftReply(noDine, bot.missingOf(noDine, NOW), NOW, false), 'tạm để Mang về');
 });
 
 Deno.test('prompt: menu, giờ hiện tại, đơn đang ghi, ảnh / tin chữ', () => {
@@ -97,14 +110,15 @@ const gem = () => { Deno.env.set('GEMINI_API_KEY', 'k'); Deno.env.delete('ANTHRO
 Deno.test('Gemini: quá tải / không có model → thử model kế; sai khoá → dừng; ảnh gửi kèm', async () => {
   gem(); const real = globalThis.fetch; const model = (url: string) => String(url).split('/models/')[1].split(':')[0];
   try {
-    // tin chữ: model mạnh trước
+    // tin chữ: cũng model nhanh trước
     let tseen: string[] = [];
     globalThis.fetch = (async (url: string) => { tseen.push(model(url)); return aiOk({ intent: 'order' }); }) as typeof fetch;
-    await bot.askAi('s', 'u'); assertEquals(tseen, ['gemini-3.8-flash']);
+    await bot.askAi('s', 'u'); assertEquals(tseen, ['gemini-3.5-flash-lite']);
     let seen: string[] = []; let body: any = null;
     globalThis.fetch = (async (url: string, init?: any) => { seen.push(model(url)); body = JSON.parse(init.body); return seen.length === 1 ? new Response('x', { status: 503 }) : aiOk({ intent: 'order', items: [] }); }) as typeof fetch;
     const a = await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]);
-    assertEquals([a.intent, a._model], ['order', 'gemini-3.8-flash']);
+    assertEquals([a.intent, a._model], ['order', 'gemini-2.5-flash']);
+    assertEquals(body.generationConfig.thinkingConfig, { thinkingBudget: 0 });   // tắt suy nghĩ cho nhanh
     assertEquals(body.contents[0].parts[1], { inlineData: { mimeType: 'image/png', data: 'QUJD' } });
 
     seen = [];
@@ -185,6 +199,26 @@ function fakeSb(tables: Record<string, any[]>, links: Record<string, boolean> = 
   };
   const rpc = async (n: string, a: any) => {
     if (n === 'get_menu') return { data: menuRaw, error: null };
+    // Giả lập SQL 27: tạo / thay đơn thật trong bảng orders; locked khi đơn có cờ nhan = true
+    if (n === 'bot_don_mo') { const o = (tables.orders || []).find(x => x.id === a.p_order); return { data: !!o && !o.nhan, error: null }; }
+    if (n === 'bot_dat_don') {
+      const d = tables.fb_drafts.find(x => x.id === a.p_draft); const os = (tables.orders ||= []);
+      const gone = d.items.find((i: any) => (tables.het || []).includes(i.menu_item_id));
+      if (gone) return { data: null, error: { message: 'ITEM_UNAVAILABLE', hint: gone.menu_item_id } };
+      const total = d.items.reduce((t: number, i: any) => t + i.price * i.qty, 0);
+      let o = d.order_id && os.find(x => x.id === d.order_id);
+      if (o && o.nhan) return { data: { action: 'locked', order_id: o.id }, error: null };
+      const action = o ? 'updated' : 'created';
+      if (!o) { o = { id: crypto.randomUUID(), source: 'fb' }; os.push(o); }
+      Object.assign(o, { items: d.items.map((i: any) => ({ ...i })), customer_name: d.customer_name || 'Khách online', dine_type: d.dine_type || 'mang_ve', total });
+      Object.assign(d, { status: 'da_duyet', order_id: o.id, total_est: total });
+      return { data: { action, order_id: o.id, total }, error: null };
+    }
+    if (n === 'bot_huy_don') {
+      const d = tables.fb_drafts.find(x => x.id === a.p_draft); const o = (tables.orders || []).find(x => x.id === d.order_id);
+      if (o && o.nhan) return { data: { action: 'locked' }, error: null };
+      tables.orders = (tables.orders || []).filter(x => x !== o); d.status = 'huy'; return { data: { action: 'cancelled' }, error: null };
+    }
     if (n === 'bot_link_use') { const ok = !!links[a.p_code]; if (ok) { delete links[a.p_code]; (tables.bot_users ||= []).push({ kenh: a.p_kenh, chat_id: a.p_chat, name: a.p_name }); } return { data: ok, error: null }; }
     return { data: null, error: null };
   };
@@ -225,7 +259,7 @@ Deno.test('chưa kết nối: bot từ chối; nhắn đúng mã thì kết nố
 
 const linked = (): Record<string, any[]> => ({ bot_users: [{ kenh: 'zalo', chat_id: 'c1', name: 'Ngọc' }] });
 
-Deno.test('gửi ảnh → đơn nháp chờ duyệt, lưu ảnh, chép đoạn chat, ghi mẫu huấn luyện', async () => {
+Deno.test('gửi ảnh → đơn thật vào thẳng bếp, lưu ảnh, chép đoạn chat, ghi mẫu huấn luyện', async () => {
   const t = linked();
   const r = await run(t, { photo: 'https://zalo/a.jpg' }, {
     intent: 'order', khach: 'Nguyễn Lan', dine_type: 'giao_hang', time: '19:30', address: '12 ngõ 5 Nguyễn Trãi', phone: '0912345678',
@@ -235,19 +269,20 @@ Deno.test('gửi ảnh → đơn nháp chờ duyệt, lưu ảnh, chép đoạn 
   assertEquals(r.ai[0].contents[0].parts[1].inlineData.mimeType, 'image/jpeg');   // đoán đúng loại ảnh dù Zalo trả octet-stream
   assertEquals(t.bot_photos[0].done, true);
   const d = t.fb_drafts[0];
-  assertEquals([d.kenh, d.chat_id, d.nguoi_gui, d.status, d.customer_name, d.total_est], ['zalo', 'c1', 'Ngọc', 'cho_duyet', 'Nguyễn Lan', 60000]);
+  assertEquals([d.kenh, d.chat_id, d.nguoi_gui, d.status, d.customer_name, d.total_est], ['zalo', 'c1', 'Ngọc', 'da_duyet', 'Nguyễn Lan', 60000]);
+  assertEquals(t.orders.length, 1); assertEquals([t.orders[0].source, t.orders[0].dine_type, d.order_id], ['fb', 'giao_hang', t.orders[0].id]);
   assertEquals(d.convo.length, 2);                          // bỏ tin không phải khách / quán
   assertEquals(d.anh.length, 1); assertMatch(d.anh[0], new RegExp('^' + d.id + '/\\d+-1\\.jpg$'));
   assertEquals(r.uploads, d.anh);
   assertStringIncludes(r.sent[0], 'Đang đọc 1 ảnh');
-  assertStringIncludes(r.sent[1], '📝 Đơn nháp mới · Nguyễn Lan');
+  assertStringIncludes(r.sent[1], '✅ Đã gửi bếp · Nguyễn Lan');
   assertEquals(t.fb_train.length, 1);
   const s = JSON.stringify(t.fb_train[0]);
   assert(!s.includes('0912345678') && !s.includes('Nguyễn Lan'));
   assertStringIncludes(s, '12 ngõ 5 Nguyễn Trãi');
 });
 
-Deno.test('nhắn chữ → sửa đơn vừa lên; "huỷ" → bỏ đơn', async () => {
+Deno.test('nhắn chữ → sửa đơn ở bếp; "huỷ" → huỷ đơn; bếp đã nhận thì khoá', async () => {
   const t = linked();
   await run(t, { photo: 'https://zalo/a.jpg' }, { intent: 'order', khach: 'Lan', dine_type: 'mang_ve', time: '18:00', items: [{ m: num('Cơm gà viên') }], convo: [{ s: 'khach', t: '1 cơm gà' }] });
   const id = t.fb_drafts[0].id;
@@ -258,12 +293,19 @@ Deno.test('nhắn chữ → sửa đơn vừa lên; "huỷ" → bỏ đơn', asy
   assertEquals(t.fb_drafts[0].items.length, 2);
   assertEquals(t.fb_drafts[0].customer_name, 'Lan');        // giữ tên khách cũ
   assertEquals(t.fb_drafts[0].convo.at(-1), { s: 'sua', t: 'thêm 1 trà sữa' });
-  assertStringIncludes(r.sent[0], '🔄 Đã cập nhật đơn · Lan');
+  assertStringIncludes(r.sent[0], '🔄 Đã sửa đơn ở bếp · Lan');
+  assertEquals(t.orders.length, 1); assertEquals(t.orders[0].items.length, 2);       // vẫn 1 đơn ở bếp, đã thay món
+  // bếp nhận rồi: nhắn sửa thì báo khoá, không gọi AI
+  t.orders[0].nhan = true;
+  const lk = await run(t, { text: 'thêm 1 cơm' }, { intent: 'order' });
+  assertEquals(lk.ai.length, 0); assertStringIncludes(lk.sent[0], 'đã nhận đơn này');
+  const lk2 = await run(t, { text: 'huỷ' }); assertStringIncludes(lk2.sent[0], 'không huỷ được');
+  t.orders[0].nhan = false;
   const c = await run(t, { text: 'Huỷ' });
-  assertEquals(t.fb_drafts[0].status, 'huy');
-  assertStringIncludes(c.sent[0], 'Đã huỷ đơn nháp của Lan');
+  assertEquals(t.fb_drafts[0].status, 'huy'); assertEquals(t.orders.length, 0);
+  assertStringIncludes(c.sent[0], 'Đã huỷ đơn của Lan');
   const c2 = await run(t, { text: 'huỷ' });
-  assertStringIncludes(c2.sent[0], 'Không có đơn nháp');
+  assertStringIncludes(c2.sent[0], 'Không có đơn nào');
 });
 
 Deno.test('ảnh khách khác (same_order = false) → đơn mới; ảnh không phải đơn → báo lại', async () => {
@@ -274,6 +316,14 @@ Deno.test('ảnh khách khác (same_order = false) → đơn mới; ảnh không
   const r = await run(t, { photo: 'https://zalo/c.jpg' }, { intent: 'khong_phai_don' });
   assertEquals(t.fb_drafts.length, 2);
   assertStringIncludes(r.sent.at(-1)!, 'không thấy đoạn chat đặt món');
+});
+
+Deno.test('món hết hàng / không có món → báo lại, chưa gửi bếp', async () => {
+  const t = linked(); (t as any).het = [menu.items.find(i => i.name === 'Cơm gà viên')!.id];
+  const r = await run(t, { text: '1 cơm gà viên' }, { intent: 'order', items: [{ m: num('Cơm gà viên') }] });
+  assertStringIncludes(r.sent[0], '“Cơm gà viên” đang tạm hết'); assertEquals((t.orders || []).length, 0);
+  const r2 = await run(linked(), { text: 'khách hỏi giờ mở cửa' }, { intent: 'order', items: [] });
+  assertStringIncludes(r2.sent[0], 'Chưa thấy món nào');
 });
 
 Deno.test('AI lỗi → báo chủ quán gửi lại, không tạo đơn', async () => {

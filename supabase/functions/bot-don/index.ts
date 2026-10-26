@@ -2,12 +2,12 @@
 // BÉ NỐC — BOT LÊN ĐƠN TỪ ẢNH CHỤP (Supabase Edge Function "bot-don")
 //
 //  Chủ quán nhắn khách trên Facebook như bình thường, rồi:
-//  ảnh chụp đoạn chat ──Zalo / Telegram──▶ bot-don ──AI đọc ảnh──▶ fb_drafts (đơn nháp, tab "Đơn online")
-//                                              │                          │
-//                                              └─ nhắn lại tóm tắt đơn     └─▶ chủ quán duyệt → đơn thật → bếp
+//  ảnh chụp đoạn chat ──Zalo / Telegram──▶ bot-don ──AI đọc ảnh──▶ đơn thật vào thẳng bếp / pha chế (nhãn ĐƠN ONLINE)
+//                                              └─ nhắn lại tóm tắt đơn cho chủ quán
+//  (fb_drafts vẫn lưu bản bot đọc để sửa tiếp và làm dữ liệu huấn luyện; cập nhật 27)
 //
 //  Nhắn chữ cho bot để sửa đơn vừa lên ("thêm 1 trà đào", "giờ 18h"), hoặc gõ thẳng cả đơn.
-//  Nhắn "huỷ" để bỏ đơn vừa lên. Chỉ tài khoản đã kết nối bằng mã (lấy trong Quản lý) mới dùng được.
+//  Nhắn "huỷ" để huỷ đơn vừa lên. Bếp đã bấm Nhận thì bot không sửa / huỷ nữa (sửa ở màn hình bếp). Chỉ tài khoản đã kết nối bằng mã (lấy trong Quản lý) mới dùng được.
 //
 //  Biến môi trường (Supabase → Edge Functions → Secrets):
 //    ZALO_BOT_TOKEN       token bot Zalo (tạo ở https://bot.zapps.me)          ┐ cần ít nhất 1 trong 2
@@ -232,10 +232,17 @@ export function parseJson(t: string): AiOut {
 
 
 export type Img = { mime: string; b64: string };
-// Model nhanh chạy trước (đọc ảnh chụp chat vẫn đủ chính xác), model mạnh làm dự phòng khi lỗi / quá tải
-const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash'];
-const AI_TIMEOUT_MS = 20000;   // 1 lần gọi AI (chỉ chữ) quá 20 giây thì bỏ, thử model khác
-const AI_IMG_TIMEOUT_MS = 45000; // có ảnh thì đọc lâu hơn
+// Model nhanh chạy trước; model "suy nghĩ" (3.8-flash) chậm, chỉ để cuối làm dự phòng.
+const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-flash'];
+const AI_TIMEOUT_MS = 12000;     // 1 lần gọi AI (chỉ chữ) quá 12 giây thì bỏ, thử model khác
+const AI_IMG_TIMEOUT_MS = 25000; // có ảnh thì đọc lâu hơn
+/* Tắt / giảm "suy nghĩ" để trả lời nhanh: việc tách đơn không cần suy luận dài */
+export function thinkCfg(model: string): Record<string, unknown> | null {
+  if (/lite/.test(model)) return null;
+  if (/^gemini-2\.5/.test(model)) return { thinkingBudget: 0 };
+  if (/^gemini-[3-9]/.test(model)) return { thinkingLevel: 'low' };
+  return null;
+}
 const AI_RETRY_MS = 2000;      // mọi model đều quá tải: đợi 2 giây rồi thử lại 1 vòng
 const AI_BUDGET_MS = 110000;   // tổng thời gian tối đa cho 1 lượt (function bị dừng ở ~150 giây)
 export const aiProvider = () => (env('AI_PROVIDER') || (env('GEMINI_API_KEY') && !env('ANTHROPIC_API_KEY') ? 'gemini' : 'claude')).toLowerCase();
@@ -246,8 +253,7 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
   if (provider === 'gemini') {
     // Model lỗi (không có, quá tải 503, hết lượt 429, chậm quá) thì thử model kế tiếp. Cả lượt đều quá tải: đợi chút, thử lại 1 vòng.
     // Sai khoá (401) thì dừng luôn.
-    // Tin chữ (chủ quán sửa đơn) đọc nhanh nên dùng model mạnh trước cho chắc; ảnh thì model nhanh trước
-    const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : images.length ? GEMINI_MODELS : [GEMINI_MODELS[1], GEMINI_MODELS[0], GEMINI_MODELS[2]];
+    const models = env('GEMINI_MODEL') ? [env('GEMINI_MODEL')] : GEMINI_MODELS;
     const parts: any[] = [{ text: user }, ...images.map(im => ({ inlineData: { mimeType: im.mime, data: im.b64 } }))];
     let err = '';
     for (let round = 0; round < 2 && !used; round++) {
@@ -255,15 +261,19 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
       let retry = false;
       for (const model of models) {
         const left = deadline - Date.now(); if (left < 5000) { retry = false; break; }
+        const t0 = Date.now();
         let r: Response;
+        const call = (think: Record<string, unknown> | null) => fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts }],
+            generationConfig: Object.assign({ responseMimeType: 'application/json', temperature: 0.1 }, think ? { thinkingConfig: think } : {}) }),
+          signal: AbortSignal.timeout(Math.min(per, left)),
+        });
         try {
-          r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-            method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
-            body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }),
-            signal: AbortSignal.timeout(Math.min(per, left)),
-          });
+          r = await call(thinkCfg(model));
+          if (r.status === 400 && thinkCfg(model)) { console.warn('Gemini ' + model + ' không nhận thinkingConfig, gọi lại không có'); r = await call(null); }   // model không hỗ trợ tuỳ chọn suy nghĩ
         } catch (e) { err = 'Gemini ' + model + ': ' + String((e as Error)?.name === 'TimeoutError' ? 'quá ' + Math.round(Math.min(per, left) / 1000) + ' giây' : e); retry = true; console.warn(err); continue; }
-        if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model; break; }
+        if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model; console.log('⏱ AI ' + model + ' ' + (Date.now() - t0) + 'ms' + (images.length ? ' · ' + images.length + ' ảnh' : ' · chữ')); break; }
         err = 'Gemini ' + model + ' ' + r.status + ': ' + (await r.text()).slice(0, 300);
         console.warn(err);
         if (r.status === 401) { retry = false; break; }
@@ -465,25 +475,27 @@ const MISS_TEXT: Record<string, string> = {
   at_hours: 'giờ hẹn ngoài giờ nhận đơn', address: 'địa chỉ ship', phone: 'SĐT người nhận',
 };
 export const HELP = 'Đây là bot lên đơn của Bé Nốc 🥰\n\n' +
-  '📸 Chụp màn hình đoạn chat đặt món với khách rồi gửi vào đây (nhiều ảnh gửi liền nhau cũng được) → bot lên đơn nháp.\n' +
+  '📸 Chụp màn hình đoạn chat đặt món với khách rồi gửi vào đây (nhiều ảnh gửi liền nhau cũng được) → bot lên đơn, gửi thẳng vào bếp / pha chế.\n' +
   '✏️ Nhắn chữ để sửa đơn vừa lên: "thêm 1 trà đào", "bỏ kimbap", "giờ 18h30", "ship 12 ngõ 5 Quang Trung, sđt 09…".\n' +
   '⌨️ Gõ thẳng cả đơn bằng chữ cũng được.\n' +
-  '🗑 Nhắn "huỷ" để bỏ đơn vừa lên.\n\n' +
-  'Duyệt đơn trong Quản lý → Đơn online.';
+  '🗑 Nhắn "huỷ" để huỷ đơn vừa lên.\n\n' +
+  'Sửa / huỷ qua bot được khi bếp chưa bấm Nhận đơn. Bếp nhận rồi thì sửa trên màn hình bếp.';
 export const NOT_LINKED = 'Tài khoản này chưa được dùng bot lên đơn của Bé Nốc.\nChủ quán vào Quản lý → Đơn online → Cài đặt bot → "Lấy mã kết nối", rồi nhắn mã 6 số đó vào đây.';
 const isCancel = (t: string) => /^\/?(huy|xoa|bo)(\s+(don|đơn))?\s*[.!]*$/.test(fold(t).trim());
 const isHelp = (t: string) => /^\/?(start|help|hd|huong\s*dan|menu|hi|hello|chao|alo)\b/.test(fold(t).trim()) && fold(t).trim().length < 20;
 
-/* Câu bot nhắn lại sau khi lên / sửa đơn */
+/* Câu bot nhắn lại sau khi gửi / sửa đơn ở bếp */
 export function draftReply(d: Draft, miss: string[], now: Date, updated: boolean) {
-  const out = [(updated ? '🔄 Đã cập nhật đơn' : '📝 Đơn nháp mới') + ' · ' + (d.customer_name || 'Khách')];
+  const out = [(updated ? '🔄 Đã sửa đơn ở bếp' : '✅ Đã gửi bếp') + ' · ' + (d.customer_name || 'Khách online')];
   if (d.items.length || d.dine_type || d.at) out.push(draftSummary(d, now));
-  if (d.unknown.length) out.push('❓ Chưa rõ món: ' + d.unknown.map(u => '“' + u + '”').join(', '));
-  const m = miss.map(x => MISS_TEXT[x]).filter(Boolean);
-  if (m.length) out.push('⚠️ Còn thiếu: ' + m.join(', '));
-  out.push('👉 Duyệt trong Quản lý → Đơn online. Nhắn thêm để sửa, nhắn "huỷ" để bỏ đơn này.');
+  if (!d.dine_type) out.push('ℹ️ Chưa rõ qua lấy / ăn tại quán / ship nên tạm để Mang về.');
+  if (d.unknown.length) out.push('❓ Chưa rõ món: ' + d.unknown.map(u => '“' + u + '”').join(', ') + ' (chưa đưa vào đơn)');
+  const m = miss.filter(x => x !== 'dine_type').map(x => MISS_TEXT[x]).filter(Boolean);
+  if (m.length) out.push('⚠️ Còn thiếu: ' + m.join(', ') + '. Nhắn thêm để bổ sung.');
+  out.push('Nhắn thêm để sửa, nhắn "huỷ" để huỷ (khi bếp chưa nhận đơn).');
   return out.join('\n\n');
 }
+export const LOCKED = '🔒 Bếp / pha chế đã nhận đơn này nên bot không sửa được nữa. Sửa trên màn hình bếp (nút Sửa đơn) giúp em nha.';
 
 async function isAllowed(sb: SupabaseClient, k: Kenh, chatId: string) {
   const { data } = await sb.from('bot_users').select('chat_id').eq('kenh', k).eq('chat_id', chatId).maybeSingle();
@@ -494,7 +506,7 @@ async function openDraft(sb: SupabaseClient, k: Kenh, chatId: string, now: Date)
   const since = new Date(now.getTime() - OPEN_MINUTES * 60e3).toISOString();
   const { data } = await sb.from('fb_drafts').select('*').eq('kenh', k).eq('chat_id', chatId).gte('updated_at', since).order('updated_at', { ascending: false }).limit(1);
   const d = data && data[0];
-  return d && (d.status === 'cho_duyet' || d.status === 'dang_hoi') ? d : null;
+  return d && d.status !== 'huy' ? d : null;   // đơn bot đã gửi bếp (da_duyet) vẫn sửa / huỷ được khi bếp chưa nhận
 }
 
 /* Một tin từ Zalo / Telegram. Ảnh thì gom rồi đọc sau PHOTO_WAIT_MS */
@@ -520,9 +532,9 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
     const since = new Date(now.getTime() - 15 * 60e3).toISOString();
     const { data: batch } = await sb.from('bot_photos').select('*').eq('kenh', m.kenh).eq('chat_id', m.chatId).eq('done', false).gte('created_at', since).order('id', { ascending: true }).limit(MAX_PHOTOS);
     const rows = batch || [];
-    for (const p of rows) await sb.from('bot_photos').update({ done: true }).eq('id', p.id);
     if (!rows.length) return;
-    await say(m.kenh, m.chatId, '⏳ Đang đọc ' + rows.length + ' ảnh…');
+    say(m.kenh, m.chatId, '⏳ Đang đọc ' + rows.length + ' ảnh…');   // không chờ, đọc luôn
+    await Promise.all(rows.map((p: any) => sb.from('bot_photos').update({ done: true }).eq('id', p.id)));
     const caption = rows.map((p: any) => p.caption).filter(Boolean).join(' · ') || null;
     await buildDraft(sb, m, now, { refs: rows.map((p: any) => p.ref), caption });
     return;
@@ -531,9 +543,11 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
   if (isHelp(text)) { await say(m.kenh, m.chatId, HELP); return; }
   if (isCancel(text)) {
     const d = await openDraft(sb, m.kenh, m.chatId, now);
-    if (!d) { await say(m.kenh, m.chatId, 'Không có đơn nháp nào vừa lên để huỷ. Đơn cũ hơn thì huỷ trong Quản lý → Đơn online nha.'); return; }
-    await sb.from('fb_drafts').update({ status: 'huy', updated_at: now.toISOString() }).eq('id', d.id);
-    await say(m.kenh, m.chatId, '🗑 Đã huỷ đơn nháp của ' + (d.customer_name || 'khách') + '.');
+    if (!d) { await say(m.kenh, m.chatId, 'Không có đơn nào vừa lên để huỷ. Đơn cũ hơn thì huỷ trên màn hình bếp nha.'); return; }
+    const { data: r, error } = await sb.rpc('bot_huy_don', { p_draft: d.id });
+    if (error) { console.error('Huỷ đơn lỗi', error); await say(m.kenh, m.chatId, 'Chưa huỷ được, thử lại giúp em nha.'); return; }
+    await say(m.kenh, m.chatId, r?.action === 'locked' ? '🔒 Bếp / pha chế đã nhận đơn của ' + (d.customer_name || 'khách') + ', bot không huỷ được nữa. Huỷ trên màn hình bếp giúp em nha.'
+      : '🗑 Đã huỷ đơn của ' + (d.customer_name || 'khách') + (d.order_id ? ', bếp không còn thấy đơn này.' : '.'));
     return;
   }
   await buildDraft(sb, m, now, { text });
@@ -541,25 +555,35 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
 
 /* Đọc ảnh / tin chữ bằng AI → tạo mới hoặc sửa đơn nháp */
 async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { refs?: string[]; caption?: string | null; text?: string }) {
+  const t0 = Date.now(), tm: string[] = [];
+  const lap = (what: string, since: number) => tm.push(what + ' ' + (Date.now() - since) + 'ms');
   // Lấy cài đặt, đơn đang ghi, menu và tải ảnh cùng lúc cho nhanh
   const [{ data: st }, cur, menuRes, got] = await Promise.all([
     sb.from('shop_settings').select('fb_open, fb_close').eq('id', 1).maybeSingle(),
-    openDraft(sb, m.kenh, m.chatId, now),
+    openDraft(sb, m.kenh, m.chatId, now).then(async d => {   // kèm luôn: đơn ở bếp còn sửa được không
+      if (d?.order_id) { const { data: ok } = await sb.rpc('bot_don_mo', { p_order: d.order_id }); d._open = ok !== false; }
+      return d;
+    }),
     sb.rpc('get_menu'),
     Promise.all((src.refs || []).map(ref => fetchImage(m.kenh, ref))),
   ]);
+  // Nhắn chữ sửa đơn mà bếp đã nhận: báo luôn, khỏi gọi AI
+  if (src.text && cur?.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const open = st?.fb_open || '07:00', close = st?.fb_close || '22:00';
   const menuRaw: any[] = menuRes.data || [];
   const menu = buildMenu(menuRaw);
   const imgs = got.filter((x): x is { bytes: Uint8Array; mime: string } => !!x);
+  lap('chuẩn bị + tải ảnh', t0); const tAi = Date.now();
   if (src.refs && !imgs.length) { await say(m.kenh, m.chatId, 'Bot chưa tải được ảnh, gửi lại giúp em nha (ảnh JPG / PNG, dưới 8MB).'); return; }
 
   let ai: AiOut;
   try { ai = await askAi(systemPrompt(menu, now, open, close), userPrompt({ cur, nImages: imgs.length, text: src.text, caption: src.caption }), imgs.map(i => ({ mime: i.mime, b64: b64(i.bytes) }))); }
   catch (e) { console.error('AI lỗi', e); await say(m.kenh, m.chatId, 'AI đang quá tải, chưa đọc được. Gửi lại sau ít phút giúp em nha.'); return; }
+  lap('AI', tAi); const tDb = Date.now();
   if (ai.intent === 'khong_phai_don') { await say(m.kenh, m.chatId, 'Ảnh này không thấy đoạn chat đặt món. Chụp màn hình phần tin nhắn có món, giờ hẹn… rồi gửi lại nha.'); return; }
 
   const same = !!cur && (src.text ? true : ai.same_order === true);
+  if (same && cur.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
   const base: Draft = same ? JSON.parse(JSON.stringify(cur))
     : { psid: null as any, status: 'cho_duyet', dine_type: null, at: null, customer_name: null, customer_phone: null, address: null, note: null, items: [], unknown: [], missing: [], total_est: 0, asked: [] };
   const anon = anonymizer({ names: [ai.khach, ai.name, base.customer_name], words: menuWords(menu) });
@@ -579,27 +603,48 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   if (draftId) await sb.from('fb_drafts').update(row).eq('id', draftId);
   else { const { data: ins, error } = await sb.from('fb_drafts').insert(Object.assign({ asked: [], anh: [] }, row)).select('id').single(); if (error) console.error('Lưu đơn lỗi', error); draftId = ins?.id || null; }
 
-  // Lưu ảnh để đối chiếu khi duyệt (lỗi thì bỏ qua, đơn vẫn lên)
-  if (draftId && imgs.length) {
-    const paths: string[] = [];
-    for (let i = 0; i < imgs.length; i++) {
-      const ext = imgs[i].mime === 'image/png' ? 'png' : imgs[i].mime === 'image/webp' ? 'webp' : 'jpg';
-      const path = draftId + '/' + now.getTime() + '-' + (i + 1) + '.' + ext;
-      try { const { error } = await sb.storage.from('don-anh').upload(path, imgs[i].bytes, { contentType: imgs[i].mime, upsert: true }); if (error) throw error; paths.push(path); }
-      catch (e) { console.error('Lưu ảnh lỗi', e); }
-    }
-    if (paths.length) await sb.from('fb_drafts').update({ anh: [...(same ? cur.anh || [] : []), ...paths] }).eq('id', draftId);
+  // Gửi thẳng vào bếp / pha chế (tạo đơn thật, hoặc thay đơn thật khi bếp chưa nhận)
+  let sent: any = null, fail = '';
+  if (!d.items.length) fail = '⚠️ Chưa thấy món nào trong ' + (src.refs ? 'ảnh' : 'tin') + ', chưa gửi bếp. Nhắn món giúp em (vd "2 cơm trộn, 1 trà sữa").';
+  else if (draftId) {
+    const { data, error } = await sb.rpc('bot_dat_don', { p_draft: draftId });
+    if (error) {
+      console.error('Gửi bếp lỗi', error);
+      const gone = /ITEM_UNAVAILABLE/.test(error.message || '') ? d.items.find(i => i.menu_item_id === (error as any).hint) : null;
+      fail = gone ? '⚠️ Món “' + gone.name + '” đang tạm hết, chưa gửi bếp. Nhắn "bỏ ' + gone.name + '" hoặc đổi món khác giúp em.' : '⚠️ Chưa gửi được bếp (' + (error.message || 'lỗi') + '). Nhắn lại giúp em nha.';
+    } else sent = data;
+    if (sent?.action === 'locked') fail = LOCKED;
   }
-  await say(m.kenh, m.chatId, draftReply(d, miss, now, same));
+  lap('ghi đơn + gửi bếp', tDb);
+  // Trả lời chủ quán ngay; lưu ảnh và mẫu huấn luyện làm song song sau đó (không bắt chủ quán chờ)
+  const tSay = Date.now();
+  if (sent?.total) d.total_est = sent.total;   // giá thật ở bếp (có ưu đãi, tuỳ chọn)
+  const replied = say(m.kenh, m.chatId, fail || draftReply(d, miss, now, sent?.action === 'updated')).then(() => lap('nhắn Zalo', tSay));
+
+  // Lưu ảnh để đối chiếu khi duyệt (lỗi thì bỏ qua, đơn vẫn lên)
+  const saveImgs = (async () => {
+    if (!draftId || !imgs.length) return;
+    const paths = (await Promise.all(imgs.map(async (im, i) => {
+      const ext = im.mime === 'image/png' ? 'png' : im.mime === 'image/webp' ? 'webp' : 'jpg';
+      const path = draftId + '/' + now.getTime() + '-' + (i + 1) + '.' + ext;
+      try { const { error } = await sb.storage.from('don-anh').upload(path, im.bytes, { contentType: im.mime, upsert: true }); if (error) throw error; return path; }
+      catch (e) { console.error('Lưu ảnh lỗi', e); return null; }
+    }))).filter((x): x is string => !!x);
+    if (paths.length) await sb.from('fb_drafts').update({ anh: [...(same ? cur.anh || [] : []), ...paths] }).eq('id', draftId);
+  })();
 
   // Mẫu huấn luyện (đoạn chat chép từ ảnh, đã ẩn tên, SĐT)
-  try {
-    const menuHash = (await sha(JSON.stringify(menuRaw))).slice(0, 16);
-    const at = now.toISOString();
-    await saveSample(sb, trainSample({ thread: await threadHash(m.kenh + ':' + (d.customer_name || draftId)), draftId, now, anon, before: stateBefore, after: d,
-      ai: Object.assign({}, ai, { intent: 'order' }), model: ai._model || aiProvider(), menuHash,
-      convo: convo.map(x => ({ sender: x.s === 'sua' ? 'quan' : x.s, text: x.t, at })) }), menuRaw);
-  } catch (e) { console.error('Chuẩn bị mẫu lỗi', e); }
+  const saveTrain = (async () => {
+    try {
+      const menuHash = (await sha(JSON.stringify(menuRaw))).slice(0, 16);
+      const at = now.toISOString();
+      await saveSample(sb, trainSample({ thread: await threadHash(m.kenh + ':' + (d.customer_name || draftId)), draftId, now, anon, before: stateBefore, after: d,
+        ai: Object.assign({}, ai, { intent: 'order' }), model: ai._model || aiProvider(), menuHash,
+        convo: convo.map(x => ({ sender: x.s === 'sua' ? 'quan' : x.s, text: x.t, at })) }), menuRaw);
+    } catch (e) { console.error('Chuẩn bị mẫu lỗi', e); }
+  })();
+  await Promise.all([replied, saveImgs, saveTrain]);
+  console.log('⏱ ' + (src.refs ? src.refs.length + ' ảnh' : 'chữ') + ' · ' + tm.join(' · ') + ' · tổng ' + (Date.now() - t0) + 'ms (' + (ai._model || '') + ')');
 }
 
 // ---------------------------------------------------------------------

@@ -213,7 +213,7 @@ const PAY_COLOR = { tien_mat: '#E2325C', chuyen_khoan: '#3A7FC2' };
 const ICON_BOWL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>';
 const ICON_CUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.5 13h-9z"/><path d="M5 8h14M12 8l2-6"/></svg>';
 const TABS = {
-  owner: [['doanhthu', 'Doanh thu', 'hong'], ['facebook', 'Đơn online', 'xanhduong'], ['menu', 'Menu', 'vang'], ['uudai', 'Ưu đãi', 'tim'], ['kho', 'Kho', 'xanhla'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
+  owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['uudai', 'Ưu đãi', 'tim'], ['kho', 'Kho', 'xanhla'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
   staff: [['chamcong', 'Chấm công', 'cam'], ['kho', 'Kho', 'xanhla']]
 };
 const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', promoQuery: '', stockQuery: '', stockSub: 'hang', packQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
@@ -253,15 +253,6 @@ function boot() {
     '<main class="page" id="main"></main>';
   $('.nav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
   go(state.tab);
-  if (isOwner()) {
-    refreshFbBadge(); setInterval(() => { if (document.visibilityState === 'visible') refreshFbBadge(); }, 30000);
-    // Bot lên / sửa đơn là số trên tab và danh sách cập nhật ngay (gom các thay đổi liền nhau trong 0,6 giây)
-    let fbT = null;
-    api.onFbChange(() => { clearTimeout(fbT); fbT = setTimeout(() => {
-      refreshFbBadge();
-      if (state.tab === 'facebook' && !ui.isOpen() && state.fbMain) renderFacebook(state.fbMain).catch(() => {});
-    }, 600); });
-  }
 }
 function go(tab) {
   state.tab = tab;
@@ -269,113 +260,16 @@ function go(tab) {
   BN.store.set('qltab.' + BN.SLOT, tab);
   $$('.nav [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
   const main = $('#main'); main.onclick = null; main.onchange = null; main.innerHTML = '<p class="loading">Đang tải…</p>';
-  ({ doanhthu: renderRevenue, facebook: renderFacebook, menu: renderMenu, uudai: renderPromos, kho: renderStock, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
+  ({ doanhthu: renderRevenue, menu: renderMenu, uudai: renderPromos, kho: renderStock, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
     .catch(e => { main.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; });
 }
 const rerender = () => go(state.tab);
 
 /* =====================================================================
-   ĐƠN ONLINE — chủ quán chụp màn hình đoạn chat với khách, gửi cho bot Zalo / Telegram;
-   bot đọc ảnh thành đơn nháp, chủ quán đối chiếu ảnh rồi duyệt
+   BOT LÊN ĐƠN — chủ quán chụp màn hình đoạn chat với khách, gửi cho bot Zalo / Telegram;
+   bot đọc ảnh và gửi thẳng đơn vào bếp / pha chế (nhãn ĐƠN ONLINE). Ở đây chỉ còn phần cài đặt bot.
    ===================================================================== */
-const FB_DINE = { mang_ve: ['Qua lấy', 'pill-mute'], tai_quan: ['Ăn tại quán', 'pill-gift'], giao_hang: ['Đi ship', 'pill-ok'] };
-const FB_MISS = { items: 'chưa có món', dine_type: 'chưa chọn lấy / ăn / ship', at: 'chưa có giờ hẹn', at_past: 'giờ hẹn đã qua', at_far: 'hẹn quá xa', at_hours: 'ngoài giờ nhận đơn', address: 'chưa có địa chỉ', phone: 'chưa có SĐT' };
-const FB_INBOX = 'https://business.facebook.com/latest/inbox/all';
 const KENH_TEXT = { zalo: 'Zalo', tele: 'Telegram', fb: 'Fanpage' };
-const fbWhen = at => { if (!at) return ''; const d = new Date(at), today = startOfDay(new Date()).getTime(), day = startOfDay(d).getTime(); return (day === today ? '' : day === today + 864e5 ? 'mai ' : ddmm(d) + ' ') + hhmm(d); };
-const fbItemsHtml = items => '<ul class="fb-items">' + (items || []).map(i => '<li><b class="num">' + i.qty + '×</b> ' + esc(i.name) + (i.choices && i.choices.length ? ' <span class="small muted">' + esc(i.choices.join(', ')) + '</span>' : '') + (i.note ? ' <span class="small muted">— ' + esc(i.note) + '</span>' : '') + '</li>').join('') + '</ul>';
-async function renderFacebook(main) {
-  const [data, st, users] = await Promise.all([api.fbDrafts(), api.settings(), api.botUsers()]);
-  if (!data || !users) {
-    main.innerHTML = '<div class="ptitle"><h1>Đơn online</h1></div><section class="box cc-xanhduong"><h2 class="box-title"><span>Chưa cài bot lên đơn</span></h2><p>Chạy <b>sql/cap-nhat-25-don-tu-anh-chup.sql</b> trên Supabase, rồi làm theo <b>HUONG-DAN-BOT-LEN-DON.md</b> để tạo bot Zalo.</p></section>';
-    return;
-  }
-  const today = startOfDay(new Date());
-  const pending = data.drafts.filter(d => d.status === 'cho_duyet' || d.status === 'dang_hoi').sort((a, b) => new Date(a.at || 8.64e15) - new Date(b.at || 8.64e15));
-  const done = data.drafts.filter(d => d.status === 'da_duyet' && new Date(d.approved_at) >= today);
-  const card = d => '<article class="fb-card"><div class="fb-top"><b>' + esc(d.customer_name || 'Khách') + '</b>' +
-      (d.dine_type ? '<span class="pill ' + FB_DINE[d.dine_type][1] + '">' + FB_DINE[d.dine_type][0] + (d.at ? ' · ' + fbWhen(d.at) : '') + '</span>' : d.at ? '<span class="pill pill-mute">' + fbWhen(d.at) + '</span>' : '') +
-      '<span class="small muted fb-ago">' + (d.kenh && d.kenh !== 'fb' ? '📸 ' + KENH_TEXT[d.kenh] + (d.nguoi_gui ? ' · ' + esc(d.nguoi_gui) : '') + ' · ' : '') + BN.ago(d.updated_at) + '</span></div>' +
-      (d.items && d.items.length ? fbItemsHtml(d.items) : '') +
-      ((d.unknown || []).length ? '<p class="small fb-unk">Bot chưa rõ: ' + d.unknown.map(u => '“' + esc(u) + '”').join(', ') + '</p>' : '') +
-      '<p class="small muted fb-meta">' + [d.address ? '📍 ' + esc(d.address) : '', d.customer_phone ? '📞 ' + esc(d.customer_phone) : '', d.total_est ? 'Tạm tính <b class="num">' + vnd(d.total_est) + '</b>' : '', d.status === 'da_duyet' ? 'Duyệt lúc ' + hhmm(d.approved_at) + ' · ' + esc(d.approved_by || '') : ''].filter(Boolean).join(' · ') + '</p>' +
-      (d.status !== 'da_duyet' && (d.missing || []).length ? '<div class="chips">' + d.missing.map(m => '<span class="pill pill-red">' + (FB_MISS[m] || m) + '</span>').join('') + '</div>' : '') +
-      (d.status === 'da_duyet' ? '' : '<div class="fb-acts"><button class="btn btn-sm" type="button" data-fbd="' + esc(d.id) + '">Xem & duyệt</button></div>') + '</article>';
-  main.innerHTML = '<div class="ptitle"><h1>Đơn online</h1></div>' +
-    '<div class="toolbar"><span class="small muted grow">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán → bot lên đơn nháp ở đây. Đối chiếu ảnh rồi bấm Duyệt để gửi bếp.</span><button class="btn btn-line btn-sm" type="button" id="fbSet">Cài đặt bot</button></div>' +
-    (!users.length ? '<section class="box cc-hong"><h2 class="box-title"><span>Chưa kết nối Zalo</span></h2><p>Bấm <b>Cài đặt bot → Lấy mã kết nối</b>, rồi nhắn mã đó cho bot Zalo của quán. Sau đó gửi ảnh chụp đoạn chat là bot lên đơn.</p></section>' : '') +
-    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Chờ duyệt (' + pending.length + ')</span></h2>' + (pending.length ? pending.map(card).join('') : '<p class="empty">Chưa có đơn chờ duyệt.</p>') + '</section>' +
-    (done.length ? '<section class="box cc-xanhla"><h2 class="box-title"><span>Đã duyệt hôm nay (' + done.length + ')</span></h2>' + done.map(card).join('') + '</section>' : '');
-  main.onclick = e => {
-    const b = e.target.closest('[data-fbd]'); if (b) { openFbDraft(data.drafts.find(d => d.id === b.dataset.fbd)); return; }
-    if (e.target.closest('#fbSet')) openFbSettings(st);
-  };
-  // Tự làm mới khi đang mở tab (không làm mới lúc đang xem một đơn)
-  // Đơn mới hiện ngay nhờ realtime (cập nhật 26); vẫn tự tải lại 60 giây một lần phòng khi mất kết nối
-  state.fbMain = main;
-  clearInterval(state.fbTimer);
-  state.fbTimer = setInterval(() => { if (state.tab !== 'facebook') return clearInterval(state.fbTimer); if (!ui.isOpen() && document.visibilityState === 'visible') renderFacebook(main).catch(() => {}); }, 60000);
-}
-/* Xem đơn nháp: ảnh chụp + đoạn chat bot chép lại bên trái, đơn bot tách bên phải; sửa rồi duyệt */
-async function openFbDraft(d) {
-  const f = { dine: d.dine_type || 'mang_ve', at: d.at ? toLocalInput(d.at) : '', name: d.customer_name || '', phone: d.customer_phone || '', address: d.address || '', note: d.note || '', items: JSON.parse(JSON.stringify(d.items || [])) };
-  let menu = null, adding = false, query = '';
-  const total = () => f.items.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
-  const convo = (d.convo || []).length ? d.convo.map(m => m.s === 'sua' ? '<p class="small muted fb-fix">✏️ Bạn nhắn bot: ' + esc(m.t) + '</p>' : '<div class="fb-msg fb-' + (m.s === 'quan' ? 'quan' : 'khach') + '"><span>' + esc(m.t).replace(/\n/g, '<br>') + '</span><small>' + (m.s === 'quan' ? 'Quán' : 'Khách') + '</small></div>').join('') : '<p class="small muted">Chưa có đoạn chat.</p>';
-  const itemsBox = () => (f.items.length ? '<ul class="fb-edit">' + f.items.map((i, k) => '<li><span class="grow">' + esc(i.name) + (i.choices && i.choices.length ? ' <span class="small muted">' + esc(i.choices.join(', ')) + '</span>' : '') + (i.note ? ' <span class="small muted">— ' + esc(i.note) + '</span>' : '') + '<br><span class="small muted num">' + vnd(i.price) + '</span></span>' +
-    '<span class="sk-step"><button class="btn btn-line btn-sm" type="button" data-q="' + k + '" data-d="-1" aria-label="Bớt">−</button><b class="num">' + i.qty + '</b><button class="btn btn-line btn-sm" type="button" data-q="' + k + '" data-d="1" aria-label="Thêm">+</button></span></li>').join('') + '</ul>' : '<p class="small muted">Chưa có món.</p>') +
-    (adding ? '<input class="search" id="fdQ" type="search" placeholder="Tìm món để thêm…" value="' + esc(query) + '" aria-label="Tìm món"><div class="chips" id="fdList">' + addList() + '</div>' : '<button class="link small" type="button" id="fdAdd">+ Thêm món</button>') +
-    '<p class="fb-total">Tạm tính: <b class="num">' + vnd(total()) + '</b> <span class="small muted">(giá thật tính lại khi duyệt)</span></p>';
-  const addList = () => { if (!menu) return '<span class="small muted">Đang tải menu…</span>'; const w = BN.fold(query).split(/\s+/).filter(Boolean); const all = [].concat(...menu.map(c => c.items)); const hit = all.filter(m => w.every(x => BN.fold(m.name).indexOf(x) >= 0)).slice(0, 24); return hit.map(m => '<button class="chipbtn" type="button" data-addm="' + esc(m.id) + '">' + esc(m.name) + ' · ' + K(m.price) + '</button>').join('') || '<span class="small muted">Không có món khớp.</span>'; };
-  const seg = () => '<div class="seg2 sc-modes" role="group" aria-label="Hình thức">' + Object.keys(FB_DINE).map(k => '<button type="button" data-dine="' + k + '" aria-pressed="' + (f.dine === k) + '">' + FB_DINE[k][0] + '</button>').join('') + '</div>';
-  const atLabel = () => f.dine === 'giao_hang' ? 'Giờ giao' : f.dine === 'tai_quan' ? 'Giờ khách đến ăn' : 'Giờ khách qua lấy';
-  const miss = (d.missing || []).map(m => FB_MISS[m] || m);
-  ui.sheet(ui.head('Đơn online · ' + esc(f.name || 'Khách'), miss.length ? 'Còn thiếu: ' + miss.join(', ') + ' — điền tay rồi duyệt' : 'Bot đã đọc xong, đối chiếu ảnh rồi duyệt') +
-    '<div class="sh-body fb-review"><div class="fb-chat-col"><div class="fb-chat-head"><b>' + ((d.anh || []).length ? 'Ảnh chụp (' + d.anh.length + ')' : 'Đoạn chat') + '</b><a class="btn btn-line btn-sm" href="' + FB_INBOX + '" target="_blank" rel="noopener">Mở hộp thư Facebook</a></div>' +
-      ((d.anh || []).length ? '<div class="fb-shots" id="fdShots"><p class="small muted">Đang tải ảnh…</p></div>' : '') +
-      '<details class="fb-convo"' + ((d.anh || []).length ? '' : ' open') + '><summary class="small">Đoạn chat bot chép lại từ ảnh</summary><div class="fb-chat">' + convo + '</div></details></div>' +
-    '<div class="fb-form-col"><div id="fdSeg">' + seg() + '</div>' +
-      '<label class="field" for="fdAt"><span><span id="fdAtL">' + atLabel() + '</span> <span class="req">*</span></span><input id="fdAt" type="datetime-local" value="' + esc(f.at) + '"></label>' +
-      '<div class="grid2"><label class="field" for="fdName"><span>Tên khách <span class="req">*</span></span><input id="fdName" maxlength="60" value="' + esc(f.name) + '"></label><label class="field" for="fdPhone">SĐT<input id="fdPhone" inputmode="tel" maxlength="15" value="' + esc(f.phone) + '"></label></div>' +
-      '<label class="field" for="fdAddr" id="fdAddrBox"' + (f.dine === 'giao_hang' ? '' : ' hidden') + '><span>Địa chỉ giao <span class="req">*</span></span><input id="fdAddr" maxlength="300" value="' + esc(f.address) + '"></label>' +
-      '<label class="field" for="fdNote">Ghi chú cho bếp<input id="fdNote" maxlength="300" value="' + esc(f.note) + '"></label>' +
-      '<h3 class="og-head">Món</h3><div id="fdItems">' + itemsBox() + '</div>' +
-      ((d.unknown || []).length ? '<p class="small fb-unk">Bot chưa rõ: ' + d.unknown.map(u => '“' + esc(u) + '”').join(', ') + ' — thêm tay nếu cần.</p>' : '') +
-      '<p class="msg" id="fdMsg" hidden></p>' + confirmBox('Huỷ đơn nháp này? Khách không nhận được tin gì, bạn tự báo khách nếu cần.', 'Huỷ đơn', 'fdDelBox') + '</div></div>' +
-    '<div class="sh-foot"><button class="btn btn-danger" type="button" id="fdDel">Huỷ đơn</button><button class="btn grow" type="button" id="fdOk">Duyệt → gửi bếp</button></div>', sh => {
-    if ((d.anh || []).length) api.draftImages(d.anh).then(urls => {
-      const box = $('#fdShots', sh); if (!box) return;
-      box.innerHTML = urls.length ? urls.map((u, k) => '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Ảnh chụp đoạn chat ' + (k + 1) + '" loading="lazy"></a>').join('') : '<p class="small muted">Không tải được ảnh (ảnh có thể đã bị xoá).</p>';
-    }).catch(() => null);
-    const repaint = () => { $('#fdItems', sh).innerHTML = itemsBox(); const q = $('#fdQ', sh); if (q) { q.oninput = () => { query = q.value; $('#fdList', sh).innerHTML = addList(); }; } };
-    sh.addEventListener('click', async e => {
-      const dn = e.target.closest('[data-dine]'); if (dn) { f.dine = dn.dataset.dine; $('#fdSeg', sh).innerHTML = seg(); $('#fdAddrBox', sh).hidden = f.dine !== 'giao_hang'; $('#fdAtL', sh).textContent = atLabel(); return; }
-      const qb = e.target.closest('[data-q]'); if (qb) { const i = f.items[Number(qb.dataset.q)]; i.qty += Number(qb.dataset.d); if (i.qty <= 0) f.items.splice(Number(qb.dataset.q), 1); repaint(); return; }
-      if (e.target.closest('#fdAdd')) { adding = true; repaint(); $('#fdQ', sh).focus(); if (!menu) { try { menu = await api.getMenu(); } catch (err) { menu = []; } $('#fdList', sh).innerHTML = addList(); } return; }
-      const am = e.target.closest('[data-addm]'); if (am) {
-        const m = [].concat(...menu.map(x => x.items)).find(x => x.id === am.dataset.addm);
-        const defs = (m.option_groups || []).filter(g => g.min > 0).map(g => g.choices.find(x => x.default) || g.choices[0]).filter(Boolean);
-        f.items.push({ menu_item_id: m.id, name: m.name, qty: 1, choice_ids: defs.map(x => x.id), choices: [], note: null, price: m.price + defs.reduce((s, x) => s + (x.price || 0), 0) });
-        adding = false; query = ''; repaint(); ui.toast('Đã thêm ' + m.name + ' · đổi tuỳ chọn bằng Sửa đơn ở bếp nếu cần'); return;
-      }
-    });
-    wireConfirm(sh, '#fdDel', 'fdDelBox', async () => { await api.fbCancel(d.id); ui.close(); ui.toast('Đã huỷ đơn nháp'); rerender(); refreshFbBadge(); });
-    $('#fdOk', sh).onclick = async () => {
-      const m = $('#fdMsg', sh), say = x => { m.textContent = x; m.hidden = false; }; m.hidden = true;
-      const at = $('#fdAt', sh).value, name = $('#fdName', sh).value.trim(), addr = $('#fdAddr', sh).value.trim();
-      if (!f.items.length) return say('Đơn chưa có món.');
-      if (!at) return say('Nhập ' + atLabel().toLowerCase() + '.');
-      if (!name) return say('Nhập tên khách.');
-      if (f.dine === 'giao_hang' && !addr) return say('Nhập địa chỉ giao.');
-      const btn = $('#fdOk', sh); btn.disabled = true;
-      try {
-        const r = await api.fbApprove(d.id, { dine: f.dine, at: new Date(at).toISOString(), name, phone: $('#fdPhone', sh).value.trim(), address: f.dine === 'giao_hang' ? addr : null, note: $('#fdNote', sh).value.trim(),
-          items: f.items.map(i => ({ menu_item_id: i.menu_item_id, qty: i.qty, choice_ids: i.choice_ids || [], note: i.note || null })) });
-        ui.close(); ui.toast('Đã duyệt, đơn sang bếp · ' + vnd(r.total)); rerender(); refreshFbBadge();
-      } catch (err) { say(errText(err)); btn.disabled = false; }
-    };
-  }, { wide: true });
-}
 function openFbSettings(st) {
   const botLink = { zalo: null, tele: null };
   ui.sheet(ui.head('Cài đặt bot lên đơn', 'Bot đọc ảnh chụp đoạn chat theo menu đang bán') + '<div class="sh-body">' +
@@ -456,13 +350,6 @@ function openFbSettings(st) {
     // Lấy tên bot sẵn để hướng dẫn kết nối ghi đúng tên
     api.fbCall({ action: 'status' }).then(x => { for (const k of ['zalo', 'tele']) { const c = (x && x.kenh || {})[k]; if (c && c.token && !c.error) { if (k === 'zalo') botLink.zalo = c.name; else botLink.tele = c.username; } } }).catch(() => null);
   });
-}
-/* Số trên nút tab Đơn online: đơn chờ duyệt */
-async function refreshFbBadge() {
-  if (!isOwner()) return;
-  const n = await api.fbCount().catch(() => null); const b = $('.nav [data-tab="facebook"]'); if (!b) return;
-  let s = $('.nav-badge', b); if (!s) { s = document.createElement('span'); s.className = 'nav-badge'; b.appendChild(s); }
-  s.hidden = !n; s.textContent = n || '';
 }
 
 /* =====================================================================
@@ -1561,6 +1448,7 @@ async function renderSettings(main) {
     '<p class="small muted" style="margin:0">Hai số này dùng để ước tính thời gian chờ báo cho khách.</p>' +
     '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
+    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
     (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
     QRS.map(q => '<section class="box cc-' + q.color + '"><h2 class="box-title"><span>' + q.title + '</span></h2><div class="row" style="align-items:flex-start;gap:18px"><div class="qr" id="qr-' + q.key + '"><p class="loading">Đang tạo mã…</p></div>' +
       '<div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px"><p style="margin:0">' + q.desc + '</p><label class="field" for="qUrl-' + q.key + '">Địa chỉ mã này mở ra<input id="qUrl-' + q.key + '" value="' + esc(orderUrl + q.query) + '"></label>' +
@@ -1574,6 +1462,7 @@ async function renderSettings(main) {
     $('#sEx', main).innerHTML = 'Ví dụ với lương 25.000đ/giờ:<br>• ' + payLine(shift(232)) + '<br>• ' + payLine(shift(248));
   };
   ex(); ['#sRoundOn', '#sStep', '#sMode', '#sPay'].forEach(id => { $(id, main).onchange = ex; });
+  $('#sBot', main).onclick = () => openFbSettings(cfg);
   $('#sSave', main).onclick = async e => {
     e.target.disabled = true;
     try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1), bar_capacity: Math.max(1, Number($('#sBar', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
