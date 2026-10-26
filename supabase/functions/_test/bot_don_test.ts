@@ -292,6 +292,11 @@ Deno.test('ảnh: tên khách là tên đầu màn hình, AI nhặt nhầm tên 
   assertEquals(t.orders[0].customer_name ?? 'Thanhh Hienn', 'Thanhh Hienn');
 });
 
+Deno.test('prompt: phân biệt Zalo / Messenger bằng dấu hiệu cụ thể, không dựa vào màu xanh', () => {
+  const p = bot.systemPrompt(menu, new Date('2026-05-12T04:00:00Z'), '07:00', '22:00');
+  for (const k of ['PHÂN BIỆT ZALO / MESSENGER', 'GIỜ nằm BÊN TRONG bong bóng', 'DANH SÁCH', '"Tin nhắn"', 'nguon_ly_do', 'xanh NHẠT = ZALO']) assertStringIncludes(p, k);
+});
+
 Deno.test('prompt: tên khách chỉ lấy ở thanh tiêu đề, không lấy tên trong khung trích dẫn', () => {
   const p = bot.systemPrompt(menu, new Date('2026-05-12T04:00:00Z'), '07:00', '22:00');
   assertStringIncludes(p, 'KHUNG TRÍCH DẪN');
