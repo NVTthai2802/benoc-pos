@@ -55,6 +55,7 @@ Deno.test('prompt: menu, giờ hiện tại, đơn đang ghi, ảnh / tin chữ'
   assertStringIncludes(sp, '15:00 Thứ 7 ngày 2026-10-24');
   assertStringIncludes(sp, num('Cơm gà viên') + '. Cơm gà viên — 30k');
   assertStringIncludes(sp, 'ẢNH CHỤP MÀN HÌNH');
+  assertStringIncludes(sp, 'CHỐNG ĐẾM TRÙNG');   // khách nhắc lại món thì không cộng thêm
   const cur = bot.applyAi(empty(), { items: [{ m: num('Cơm gà viên') }] }, menu, NOW, 'Lan');
   assertStringIncludes(bot.userPrompt({ cur, nImages: 2, caption: 'khách quen' }), 'Chủ quán gửi 2 ảnh');
   assertStringIncludes(bot.userPrompt({ cur, nImages: 2 }), '"ten":"Cơm gà viên"');
@@ -85,18 +86,18 @@ Deno.test('Gemini: quá tải / không có model → thử model kế; sai khoá
     let seen: string[] = []; let body: any = null;
     globalThis.fetch = (async (url: string, init?: any) => { seen.push(model(url)); body = JSON.parse(init.body); return seen.length === 1 ? new Response('x', { status: 503 }) : aiOk({ intent: 'order', items: [] }); }) as typeof fetch;
     const a = await bot.askAi('s', 'u', [{ mime: 'image/png', b64: 'QUJD' }]);
-    assertEquals([a.intent, a._model], ['order', 'gemini-3.5-flash-lite']);
+    assertEquals([a.intent, a._model], ['order', 'gemini-3.8-flash']);
     assertEquals(body.contents[0].parts[1], { inlineData: { mimeType: 'image/png', data: 'QUJD' } });
 
     seen = [];
     globalThis.fetch = (async (url: string) => { seen.push(model(url)); return seen.length <= 3 ? new Response('busy', { status: 429 }) : aiOk({ intent: 'order' }); }) as typeof fetch;
-    assertEquals((await bot.askAi('s', 'u'))._model, 'gemini-3.8-flash');
+    assertEquals((await bot.askAi('s', 'u'))._model, 'gemini-3.5-flash-lite');
     assertEquals(seen.length, 4);
 
     seen = [];
     globalThis.fetch = (async (url: string) => { seen.push(model(url)); return new Response('bad key', { status: 401 }); }) as typeof fetch;
     let threw = false; try { await bot.askAi('s', 'u'); } catch (_) { threw = true; }
-    assert(threw); assertEquals(seen, ['gemini-3.8-flash']);
+    assert(threw); assertEquals(seen, ['gemini-3.5-flash-lite']);
   } finally { globalThis.fetch = real; }
 });
 

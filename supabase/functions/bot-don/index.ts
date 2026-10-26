@@ -12,7 +12,7 @@
 //  Biến môi trường (Supabase → Edge Functions → Secrets):
 //    ZALO_BOT_TOKEN       token bot Zalo (tạo ở https://bot.zapps.me)          ┐ cần ít nhất 1 trong 2
 //    TELEGRAM_BOT_TOKEN   token bot Telegram (tạo bằng @BotFather)            ┘
-//    GEMINI_API_KEY       khoá AI Gemini   (GEMINI_MODEL: để trống tự thử gemini-3.8-flash → 3.5-flash-lite → 2.5-flash)
+//    GEMINI_API_KEY       khoá AI Gemini   (GEMINI_MODEL: để trống tự thử gemini-3.5-flash-lite → 3.8-flash → 2.5-flash)
 //    ANTHROPIC_API_KEY    hoặc khoá Claude (CLAUDE_MODEL, mặc định claude-haiku-5-5); AI_PROVIDER = gemini | claude để chọn
 //  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: Supabase tự cấp sẵn.
 //
@@ -23,7 +23,7 @@
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 const env = (k: string, d = '') => (globalThis as any).Deno?.env.get(k) ?? d;
-const PHOTO_WAIT_MS = 6000;     // chủ quán hay gửi nhiều ảnh liền nhau: đợi gom đủ rồi đọc một lượt
+const PHOTO_WAIT_MS = 3000;     // chủ quán hay gửi nhiều ảnh liền nhau: đợi gom đủ rồi đọc một lượt
 const MAX_PHOTOS = 8;           // tối đa 8 ảnh / đơn
 const MAX_PHOTO_BYTES = 8e6;    // ảnh lớn hơn 8MB thì bỏ
 const OPEN_MINUTES = 90;        // đơn nháp gửi trong 90 phút gần nhất coi là "đơn đang ghi" (nhắn chữ là sửa đơn này)
@@ -165,7 +165,13 @@ Chủ quán gửi cho bạn MỘT trong hai loại:
 (a) ẢNH CHỤP MÀN HÌNH đoạn chat đặt món giữa quán và MỘT khách (Messenger / Facebook / Zalo), có thể nhiều ảnh, theo thứ tự cũ → mới. Tin của QUÁN thường nằm bên PHẢI (bong bóng có màu), tin của KHÁCH nằm bên TRÁI. Tên khách thường ở đầu màn hình. Ảnh vừa chụp, nên "chiều nay", "tối nay" là hôm nay; tin có mốc giờ / ngày thì dựa vào đó.
 (b) TIN CHỮ do chủ quán gõ: lệnh sửa ĐƠN ĐANG GHI ("thêm 1 trà đào", "bỏ kimbap", "giờ 18h", "ship 12 ngõ 5…, sđt 09…"), hoặc cả một đơn chủ quán tự gõ khi chưa có đơn đang ghi.
 
-Nhiệm vụ: trả về TRẠNG THÁI ĐƠN ĐẦY ĐỦ, MỚI NHẤT dưới dạng JSON: cộng dồn mọi thông tin hai bên đã chốt; khách đổi ý thì lấy ý mới nhất; quán báo hết món / khách bỏ món thì bỏ khỏi danh sách.
+Nhiệm vụ: trả về TRẠNG THÁI ĐƠN ĐẦY ĐỦ, MỚI NHẤT dưới dạng JSON: gom mọi thông tin hai bên đã chốt; khách đổi ý thì lấy ý mới nhất; quán báo hết món / khách bỏ món thì bỏ khỏi danh sách.
+
+CHỐNG ĐẾM TRÙNG (rất quan trọng):
+- Khách hay NHẮC LẠI cả đơn hoặc GHI RÕ HƠN món đã gọi (nhất là khi quán chưa trả lời kịp). Món nhắc lại / ghi rõ hơn là CÙNG MỘT MÓN, KHÔNG cộng thêm số lượng.
+  Ví dụ: "Cho em 1 cơm trộn ạ" … "Alo ạ" … "Cho em 1ts cốm, 1 cơm trộn HQ ạ" → đơn là 1 Cơm trộn Hàn Quốc + 1 Trà sữa cốm (KHÔNG phải 2 cơm trộn). Tin sau đầy đủ hơn thì lấy tin sau.
+- Chỉ cộng thêm khi khách nói rõ là gọi THÊM: "thêm 1…", "1… nữa", "cho thêm", "gọi thêm", hoặc quán hỏi "mình lấy thêm gì không" và khách gọi món mới.
+- Tin của quán hoặc bot (bên phải) nhắc lại / tóm tắt đơn thì KHÔNG phải món mới.
 
 ${menuText(menu)}
 
@@ -208,7 +214,8 @@ export function parseJson(t: string): AiOut {
 
 
 export type Img = { mime: string; b64: string };
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+// Model nhanh chạy trước (đọc ảnh chụp chat vẫn đủ chính xác), model mạnh làm dự phòng khi lỗi / quá tải
+const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash'];
 const AI_TIMEOUT_MS = 20000;   // 1 lần gọi AI (chỉ chữ) quá 20 giây thì bỏ, thử model khác
 const AI_IMG_TIMEOUT_MS = 45000; // có ảnh thì đọc lâu hơn
 const AI_RETRY_MS = 2000;      // mọi model đều quá tải: đợi 2 giây rồi thử lại 1 vòng
