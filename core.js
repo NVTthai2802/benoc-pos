@@ -392,7 +392,7 @@ function supabaseApi() {
     },
     async unlinkBarcode(code) { const c = await cl(); await q(c.from('stock_barcodes').delete().eq('code', code)); },
 
-    /* ---------- Đơn Facebook (cập nhật 22 + Edge Function fb-bot). Chưa cài thì trả về null ---------- */
+    /* ---------- Đơn online (cập nhật 22, 25 + Edge Function bot-don: đơn từ ảnh chụp gửi qua Zalo / Telegram). Chưa cài thì trả về null ---------- */
     async fbDrafts() {
       const c = await cl(); const since = new Date(Date.now() - 36 * 3600e3).toISOString();
       let drafts; try { drafts = await q(c.from('fb_drafts').select('*').gte('updated_at', since).neq('status', 'huy').order('updated_at', { ascending: false }).limit(200)); } catch (e) { return null; }
@@ -430,11 +430,21 @@ function supabaseApi() {
         return (a.count || 0) + (b.count || 0);
       } catch (e) { return null; }
     },
-    /* Gọi bot: nhắn khách sau khi duyệt, nhắn tay, kiểm tra cài đặt */
+    /* Gọi bot: kiểm tra cài đặt, cài webhook, gửi tin xác nhận về Zalo / Telegram sau khi duyệt */
     async fbCall(body) {
-      const c = await cl(); const { data, error } = await c.functions.invoke('fb-bot', { body });
-      if (error) { let msg = error.message || 'Lỗi gọi bot'; try { const j = await error.context.json(); msg = j.error || msg; } catch (e) { /* bỏ qua */ } if (/Failed to send|NOT_FOUND|404/i.test(msg)) msg = 'Chưa cài bot (Edge Function fb-bot) trên Supabase.'; fail(msg); }
+      const c = await cl(); const { data, error } = await c.functions.invoke('bot-don', { body });
+      if (error) { let msg = error.message || 'Lỗi gọi bot'; try { const j = await error.context.json(); msg = j.error || msg; } catch (e) { /* bỏ qua */ } if (/Failed to send|NOT_FOUND|404/i.test(msg)) msg = 'Chưa cài bot (Edge Function bot-don) trên Supabase.'; fail(msg); }
       return data;
+    },
+    /* Tài khoản Zalo / Telegram được dùng bot (cập nhật 25). Chưa cài thì trả về null */
+    async botUsers() { try { const c = await cl(); const r = await c.from('bot_users').select('*').order('created_at'); return r.error ? null : r.data; } catch (e) { return null; } },
+    async botUserDel(kenh, chatId) { const c = await cl(); await q(c.from('bot_users').delete().eq('kenh', kenh).eq('chat_id', chatId)); },
+    botLinkCode: () => rpc('bot_link_code', {}),
+    /* Link xem ảnh chụp của đơn (bucket riêng tư, link hết hạn sau 1 giờ) */
+    async draftImages(paths) {
+      if (!paths || !paths.length) return [];
+      const c = await cl(); const { data, error } = await c.storage.from('don-anh').createSignedUrls(paths, 3600);
+      if (error) return []; return (data || []).map(x => x.signedUrl).filter(Boolean);
     },
 
     /* ---------- Nhân viên & chấm công ---------- */
@@ -904,7 +914,7 @@ function demoStockSeed(db) {
   db.stock_barcodes = [{ code: '8934563000016', item_id: mi.id, unit_kind: 'use', created_by: 'Mẫu', created_at: new Date().toISOString() }, { code: '8934563000023', item_id: mi.id, unit_kind: 'buy', created_by: 'Mẫu', created_at: new Date().toISOString() }];
   return db;
 }
-/* Đơn Facebook mẫu của bản xem thử */
+/* Đơn online mẫu của bản xem thử (đơn bot đọc từ ảnh chụp gửi qua Zalo) */
 function demoFbSeed(db) {
   const now = Date.now(), at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); if (d.getTime() < now + 30 * 60e3) d.setTime(now + 60 * 60e3); return d.toISOString(); };
   const mi = n => db.menu_items.find(m => m.name === n && m.is_available) || db.menu_items.find(m => m.is_available);
@@ -914,29 +924,18 @@ function demoFbSeed(db) {
     const all = cs.filter(c => !ex.some(x => x.group_id === c.group_id)).concat(ex);
     return { menu_item_id: m.id, name: m.name, qty, choice_ids: all.map(c => c.id), choices: ex.map(c => c.name), note: null, price: m.price + all.reduce((t, c) => t + (c.price_delta || 0), 0), drink: DRINK_CATS.test((db.menu_categories.find(c => c.id === m.category_id) || {}).name || '') }; };
   const t = (min) => new Date(now - min * 60e3).toISOString();
-  db.fb_threads = [
-    { psid: 'demo-1', name: 'Nguyễn Thu Hà', link: null, paused_until: null, need_human: false, last_at: t(3), created_at: t(10) },
-    { psid: 'demo-2', name: 'Trần Minh Đức', link: null, paused_until: null, need_human: false, last_at: t(6), created_at: t(9) },
-    { psid: 'demo-3', name: 'Lê Phương Anh', link: null, paused_until: null, need_human: true, last_at: t(1), created_at: t(2) }
-  ];
+  db.fb_threads = []; db.fb_messages = [];
+  db.bot_users = [{ kenh: 'zalo', chat_id: 'demo-zalo', name: 'Chủ quán (mẫu)', created_at: t(60 * 24) }];
   const i1 = [line('Cơm gà viên', 2, ['Trứng ốp la']), line('Hồng trà sữa trân châu', 2, ['Ít đá'])];
   const i2 = [line('Kimbap chiên', 1), line('Hồng trà sữa trân châu', 1)];
   const sum = a => a.reduce((s, i) => s + i.price * i.qty, 0);
   db.fb_drafts = [
-    { id: uuid(), psid: 'demo-1', status: 'cho_duyet', dine_type: 'giao_hang', at: at(18, 30), customer_name: 'Nguyễn Thu Hà', customer_phone: '0912345678', address: '12 ngõ 5 Nguyễn Trãi, Thanh Xuân', note: null, items: i1, unknown: [], missing: [], total_est: sum(i1), asked: ['drink'], changed_after: false, created_at: t(10), updated_at: t(3) },
-    { id: uuid(), psid: 'demo-2', status: 'dang_hoi', dine_type: 'mang_ve', at: null, customer_name: 'Trần Minh Đức', customer_phone: null, address: null, note: null, items: i2, unknown: [], missing: ['at'], total_est: sum(i2), asked: [], changed_after: false, created_at: t(9), updated_at: t(6) }
+    { id: uuid(), psid: null, kenh: 'zalo', chat_id: 'demo-zalo', nguoi_gui: 'Chủ quán (mẫu)', anh: [], status: 'cho_duyet', dine_type: 'giao_hang', at: at(18, 30), customer_name: 'Nguyễn Thu Hà', customer_phone: '0912345678', address: '12 ngõ 5 Nguyễn Trãi, Thanh Xuân', note: null, items: i1, unknown: [], missing: [], total_est: sum(i1), asked: [], changed_after: false, created_at: t(10), updated_at: t(3),
+      convo: [{ s: 'khach', t: 'shop ơi cho mình 2 cơm gà viên thêm trứng, 2 ts trân châu ít đá' }, { s: 'quan', t: 'Dạ mình qua lấy hay ship ạ?' }, { s: 'khach', t: 'ship 6r tối nha, 12 ngõ 5 nguyễn trãi thanh xuân, sdt 0912345678' }, { s: 'quan', t: 'Dạ vâng ạ' }] },
+    { id: uuid(), psid: null, kenh: 'zalo', chat_id: 'demo-zalo', nguoi_gui: 'Chủ quán (mẫu)', anh: [], status: 'cho_duyet', dine_type: 'mang_ve', at: null, customer_name: 'Trần Minh Đức', customer_phone: null, address: null, note: null, items: i2, unknown: [], missing: ['at'], total_est: sum(i2), asked: [], changed_after: false, created_at: t(9), updated_at: t(6),
+      convo: [{ s: 'khach', t: '1 kimbap chiên 1 ts nhé, mình qua lấy' }, { s: 'quan', t: 'Dạ mấy giờ mình qua ạ?' }] }
   ];
-  db.fb_messages = [
-    { id: 1, psid: 'demo-1', sender: 'khach', text: 'shop ơi cho mình 2 cơm gà viên thêm trứng, 2 ts trân châu ít đá', created_at: t(10) },
-    { id: 2, psid: 'demo-1', sender: 'bot', text: 'Dạ Bé Nốc chào Hà ạ 🥰\n\nEm ghi nhận đơn của mình:\n• 2 Cơm gà viên (Trứng ốp la)\n• 2 Hồng trà sữa trân châu (Ít đá)\n\n👉 Mình qua lấy, ăn tại quán hay để quán ship ạ?\n👉 Mình hẹn mấy giờ ạ?', created_at: t(10) },
-    { id: 3, psid: 'demo-1', sender: 'khach', text: 'ship 6r tối nha, 12 ngõ 5 nguyễn trãi thanh xuân, sdt 0912345678', created_at: t(4) },
-    { id: 4, psid: 'demo-1', sender: 'bot', text: 'Em đã gửi đơn cho quán xác nhận ạ. Quán xác nhận xong em nhắn mình ngay, mình cần sửa gì cứ nhắn em nha.', created_at: t(3) },
-    { id: 5, psid: 'demo-2', sender: 'khach', text: '1 kimbap chiên 1 ts nhé, mình qua lấy', created_at: t(9) },
-    { id: 6, psid: 'demo-2', sender: 'bot', text: 'Em ghi nhận đơn của mình:\n• 1 Kimbap chiên\n• 1 Hồng trà sữa trân châu\n🛍 Qua lấy\n\nMấy giờ mình qua lấy ạ?', created_at: t(6) },
-    { id: 7, psid: 'demo-3', sender: 'khach', text: 'hôm qua mình đặt ship mà shipper giao trễ quá 😢', created_at: t(2) },
-    { id: 8, psid: 'demo-3', sender: 'bot', text: 'Dạ em báo chủ quán trả lời mình ngay ạ, mình đợi em chút nha.', created_at: t(1) }
-  ];
-  if (db.shop_settings.fb_bot_on == null) Object.assign(db.shop_settings, { fb_bot_on: true, fb_open: '07:00', fb_close: '22:00', fb_hello: null });
+  if (db.shop_settings.fb_open == null) Object.assign(db.shop_settings, { fb_open: '07:00', fb_close: '22:00' });
   return db;
 }
 function demoApi() {
@@ -1212,8 +1211,8 @@ function demoApi() {
     },
     async unlinkBarcode(code) { need('owner'); tx(db => { db.stock_barcodes = (db.stock_barcodes || []).filter(x => x.code !== code); }); },
 
-    /* ---------- Đơn Facebook (bản xem thử: dữ liệu mẫu, không nhắn Facebook thật) ---------- */
-    async fbDrafts() { need('owner'); const db = load(); if (!db.fb_drafts) { demoFbSeed(db); save(); } return { drafts: db.fb_drafts.filter(d => d.status !== 'huy').map(d => JSON.parse(JSON.stringify(d))), threads: db.fb_threads.map(t => Object.assign({}, t)) }; },
+    /* ---------- Đơn online (bản xem thử: dữ liệu mẫu, không nối Zalo thật) ---------- */
+    async fbDrafts() { need('owner'); const db = load(); if (!db.fb_drafts || !db.bot_users) { demoFbSeed(db); save(); } return { drafts: db.fb_drafts.filter(d => d.status !== 'huy').map(d => JSON.parse(JSON.stringify(d))), threads: db.fb_threads.map(t => Object.assign({}, t)) }; },
     async fbMessages(psid) { need('owner'); return (load().fb_messages || []).filter(m => m.psid === psid).map(m => Object.assign({}, m)); },
     async fbApprove(id, f) {
       const e = need('owner');
@@ -1233,13 +1232,11 @@ function demoApi() {
     async fbTrainStats() { need('owner'); return { total: 0, gold: 0, fixed: 0, demo: true }; },
     async fbTrainExport() { need('owner'); return { rows: [], menus: [] }; },
     async fbCount() { const db = load(); if (!db.fb_drafts) return 0; return db.fb_drafts.filter(d => d.status === 'cho_duyet').length + db.fb_threads.filter(t => t.need_human).length; },
-    async fbCall(body) {
-      need('owner'); await wait(300);
-      if (body.action === 'status') return { ok: true, demo: true };
-      const db = load(); const d = body.draft_id && db.fb_drafts.find(x => x.id === body.draft_id); const psid = body.psid || (d && d.psid);
-      tx(x => { x.fb_messages.push({ id: Date.now(), psid, sender: 'quan', text: body.text || 'Dạ quán đã xác nhận đơn của mình ✅ (bản xem thử không nhắn Facebook thật)', created_at: iso() }); });
-      return { ok: true, demo: true };
-    },
+    async fbCall(body) { need('owner'); await wait(300); return { ok: true, demo: true }; },
+    async botUsers() { need('owner'); const db = load(); if (!db.bot_users) { demoFbSeed(db); save(); } return db.bot_users.map(x => Object.assign({}, x)); },
+    async botUserDel(kenh, chatId) { need('owner'); tx(db => { db.bot_users = (db.bot_users || []).filter(x => !(x.kenh === kenh && x.chat_id === chatId)); }); },
+    async botLinkCode() { need('owner'); return { code: String(Math.floor(100000 + Math.random() * 900000)), until: new Date(Date.now() + 600e3).toISOString(), demo: true }; },
+    async draftImages() { return []; },
     async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.kind || m.kind === f.kind) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
 
     /* ---------- Nhân viên & chấm công ---------- */
