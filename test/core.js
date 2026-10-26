@@ -404,6 +404,23 @@ function supabaseApi() {
     async fbCancel(id) { const c = await cl(); await q(c.from('fb_drafts').update({ status: 'huy', updated_at: new Date().toISOString() }).eq('id', id)); },
     async fbThread(psid, patch) { const c = await cl(); await q(c.from('fb_threads').update(patch).eq('psid', psid)); },
     async fbBotSettings(patch) { const c = await cl(); await q(c.from('shop_settings').update(patch).eq('id', 1)); },
+    /* Dữ liệu huấn luyện (cập nhật 24). Chưa cài thì trả về null */
+    async fbTrainStats() {
+      try {
+        const c = await cl();
+        const a = await c.from('fb_train').select('id', { count: 'exact', head: true }); if (a.error) return null;
+        const g = await c.from('fb_train').select('edits').not('final', 'is', null).limit(5000);
+        const gold = g.data || [];
+        return { total: a.count || 0, gold: gold.length, fixed: gold.filter(r => r.edits && r.edits.length).length };
+      } catch (e) { return null; }
+    },
+    async fbTrainExport() {
+      const c = await cl(); const rows = [];
+      for (let from = 0; ; from += 1000) { const r = await q(c.from('fb_train').select('*').order('id').range(from, from + 999)); rows.push(...r); if (r.length < 1000) break; }
+      const hashes = [...new Set(rows.map(r => r.menu_hash).filter(Boolean))];
+      const menus = hashes.length ? await q(c.from('fb_train_menu').select('*').in('hash', hashes)) : [];
+      return { rows, menus };
+    },
     async fbCount() {
       try {
         const c = await cl(); const since = new Date(Date.now() - 36 * 3600e3).toISOString();
@@ -1213,6 +1230,8 @@ function demoApi() {
     async fbCancel(id) { need('owner'); tx(db => { db.fb_drafts.find(x => x.id === id).status = 'huy'; }); },
     async fbThread(psid, patch) { need('owner'); tx(db => { Object.assign(db.fb_threads.find(x => x.psid === psid), patch); }); },
     async fbBotSettings(patch) { need('owner'); tx(db => { Object.assign(db.shop_settings, patch); }); },
+    async fbTrainStats() { need('owner'); return { total: 0, gold: 0, fixed: 0, demo: true }; },
+    async fbTrainExport() { need('owner'); return { rows: [], menus: [] }; },
     async fbCount() { const db = load(); if (!db.fb_drafts) return 0; return db.fb_drafts.filter(d => d.status === 'cho_duyet').length + db.fb_threads.filter(t => t.need_human).length; },
     async fbCall(body) {
       need('owner'); await wait(300);
