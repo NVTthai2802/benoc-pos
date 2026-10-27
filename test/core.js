@@ -634,14 +634,15 @@ const promoTitle = (kind, name) => (kind === 'combo' && !/^combo/i.test(String(n
 /* Dòng ghi vào bảng promotions */
 function promoRow(p) {
   return {
-    name: String(p.name || '').trim(), kind: ['mua_tang', 'giam_gia'].indexOf(p.kind) >= 0 ? p.kind : 'combo', description: p.description || null, image_path: p.image_path || null,
+    name: String(p.name || '').trim(), kind: ['mua_tang', 'giam_gia', 'don_tang'].indexOf(p.kind) >= 0 ? p.kind : 'combo', description: p.description || null, image_path: p.image_path || null,
     price: p.kind === 'combo' ? Math.max(0, Number(p.price) || 0) : null, buy_qty: Math.max(1, Number(p.buy_qty) || 1), get_qty: Math.max(1, Number(p.get_qty) || 1),
     gift_same: !!p.gift_same, option_mode: ['cong_them', 'mien_phi', 'khong_phi'].indexOf(p.option_mode) >= 0 ? p.option_mode : 'cong_them',
     start_at: p.start_at || null, end_at: p.end_at || null, days: p.days && p.days.length && p.days.length < 7 ? p.days.slice().sort((a, b) => a - b) : null,
     time_from: p.time_from || null, time_to: p.time_to || null, is_active: p.is_active !== false, sort_order: Number(p.sort_order) || 0,
-    gift_name: p.kind === 'mua_tang' && !p.gift_same && String(p.gift_name || '').trim() ? String(p.gift_name).trim().slice(0, 60) : null,
+    gift_name: (p.kind === 'mua_tang' || p.kind === 'don_tang') && !p.gift_same && String(p.gift_name || '').trim() ? String(p.gift_name).trim().slice(0, 60) : null,
     gift_station: p.gift_station === 'bep' ? 'bep' : 'pha_che',
     limit_qty: Number(p.limit_qty) > 0 ? Math.round(Number(p.limit_qty)) : null, limit_per: p.limit_per === 'tong' ? 'tong' : 'ngay',
+    ...(p.kind === 'don_tang' ? { min_total: Math.max(1, Math.round(Number(p.min_total) || 0)), option_mode: 'mien_phi' } : {}),
     ...(p.kind === 'giam_gia' ? { sale_mode: ['dong_gia', 'phan_tram', 'tru_tien'].indexOf(p.sale_mode) >= 0 ? p.sale_mode : 'dong_gia', sale_value: Math.max(0, Number(p.sale_value) || 0) } : {})
   };
 }
@@ -668,9 +669,10 @@ function buildPublicPromos(db) {
     const good = p.kind === 'combo'
       ? p.price != null && all.some(i => i.part === 'combo') && all.filter(i => i.part === 'combo').every(i => ok(i.menu_item_id))
       : p.kind === 'giam_gia' ? p.sale_value != null && all.some(i => i.part === 'giam' && ok(i.menu_item_id))
+      : p.kind === 'don_tang' ? p.min_total > 0 && (!!p.gift_name || all.some(i => i.part === 'tang' && ok(i.menu_item_id)))
       : all.some(i => i.part === 'mua' && ok(i.menu_item_id)) && (p.gift_same || !!p.gift_name || all.some(i => i.part === 'tang' && ok(i.menu_item_id)));
     if (!good) return null;
-    return { id: p.id, name: p.name, kind: p.kind, description: p.description, image_path: p.image_path, price: p.price, buy_qty: p.buy_qty, get_qty: p.get_qty, gift_same: p.gift_same, option_mode: p.option_mode, start_at: p.start_at, end_at: p.end_at, days: p.days, time_from: hm5(p.time_from), time_to: hm5(p.time_to), sort_order: p.sort_order, sale_mode: p.sale_mode || 'dong_gia', sale_value: p.sale_value == null ? null : p.sale_value,
+    return { id: p.id, name: p.name, kind: p.kind, description: p.description, image_path: p.image_path, price: p.price, buy_qty: p.buy_qty, get_qty: p.get_qty, gift_same: p.gift_same, option_mode: p.option_mode, start_at: p.start_at, end_at: p.end_at, days: p.days, time_from: hm5(p.time_from), time_to: hm5(p.time_to), sort_order: p.sort_order, sale_mode: p.sale_mode || 'dong_gia', sale_value: p.sale_value == null ? null : p.sale_value, min_total: p.min_total || null,
       gift_name: p.gift_name || null, limit_qty: p.limit_qty || null, limit_per: p.limit_per || 'ngay', left: demoPromoLeft(db, p),
       items: all.filter(i => ok(i.menu_item_id)).map(i => ({ part: i.part, menu_item_id: i.menu_item_id, qty: i.qty })) };
   }).filter(Boolean).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi'));
@@ -782,6 +784,27 @@ function demoFinalize(db, id, method, cashierId) {
   const station_minutes = {}; db.order_stations.filter(x => x.order_id === id && x.accepted_at && x.served_at).forEach(x => { station_minutes[x.station] = Math.round((new Date(x.served_at) - new Date(x.accepted_at)) / 60000); });
   db.sales.push({ id: o.id, queue_number: o.queue_number, dine_type: o.dine_type || 'tai_quan', total: o.total, payment_method: method || o.paid_method || 'tien_mat', items, ordered_at: o.created_at, accepted_at: o.accepted_at, served_at: o.served_at, paid_at: o.paid_at || new Date().toISOString(), cook_minutes: o.accepted_at && o.served_at ? Math.round((new Date(o.served_at) - new Date(o.accepted_at)) / 60000) : null, station_minutes, cashier_id: o.paid_by || cashierId || null, customer_name: o.customer_name || null, customer_phone: o.customer_phone || null, address: o.address || null });
   db.orders = db.orders.filter(x => x.id !== id); db.order_items = db.order_items.filter(i => i.order_id !== id); db.order_stations = db.order_stations.filter(x => x.order_id !== id); db.staff_calls = db.staff_calls.filter(c => c.order_id !== id);
+}
+/* Bản xem thử: tự thêm / bỏ quà "đơn từ xx tặng quà" — giống private.apply_gifts trong SQL */
+function demoApplyGifts(db, id) {
+  const mine = () => db.order_items.filter(i => i.order_id === id);
+  const base = mine().filter(i => i.promo_kind !== 'don_tang').reduce((s, i) => s + i.unit_price * i.qty, 0);
+  (db.promotions || []).filter(p => p.kind === 'don_tang' && p.min_total && promoLive(p)).forEach(p => {
+    const has = mine().some(i => i.promo_id === p.id && i.promo_kind === 'don_tang');
+    if (base >= p.min_total) {
+      if (has) return;
+      if (p.limit_qty && demoPromoLeft(db, p) < 1) return;
+      let name = String(p.gift_name || '').trim() || null, mid = null, st = p.gift_station || 'pha_che';
+      if (!name) {
+        const pi = db.promotion_items.filter(x => x.promotion_id === p.id && x.part === 'tang').sort((a, b) => a.sort_order - b.sort_order).find(x => db.menu_items.some(m => m.id === x.menu_item_id && m.is_available));
+        if (!pi) return;
+        const m = db.menu_items.find(x => x.id === pi.menu_item_id); name = m.name; mid = m.id; st = stationOf(db, m.id);
+      }
+      db.order_items.push({ added_at: new Date().toISOString(), id: db.seq.order_items++, order_id: id, menu_item_id: mid, item_name: name, unit_price: 0, options: [], qty: Math.min(Math.max(p.get_qty || 1, 1), 20), note: null, station: st, promo_id: p.id, promo_name: p.name, promo_kind: 'don_tang', promo_group: uuid(), promo_part: 'tang', promo_units: 1 });
+    } else if (has) db.order_items = db.order_items.filter(i => !(i.order_id === id && i.promo_id === p.id && i.promo_kind === 'don_tang'));
+  });
+  [...new Set(mine().map(i => i.station))].forEach(st => { if (!db.order_stations.some(x => x.order_id === id && x.station === st)) db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null }); });
+  db.order_stations = db.order_stations.filter(x => x.order_id !== id || mine().some(i => i.station === x.station));
 }
 const demoTotal = (db, id) => db.order_items.filter(i => i.order_id === id).reduce((s, i) => s + i.unit_price * i.qty, 0);
 /* Trạng thái chung của đơn tính từ các nơi — giống hàm refresh_order_status trong SQL */
@@ -990,6 +1013,7 @@ function demoApi() {
         const o = { id, access_token: uuid(), queue_number: queue, pickup: dine === 'mang_ve' && !!me(), dine_type: dine === 'giao_hang' ? 'giao_hang' : takeaway ? 'mang_ve' : 'tai_quan', address: dine === 'giao_hang' ? String(address).trim() : null, deliver_at: dine === 'giao_hang' ? (deliverAt || null) : null, paid_amount: null, paid_method: null, customer_name: String(name).trim(), customer_phone: phone ? String(phone).trim() : null, note: note ? String(note).trim().slice(0, 300) : null, status: 'cho_nhan', total, created_at: iso(), accepted_at: null, estimated_ready_at: null, served_at: null };
         db.orders.push(o); lines.forEach(l => db.order_items.push(l));
         [...new Set(lines.map(l => l.station))].forEach(st => db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null }));
+        demoApplyGifts(db, id);
         return { order_id: o.id, access_token: o.access_token, total };
       });
     },
@@ -1057,8 +1081,8 @@ function demoApi() {
       need();
       return tx(db => {
         const o = db.orders.find(x => x.id === id); if (!o) fail('ORDER_NOT_FOUND');
-        const { lines } = demoLines(db, id, items); lines.forEach(l => db.order_items.push(l));
-        [...new Set(lines.map(l => l.station))].forEach(st => {
+        const { lines } = demoLines(db, id, items); lines.forEach(l => db.order_items.push(l)); demoApplyGifts(db, id);
+        [...new Set(db.order_items.filter(i => i.order_id === id).map(i => i.station))].forEach(st => {
           const x = db.order_stations.find(r => r.order_id === id && r.station === st);
           if (!x) db.order_stations.push({ order_id: id, station: st, status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
           else if (x.status === 'da_ra_mon') Object.assign(x, { status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
@@ -1078,6 +1102,7 @@ function demoApi() {
           db.order_items = db.order_items.filter(i => !gone(i));
           db.order_stations = db.order_stations.filter(x => x.order_id !== id || db.order_items.some(i => i.order_id === id && i.station === x.station));
         } else it.qty = Math.min(50, qty);
+        if (it.promo_kind !== 'don_tang' || qty > 0) demoApplyGifts(db, id);
         const o = db.orders.find(x => x.id === id); o.total = demoTotal(db, id); refreshOrder(db, id);
         return db.orders.some(x => x.id === id) ? o.total : null;
       });
@@ -1107,6 +1132,7 @@ function demoApi() {
         Object.assign(it, { options: opts, unit_price: base + extra, edited_at: iso() });
         const st = db.order_stations.find(x => x.order_id === it.order_id && x.station === it.station);
         if (st && st.status === 'da_ra_mon') Object.assign(st, { status: 'cho_nhan', accepted_at: null, estimated_ready_at: null, served_at: null });
+        demoApplyGifts(db, it.order_id);
         const o = db.orders.find(x => x.id === it.order_id); o.total = demoTotal(db, o.id); refreshOrder(db, o.id);
         return o.total;
       });
