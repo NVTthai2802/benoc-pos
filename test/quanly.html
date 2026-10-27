@@ -1492,6 +1492,9 @@ async function renderSettings(main) {
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
     (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
+    '<section class="box cc-vang"><h2 class="box-title"><span>Mã QR chung (khách tự điền số)</span></h2>' +
+      '<p style="margin:0 0 10px">Một mã dùng cho mọi chỗ ngồi. Khách quét, tự nhập số thẻ ở bàn (hoặc chọn mang về) rồi gọi cả đồ ăn và đồ uống. Mã này vẫn dùng được song song với mã theo bàn.</p>' +
+      '<figure class="qr-cell" style="margin:0"><div class="qr" id="qrChung"></div><figcaption>Mã chung</figcaption></figure></section>' +
     '<section class="box cc-vang"><h2 class="box-title"><span>Mã QR gọi món theo bàn</span></h2>' +
       '<p style="margin:0 0 10px">Mỗi bàn một mã. Khách quét là tự điền số bàn, gọi cả đồ ăn và đồ uống; món ăn về bếp, đồ uống về quầy pha chế, nhân viên mang tới đúng bàn. Mã QR cũ (thẻ số) vẫn dùng được.</p>' +
       '<div class="row" style="align-items:flex-end"><label class="field" for="qN" style="max-width:160px">Số bàn<input id="qN" class="num" type="number" min="1" max="60" value="' + qrTables() + '"></label>' +
@@ -1529,6 +1532,7 @@ async function renderSettings(main) {
       for (let i = 1; i <= n; i++) new window.QRCode($('#qrb-' + i, main), { text: orderUrl + '?ban=' + i, width: 150, height: 150, colorDark: '#3B2A24', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
     } catch (err) { grid.innerHTML = '<p class="msg">Không tạo được mã QR (cần mạng).</p>'; }
   };
+  loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js').then(() => new window.QRCode($('#qrChung', main), { text: orderUrl, width: 180, height: 180, colorDark: '#3B2A24', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M })).catch(() => { /* cần mạng */ });
   drawQrs(); $('#qN', main).onchange = drawQrs;
 }
 })();
