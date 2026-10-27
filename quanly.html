@@ -534,7 +534,7 @@ function promoBlocked(p) {
   if (p.kind === 'combo') { const bad = p.items.filter(i => i.part === 'combo' && off(i)); return bad.length ? 'Ẩn vì hết món: ' + nm(bad) : (p.items.some(i => i.part === 'combo') ? '' : 'Ẩn vì chưa có món'); }
   if (p.kind === 'giam_gia') { const g = p.items.filter(i => i.part === 'giam'); return g.some(i => !off(i)) ? '' : g.length ? 'Ẩn vì các món đều hết: ' + nm(g) : 'Ẩn vì chưa có món'; }
   const buy = p.items.filter(i => i.part === 'mua'), gift = p.items.filter(i => i.part === 'tang');
-  if (p.kind === 'don_tang') return p.gift_name || gift.some(i => !off(i)) ? '' : 'Ẩn vì món quà đã hết: ' + nm(gift);
+  if (p.kind === 'don_tang') return p.need_qty && !buy.some(i => !off(i)) ? 'Ẩn vì món phải mua đều hết' : p.gift_name || gift.some(i => !off(i)) ? '' : 'Ẩn vì món quà đã hết: ' + nm(gift);
   if (!buy.some(i => !off(i))) return 'Ẩn vì món mua đều hết: ' + nm(buy);
   if (!p.gift_same && !p.gift_name && !gift.some(i => !off(i))) return 'Ẩn vì món tặng đều hết: ' + nm(gift);
   return '';
@@ -555,7 +555,7 @@ async function renderPromos(main) {
   const itemsText = p => p.kind === 'combo'
     ? p.items.filter(i => i.part === 'combo').map(i => i.qty + ' ' + nameOf(i.menu_item_id)).join(' + ')
     : p.kind === 'giam_gia' ? p.items.filter(i => i.part === 'giam').map(i => nameOf(i.menu_item_id)).join(', ')
-    : p.kind === 'don_tang' ? 'Đơn từ ' + K(p.min_total || 0) + ' · Tặng ' + (p.get_qty > 1 ? p.get_qty + ' ' : '') + (p.gift_name ? p.gift_name + ' (ngoài menu)' : p.items.filter(i => i.part === 'tang').map(i => nameOf(i.menu_item_id)).join(', '))
+    : p.kind === 'don_tang' ? (p.need_qty ? 'Mua ≥' + p.need_qty + ' món' : 'Đơn') + (p.min_total ? ' từ ' + K(p.min_total) : '') + (p.dine_types && p.dine_types.length ? ' · ' + p.dine_types.map(d => ({ tai_quan: 'Tại quán', mang_ve: 'Mang về', giao_hang: 'Giao hàng' })[d]).join(', ') : '') + ' · Tặng ' + (p.get_qty > 1 ? p.get_qty + ' ' : '') + (p.gift_name ? p.gift_name + ' (ngoài menu)' : p.items.filter(i => i.part === 'tang').map(i => nameOf(i.menu_item_id)).join(', '))
     : 'Mua ' + p.buy_qty + ': ' + p.items.filter(i => i.part === 'mua').map(i => nameOf(i.menu_item_id)).join(', ') + ' · Tặng ' + p.get_qty + ': ' + (p.gift_same ? 'đúng món khách mua' : p.gift_name ? p.gift_name + ' (ngoài menu)' : p.items.filter(i => i.part === 'tang').map(i => nameOf(i.menu_item_id)).join(', '));
   const words = BN.fold(state.promoQuery).split(/\s+/).filter(Boolean);
   const shown = list.filter(p => { const t = BN.fold(p.name + ' ' + (p.description || '') + ' ' + itemsText(p)); return words.every(w => t.indexOf(w) >= 0); });
@@ -566,7 +566,7 @@ async function renderPromos(main) {
       const out = p.limit_qty && (used[p.id] || 0) >= p.limit_qty && p.is_active;
       const [st, cls] = out ? ['Đang ẩn vì hết suất' + (p.limit_per === 'tong' ? '' : ', mai mở lại'), 'pill-red'] : promoState(p), when = promoWhen(p, false);
       return '<li><div class="lrow"><button class="lmain" style="border:0;background:none;padding:0;text-align:left;color:inherit" type="button" data-promo="' + esc(p.id) + '">' +
-        '<span class="lname">' + esc(p.name) + ' <span class="pill ' + (p.kind === 'combo' ? 'pill-red' : p.kind === 'giam_gia' ? 'pill-ok' : 'pill-gift') + '">' + (p.kind === 'combo' ? 'Combo ' + K(p.price || 0) : p.kind === 'giam_gia' ? BN.saleBadge(p) : p.kind === 'don_tang' ? 'Đơn từ ' + K(p.min_total || 0) : 'Mua ' + p.buy_qty + ' tặng ' + p.get_qty) + '</span></span>' +
+        '<span class="lname">' + esc(p.name) + ' <span class="pill ' + (p.kind === 'combo' ? 'pill-red' : p.kind === 'giam_gia' ? 'pill-ok' : 'pill-gift') + '">' + (p.kind === 'combo' ? 'Combo ' + K(p.price || 0) : p.kind === 'giam_gia' ? BN.saleBadge(p) : p.kind === 'don_tang' ? (p.min_total ? 'Đơn từ ' + K(p.min_total) : 'Mua ' + p.need_qty + ' tặng quà') : 'Mua ' + p.buy_qty + ' tặng ' + p.get_qty) + '</span></span>' +
         '<span class="lsub">' + esc(itemsText(p)) + '</span><span class="lsub"><span class="pill ' + cls + '">' + st + '</span> ' + esc(when || 'Mọi lúc') + (p.limit_qty ? ' · <span class="pill ' + ((used[p.id] || 0) >= p.limit_qty ? 'pill-red' : 'pill-mute') + '">' + 'Đã dùng ' + limitTxt(p) + '</span>' : '') + '</span></button>' +
         '<label class="switch"><input type="checkbox" data-pon="' + esc(p.id) + '"' + (p.is_active ? ' checked' : '') + '><span class="track"></span><span class="sw-l">' + (p.is_active ? 'Bật' : 'Tắt') + '</span></label></div></li>';
     }).join('') + '</ul>' : '<p class="empty">' + (words.length ? 'Không có ưu đãi nào khớp.' : 'Chưa có ưu đãi nào. Bấm “+ Tạo ưu đãi”.') + '</p>') + '</section>';
@@ -590,9 +590,9 @@ function editPromo(p) {
   p._out = !p.gift_same && !!p.gift_name;
   const giftKind = () => p.gift_same ? 'same' : p._out ? 'out' : 'menu';
   // Món đã chọn: combo → số lượng từng món; mua / tặng → danh sách món
-  const pick = { combo: new Map(), mua: new Set(), tang: new Set(), giam: new Set(), tang1: new Set() };
-  p.items.forEach(i => { if (i.part === 'combo') pick.combo.set(i.menu_item_id, i.qty); else pick[p.kind === 'don_tang' && i.part === 'tang' ? 'tang1' : i.part].add(i.menu_item_id); });
-  const q = { combo: '', mua: '', tang: '', giam: '', tang1: '' };
+  const pick = { combo: new Map(), mua: new Set(), tang: new Set(), giam: new Set(), tang1: new Set(), mua1: new Set() };
+  p.items.forEach(i => { if (i.part === 'combo') pick.combo.set(i.menu_item_id, i.qty); else pick[p.kind === 'don_tang' ? (i.part === 'tang' ? 'tang1' : 'mua1') : i.part].add(i.menu_item_id); });
+  const q = { combo: '', mua: '', tang: '', giam: '', tang1: '', mua1: '' };
   const catName = it => (m.categories.find(c => c.id === it.category_id) || {}).name || '';
   const isOn = (part, id) => part === 'combo' ? pick.combo.has(id) : pick[part].has(id);
   /* Danh sách chọn món có ô tìm riêng (không dấu cũng tìm được); món đã chọn đứng đầu */
@@ -632,8 +632,14 @@ function editPromo(p) {
     '<p class="small muted" style="margin:6px 0 0">Giảm trên giá món; topping, upsize, size L vẫn cộng thêm như thường. Giảm % làm tròn xuống nghìn. Khách gọi món như bình thường là được giá giảm.</p></div>' +
     // Đơn từ xx tặng quà
     '<div data-for="don_tang"' + (p.kind === 'don_tang' ? '' : ' hidden') + '>' +
-    '<div class="grid2"><label class="field" for="prMin">Đơn từ (VNĐ) <span class="req">*</span><input id="prMin" class="num" type="number" inputmode="numeric" min="1000" step="1000" value="' + (p.min_total || '') + '" placeholder="Ví dụ 100000"></label>' +
+    '<div class="grid2"><label class="field" for="prMin">Đơn từ (VNĐ)<input id="prMin" class="num" type="number" inputmode="numeric" min="1000" step="1000" value="' + (p.min_total || '') + '" placeholder="Ví dụ 30000"></label>' +
     '<label class="field" for="prGetD">Số phần quà<input id="prGetD" class="num" type="number" min="1" max="20" value="' + (p.get_qty || 1) + '"></label></div>' +
+    '<div class="field pk-h" style="margin-top:10px">Phải mua món nào? (tuỳ chọn)</div>' +
+    '<div class="grid2"><label class="field" for="prNeed">Mua ít nhất (số món)<input id="prNeed" class="num" type="number" min="1" max="20" value="' + (p.need_qty || '') + '" placeholder="Để trống = không bắt buộc"></label>' +
+    '<label class="field" for="prCatD">Thêm cả nhóm món<select id="prCatD"><option value="">Chọn nhóm…</option>' + m.categories.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>').join('') + '</select></label></div>' +
+    '<div id="pkMuaD">' + pickerHtml('mua1') + '</div>' +
+    '<div class="field" style="margin-top:10px">Áp dụng cho loại đơn</div><div class="chips" id="prDine">' + [['tai_quan', 'Ăn tại quán'], ['mang_ve', 'Mang về / qua lấy'], ['giao_hang', 'Giao hàng (ship)']].map(([k, t]) => '<button class="chipbtn" type="button" data-dt="' + k + '" aria-pressed="' + (!(p.dine_types && p.dine_types.length) || p.dine_types.indexOf(k) >= 0) + '">' + t + '</button>').join('') + '</div>' +
+    '<p class="small muted" style="margin:4px 0 0">Bỏ chọn loại đơn không áp dụng (ví dụ chỉ để Mang về). Ví dụ: Mang về, mua ít nhất 1 trà sữa / trà hoa quả, đơn từ 30.000đ → tặng 1 nước chanh.</p>' +
     '<div class="field" style="margin-top:10px">Tặng gì</div><div class="seg2" role="group" aria-label="Tặng gì" style="grid-template-columns:repeat(2,1fr)">' + [['menu', 'Món trong menu'], ['out', 'Quà ngoài menu']].map(([k, t]) => '<button type="button" data-gd="' + k + '" aria-pressed="' + ((k === 'out') === !!p._out) + '">' + t + '</button>').join('') + '</div>' +
     '<div id="outBoxD"' + (p._out ? '' : ' hidden') + '><div class="grid2" style="margin-top:8px"><label class="field" for="prGiftNameD">Tên quà (khách thấy, in trên phiếu) <span class="req">*</span><input id="prGiftNameD" maxlength="60" value="' + esc(p.gift_name || '') + '" placeholder="Ví dụ: Sữa đậu 500ml"></label>' +
     '<label class="field" for="prGiftStD">Nơi đưa quà<select id="prGiftStD"><option value="pha_che"' + (p.gift_station !== 'bep' ? ' selected' : '') + '>Quầy pha chế</option><option value="bep"' + (p.gift_station === 'bep' ? ' selected' : '') + '>Bếp</option></select></label></div></div>' +
@@ -654,13 +660,14 @@ function editPromo(p) {
     '<p class="msg" id="prMsg" hidden></p>' + (isNew ? '' : confirmBox('Xoá hẳn ưu đãi “' + esc(p.name) + '”? Hoá đơn cũ vẫn giữ tên ưu đãi.', 'Xoá ưu đãi', 'prDelBox')) + '</div>' +
     '<div class="sh-foot">' + (isNew ? '' : '<button class="btn btn-danger" type="button" id="prDel">Xoá</button>') + '<button class="btn grow" type="button" id="prSave">' + (isNew ? 'Tạo ưu đãi' : 'Lưu') + '</button></div>',
     sh => {
-      const box = { combo: '#pkCombo', mua: '#pkMua', tang: '#pkTang', giam: '#pkGiam', tang1: '#pkTang1' };
+      const box = { combo: '#pkCombo', mua: '#pkMua', tang: '#pkTang', giam: '#pkGiam', tang1: '#pkTang1', mua1: '#pkMuaD' };
       const redraw = part => { const el = $(box[part], sh), had = document.activeElement && document.activeElement.dataset.pq === part, pos = had ? document.activeElement.selectionStart : 0; el.innerHTML = pickerHtml(part); if (had) { const i = $('[data-pq="' + part + '"]', el); i.focus(); i.setSelectionRange(pos, pos); } if (part === 'combo') $('#prNormal', sh).textContent = vnd(comboNormal()); };
       sh.addEventListener('click', e => {
         const k = e.target.closest('[data-pk]');
         if (k) { p.kind = k.dataset.pk; $$('[data-pk]', sh).forEach(x => x.setAttribute('aria-pressed', x === k)); $$('[data-for]', sh).forEach(x => { x.hidden = x.dataset.for !== p.kind; }); $('#prModeBox', sh).hidden = p.kind === 'giam_gia' || p.kind === 'don_tang'; $('#prModeLbl', sh).textContent = p.kind === 'combo' ? 'Topping, upsize có phí trong combo' : 'Topping, upsize có phí của món tặng'; return; }
         const gk = e.target.closest('[data-gk]');
         if (gk) { p.gift_same = gk.dataset.gk === 'same'; p._out = gk.dataset.gk === 'out'; $$('[data-gk]', sh).forEach(x => x.setAttribute('aria-pressed', x === gk)); $('#tangBox', sh).hidden = gk.dataset.gk !== 'menu'; $('#outBox', sh).hidden = gk.dataset.gk !== 'out'; return; }
+        const dt = e.target.closest('[data-dt]'); if (dt) { dt.setAttribute('aria-pressed', dt.getAttribute('aria-pressed') !== 'true'); return; }
         const gd = e.target.closest('[data-gd]');
         if (gd) { p._out = gd.dataset.gd === 'out'; $$('[data-gd]', sh).forEach(x => x.setAttribute('aria-pressed', x === gd)); $('#tangBoxD', sh).hidden = p._out; $('#outBoxD', sh).hidden = !p._out; return; }
         const sm = e.target.closest('[data-sm]');
@@ -670,6 +677,7 @@ function editPromo(p) {
         const d = e.target.closest('[data-day]'); if (d) d.setAttribute('aria-pressed', d.getAttribute('aria-pressed') !== 'true');
       });
       sh.addEventListener('change', e => {
+        if (e.target.id === 'prCatD') { const cid = e.target.value; if (cid) { m.items.filter(it => String(it.category_id) === String(cid)).forEach(it => pick.mua1.add(it.id)); redraw('mua1'); } e.target.value = ''; return; }
         const c = e.target.closest('[data-pp]');
         if (c) { const part = c.dataset.pp, id = c.value; if (part === 'combo') { if (c.checked) pick.combo.set(id, 1); else pick.combo.delete(id); } else if (c.checked) { if (part === 'tang1') pick.tang1.clear(); pick[part].add(id); } else pick[part].delete(id); redraw(part); return; }
 
@@ -686,12 +694,17 @@ function editPromo(p) {
           const price = $('#prPrice', sh).value; if (price === '' || !(Number(price) >= 0)) return say('Nhập giá combo.');
           out.price = Number(price); out.items = [...pick.combo].map(([id, n]) => ({ part: 'combo', menu_item_id: id, qty: n }));
         } else if (p.kind === 'don_tang') {
-          const mn = $('#prMin', sh).value; if (mn === '' || !(Number(mn) >= 1)) return say('Nhập mức đơn tối thiểu để được tặng quà.');
-          out.min_total = Math.round(Number(mn)); out.get_qty = Math.max(1, Math.min(20, Number($('#prGetD', sh).value) || 1)); out.option_mode = 'mien_phi';
+          const mn = $('#prMin', sh).value, nd = $('#prNeed', sh).value;
+          if (mn !== '' && !(Number(mn) >= 1)) return say('Mức đơn tối thiểu không hợp lệ.');
+          if (nd !== '' && !(Number(nd) >= 1)) return say('Số món phải mua không hợp lệ.');
+          if (mn === '' && nd === '') return say('Nhập mức đơn tối thiểu hoặc số món phải mua (hoặc cả hai).');
+          if (nd !== '' && !pick.mua1.size) return say('Chọn các món được tính là món phải mua (hoặc thêm cả nhóm món).');
+          const dts = $$('[data-dt]', sh).filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.dt); if (!dts.length) return say('Chọn ít nhất 1 loại đơn được áp dụng.');
+          out.min_total = mn === '' ? null : Math.round(Number(mn)); out.need_qty = nd === '' ? null : Math.round(Number(nd)); out.dine_types = dts.length === 3 ? null : dts; out.get_qty = Math.max(1, Math.min(20, Number($('#prGetD', sh).value) || 1)); out.option_mode = 'mien_phi';
           out.gift_same = false; out.gift_name = p._out ? $('#prGiftNameD', sh).value.trim() : null; out.gift_station = $('#prGiftStD', sh).value; out.price = null;
           if (p._out && !out.gift_name) return say('Nhập tên quà tặng ngoài menu.');
           if (!p._out && !pick.tang1.size) return say('Chọn món được tặng (hoặc chọn “Quà ngoài menu”).');
-          out.items = p._out ? [] : [...pick.tang1].map(id => ({ part: 'tang', menu_item_id: id }));
+          out.items = (nd === '' ? [] : [...pick.mua1].map(id => ({ part: 'mua', menu_item_id: id }))).concat(p._out ? [] : [...pick.tang1].map(id => ({ part: 'tang', menu_item_id: id })));
         } else if (p.kind === 'giam_gia') {
           const v = $('#prSale', sh).value; if (v === '' || !(Number(v) >= 0)) return say('Nhập ' + SALE_LBL[p.sale_mode].toLowerCase() + '.');
           if (p.sale_mode === 'phan_tram' && !(Number(v) > 0 && Number(v) <= 100)) return say('Giảm % phải từ 1 đến 100.');
