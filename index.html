@@ -377,7 +377,7 @@ const isLay = () => GIAO && state.giao.kind === 'lay';
 function setGiaoKind(k) { state.giao.kind = k === 'lay' ? 'lay' : 'ship'; store.set('giaoKind', state.giao.kind); renderTicket(); }
 const dineMode = () => GIAO ? (isLay() ? 'mang_ve' : 'giao_hang') : (state.info.dine && Date.now() - (state.info.dineAt || 0) < DINE_TTL) ? state.info.dine : '';
 const isTake = () => dineMode() === 'mang_ve';
-function setDine(d) { state.info.dine = d; state.info.dineAt = Date.now(); saveInfo(); }
+function setDine(d) { state.info.dine = d; state.info.dineAt = Date.now(); saveInfo(); try { renderPromos(); } catch (e) { /* menu chưa dựng xong */ } }
 const infoReady = () => !!dineMode() && state.info.name.trim() !== '' && (isTake() || queueNum() > 0);
 const dinePickHtml = () => '<p class="dp-title">Bạn ăn tại quán hay mang về?</p><div class="dp-btns">' +
   '<button class="dp-btn" type="button" data-dine="tai_quan">' + ICON.bowl + '<b>Ăn tại quán</b><span>' + (BAN ? 'Phục vụ tại bàn ' + BAN : 'Lấy thẻ số ở quầy') + '</span></button>' +
@@ -691,18 +691,26 @@ function promoUsable(p) {
   const its = p.items || [], has = i => state.items.has(i.menu_item_id);
   const ok = p.kind === 'combo' ? its.some(i => i.part === 'combo') && its.filter(i => i.part === 'combo').every(has)
     : p.kind === 'giam_gia' ? promoItems(p, 'giam').some(i => { const it = state.items.get(i.menu_item_id); return it.sale && it.sale.id === p.id; })
-    : p.kind === 'don_tang' ? p.min_total > 0 && (!!p.gift_name || promoItems(p, 'tang').length > 0)
+    : p.kind === 'don_tang' ? (p.min_total > 0 || p.need_qty > 0) && (!p.need_qty || promoItems(p, 'mua').length > 0) && (!!p.gift_name || promoItems(p, 'tang').length > 0)
     : promoItems(p, 'mua').length > 0 && (p.gift_same || !!p.gift_name || promoItems(p, 'tang').length > 0);
   if (!ok) return false;
-  if (p.kind === 'don_tang') return true;   // áp cho cả đơn, hiện ở mọi menu
+  if (p.kind === 'don_tang') return !dineMode() || !p.dine_types || !p.dine_types.length || p.dine_types.indexOf(dineMode()) >= 0;   // áp cho cả đơn, hiện ở mọi menu
   if (GIAO || !state.menu.some(c => (c.station || 'bep') === state.kind)) return true;
   return its.some(i => { const c = state.itemCat.get(i.menu_item_id); return c && (c.station || 'bep') === state.kind; });
 }
 const promoNormal = p => promoItems(p, 'combo').reduce((s, i) => s + orig(state.items.get(i.menu_item_id)) * i.qty, 0);
-const promoBadge = p => p.kind === 'combo' ? 'COMBO' : p.kind === 'giam_gia' ? saleBadge(p) : p.kind === 'don_tang' ? 'ĐƠN TỪ ' + K(p.min_total) : 'MUA ' + p.buy_qty + ' TẶNG ' + p.get_qty;
+const promoBadge = p => p.kind === 'combo' ? 'COMBO' : p.kind === 'giam_gia' ? saleBadge(p) : p.kind === 'don_tang' ? (p.min_total ? 'ĐƠN TỪ ' + K(p.min_total) : 'MUA ' + p.need_qty + ' TẶNG QUÀ') : 'MUA ' + p.buy_qty + ' TẶNG ' + p.get_qty;
 /* Đơn từ xx tặng quà: tên quà (món trong menu hoặc quà ngoài menu) */
 const donGift = p => p.gift_name || ((promoItems(p, 'tang')[0] && state.items.get(promoItems(p, 'tang')[0].menu_item_id).name) || 'quà');
-const donPromos = () => state.promos.filter(p => p.kind === 'don_tang' && promoUsable(p)).sort((a, b) => a.min_total - b.min_total);
+/* Tên nhóm món bắt buộc mua: ưu tiên tên danh mục ("Trà sữa, Trà hoa quả"), không thì tên món */
+const reqName = p => { const its = promoItems(p, 'mua'), cats = [...new Set(its.map(i => { const c = state.itemCat.get(i.menu_item_id); return c ? c.name : ''; }).filter(Boolean))]; return cats.length && cats.length <= 3 && its.length > 2 ? cats.join(', ') : namesOf(its); };
+const DINE_NAME = { tai_quan: 'ăn tại quán', mang_ve: 'mang về / qua lấy', giao_hang: 'giao hàng' };
+const donWhere = p => p.dine_types && p.dine_types.length ? p.dine_types.map(d => DINE_NAME[d]).join(', ') : '';
+/* Đơn từ xx tặng quà: số món bắt buộc mua đang có trong giỏ, đủ chưa, còn thiếu gì */
+const cartNeed = p => state.cart.reduce((t, l) => t + (l.promo ? l.units.filter(u => promoItems(p, 'mua').some(i => i.menu_item_id === u.itemId)).length * l.qty : promoItems(p, 'mua').some(i => i.menu_item_id === l.itemId) ? l.qty : 0), 0);
+const donApplies = p => !p.dine_types || !p.dine_types.length || p.dine_types.indexOf(dineMode()) >= 0;
+const donMet = p => (!p.min_total || cartTotal() >= p.min_total) && (!p.need_qty || cartNeed(p) >= p.need_qty);
+const donPromos = () => state.promos.filter(p => p.kind === 'don_tang' && promoUsable(p) && donApplies(p)).sort((a, b) => (a.min_total || 0) - (b.min_total || 0));
 /* Nhãn nhỏ cạnh giá món đang giảm */
 const saleTag = it => { const p = state.promos.find(x => x.id === it.sale.id); return p ? (p.sale_mode === 'dong_gia' ? 'Đồng giá' : p.sale_mode === 'phan_tram' ? '-' + p.sale_value + '%' : 'Giảm') : 'Giảm'; };
 const namesOf = list => { const n = list.map(i => state.items.get(i.menu_item_id).name); return n.length > 3 ? n.slice(0, 3).join(', ') + '…' : n.join(', '); };
@@ -713,7 +721,7 @@ const leftText = (p, unit) => p.left != null ? 'Còn ' + p.left + ' ' + (unit ||
 function promoDesc(p) {
   if (p.description) return p.description;
   if (p.kind === 'combo') return promoItems(p, 'combo').map(i => i.qty + ' ' + state.items.get(i.menu_item_id).name).join(' + ');
-  if (p.kind === 'don_tang') return 'Đơn từ ' + K(p.min_total) + ' được tặng ' + (p.get_qty > 1 ? p.get_qty + ' ' : '') + donGift(p);
+  if (p.kind === 'don_tang') return (p.need_qty ? 'Mua ' + p.need_qty + ' ' + reqName(p) : 'Đơn') + (p.min_total ? ' từ ' + K(p.min_total) : '') + ' được tặng ' + (p.get_qty > 1 ? p.get_qty + ' ' : '') + donGift(p) + (donWhere(p) ? ' · ' + donWhere(p) : '');
   if (p.kind === 'giam_gia') { const n = promoItems(p, 'giam').length; return n + ' món: ' + namesOf(promoItems(p, 'giam')); }
   return 'Mua ' + p.buy_qty + ': ' + namesOf(promoItems(p, 'mua')) + ' · Tặng ' + p.get_qty + (p.gift_same ? ' món giống hệt' : ': ' + (giftOut(p) ? p.gift_name : namesOf(promoItems(p, 'tang'))));
 }
@@ -868,9 +876,11 @@ const orderPayload = () => state.cart.map(l => l.promo
   ? { promo_id: l.promo, qty: l.qty, parts: l.units.map(u => ({ part: u.part, menu_item_id: u.itemId, choice_ids: u.choices.map(c => c.id), note: u.note || null })) }
   : Object.assign({ menu_item_id: l.itemId, qty: l.qty, note: l.note || null, choice_ids: l.choices.map(c => c.id) }, l.sale ? { sale_id: l.sale } : {}));
 /* Đơn từ xx tặng quà: quà đã đủ mức hiện thành dòng 0đ; chưa đủ thì nhắc còn thiếu bao nhiêu */
-const giftLis = () => donPromos().filter(p => cartTotal() >= p.min_total).map(p =>
+const giftLis = () => donPromos().filter(donMet).map(p =>
   '<li class="line line--promo"><span class="line-name"><span class="line-promo"><span class="pp pp--tang">TẶNG</span>' + esc(donGift(p)) + (p.get_qty > 1 ? ' × ' + p.get_qty : '') + '</span></span><span class="line-price num">0đ</span><span class="line-sub">' + esc(p.name) + ' · quán tự thêm vào đơn</span></li>').join('');
-const giftHint = () => { const n = donPromos().find(p => cartTotal() < p.min_total); return n ? '<p class="gift-hint">Mua thêm <b class="num">' + vnd(n.min_total - cartTotal()) + '</b> để được tặng <b>' + esc(donGift(n)) + '</b> 🎁</p>' : ''; };
+const giftHint = () => { const n = donPromos().find(p => !donMet(p)); if (!n) return '';
+  const miss = n.need_qty && cartNeed(n) < n.need_qty ? 'Mua thêm <b class="num">' + (n.need_qty - cartNeed(n)) + '</b> món ' + esc(reqName(n)) : 'Mua thêm <b class="num">' + vnd(n.min_total - cartTotal()) + '</b>';
+  return '<p class="gift-hint">' + miss + ' để được tặng <b>' + esc(donGift(n)) + '</b> 🎁</p>'; };
 function openCart() {
   const linesHtml = () => state.cart.length ? '<ul class="lines">' + state.cart.map((l, i) =>
     '<li class="line' + (l.promo ? ' line--promo' : '') + '"><span class="line-name">' + (l.promo ? '<span class="line-promo"><span class="pp">' + (l.p.kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '</span>' + esc(l.name) + '</span>' : esc(l.name)) + '</span><span class="line-price num">' + vnd(unitPrice(l) * l.qty) + '</span>' +
@@ -905,7 +915,7 @@ function openCart() {
       q.oninput = () => { q.value = q.value.replace(/\D/g, ''); state.info.queue = q.value; saveInfo(); renderTicket(); $('#fQueue', sh).classList.remove('invalid'); $('#cDup', sh).hidden = true; };
       n.oninput = () => { state.info.name = n.value; saveInfo(); renderTicket(); $('#fName', sh).classList.remove('invalid'); };
       p.oninput = () => { state.info.phone = p.value; saveInfo(); $('#fPhone', sh).classList.remove('invalid'); };
-      $$('input[name=cDine]', sh).forEach(r => r.onchange = () => { setDine(r.value); $('#fQueue', sh).hidden = isTake(); $('#fDine', sh).classList.remove('invalid'); $('#cMsg', sh).hidden = true; $('#cDup', sh).hidden = true; renderTicket(); });
+      $$('input[name=cDine]', sh).forEach(r => r.onchange = () => { setDine(r.value); $('#fQueue', sh).hidden = isTake(); $('#fDine', sh).classList.remove('invalid'); $('#cMsg', sh).hidden = true; $('#cDup', sh).hidden = true; renderTicket(); repaint(); });
       nt.oninput = () => { state.cartNote = nt.value; saveCart(); };
       $('#cSend', sh).onclick = () => sendOrder(sh, false);
     });

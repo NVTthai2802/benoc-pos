@@ -642,7 +642,8 @@ function promoRow(p) {
     gift_name: (p.kind === 'mua_tang' || p.kind === 'don_tang') && !p.gift_same && String(p.gift_name || '').trim() ? String(p.gift_name).trim().slice(0, 60) : null,
     gift_station: p.gift_station === 'bep' ? 'bep' : 'pha_che',
     limit_qty: Number(p.limit_qty) > 0 ? Math.round(Number(p.limit_qty)) : null, limit_per: p.limit_per === 'tong' ? 'tong' : 'ngay',
-    ...(p.kind === 'don_tang' ? { min_total: Math.max(1, Math.round(Number(p.min_total) || 0)), option_mode: 'mien_phi' } : {}),
+    ...(p.kind === 'don_tang' ? { min_total: Number(p.min_total) > 0 ? Math.round(Number(p.min_total)) : null, need_qty: Number(p.need_qty) > 0 ? Math.round(Number(p.need_qty)) : null,
+      dine_types: Array.isArray(p.dine_types) && p.dine_types.length && p.dine_types.length < 3 ? p.dine_types.filter(x => ['tai_quan', 'mang_ve', 'giao_hang'].indexOf(x) >= 0) : null, option_mode: 'mien_phi' } : {}),
     ...(p.kind === 'giam_gia' ? { sale_mode: ['dong_gia', 'phan_tram', 'tru_tien'].indexOf(p.sale_mode) >= 0 ? p.sale_mode : 'dong_gia', sale_value: Math.max(0, Number(p.sale_value) || 0) } : {})
   };
 }
@@ -669,10 +670,10 @@ function buildPublicPromos(db) {
     const good = p.kind === 'combo'
       ? p.price != null && all.some(i => i.part === 'combo') && all.filter(i => i.part === 'combo').every(i => ok(i.menu_item_id))
       : p.kind === 'giam_gia' ? p.sale_value != null && all.some(i => i.part === 'giam' && ok(i.menu_item_id))
-      : p.kind === 'don_tang' ? p.min_total > 0 && (!!p.gift_name || all.some(i => i.part === 'tang' && ok(i.menu_item_id)))
+      : p.kind === 'don_tang' ? (p.min_total > 0 || p.need_qty > 0) && (!p.need_qty || all.some(i => i.part === 'mua' && ok(i.menu_item_id))) && (!!p.gift_name || all.some(i => i.part === 'tang' && ok(i.menu_item_id)))
       : all.some(i => i.part === 'mua' && ok(i.menu_item_id)) && (p.gift_same || !!p.gift_name || all.some(i => i.part === 'tang' && ok(i.menu_item_id)));
     if (!good) return null;
-    return { id: p.id, name: p.name, kind: p.kind, description: p.description, image_path: p.image_path, price: p.price, buy_qty: p.buy_qty, get_qty: p.get_qty, gift_same: p.gift_same, option_mode: p.option_mode, start_at: p.start_at, end_at: p.end_at, days: p.days, time_from: hm5(p.time_from), time_to: hm5(p.time_to), sort_order: p.sort_order, sale_mode: p.sale_mode || 'dong_gia', sale_value: p.sale_value == null ? null : p.sale_value, min_total: p.min_total || null,
+    return { id: p.id, name: p.name, kind: p.kind, description: p.description, image_path: p.image_path, price: p.price, buy_qty: p.buy_qty, get_qty: p.get_qty, gift_same: p.gift_same, option_mode: p.option_mode, start_at: p.start_at, end_at: p.end_at, days: p.days, time_from: hm5(p.time_from), time_to: hm5(p.time_to), sort_order: p.sort_order, sale_mode: p.sale_mode || 'dong_gia', sale_value: p.sale_value == null ? null : p.sale_value, min_total: p.min_total || null, need_qty: p.need_qty || null, dine_types: p.dine_types || null,
       gift_name: p.gift_name || null, limit_qty: p.limit_qty || null, limit_per: p.limit_per || 'ngay', left: demoPromoLeft(db, p),
       items: all.filter(i => ok(i.menu_item_id)).map(i => ({ part: i.part, menu_item_id: i.menu_item_id, qty: i.qty })) };
   }).filter(Boolean).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'vi'));
@@ -789,9 +790,11 @@ function demoFinalize(db, id, method, cashierId) {
 function demoApplyGifts(db, id) {
   const mine = () => db.order_items.filter(i => i.order_id === id);
   const base = mine().filter(i => i.promo_kind !== 'don_tang').reduce((s, i) => s + i.unit_price * i.qty, 0);
-  (db.promotions || []).filter(p => p.kind === 'don_tang' && p.min_total && promoLive(p)).forEach(p => {
+  const dine = (db.orders.find(x => x.id === id) || {}).dine_type;
+  (db.promotions || []).filter(p => p.kind === 'don_tang' && (p.min_total || p.need_qty) && promoLive(p)).forEach(p => {
     const has = mine().some(i => i.promo_id === p.id && i.promo_kind === 'don_tang');
-    if (base >= p.min_total) {
+    const need = p.need_qty ? mine().filter(i => i.promo_kind !== 'don_tang' && db.promotion_items.some(x => x.promotion_id === p.id && x.part === 'mua' && x.menu_item_id === i.menu_item_id)).reduce((t, i) => t + i.qty, 0) : 0;
+    if ((!p.dine_types || !p.dine_types.length || p.dine_types.indexOf(dine) >= 0) && (!p.min_total || base >= p.min_total) && (!p.need_qty || need >= p.need_qty)) {
       if (has) return;
       if (p.limit_qty && demoPromoLeft(db, p) < 1) return;
       let name = String(p.gift_name || '').trim() || null, mid = null, st = p.gift_station || 'pha_che';
@@ -1116,6 +1119,7 @@ function demoApi() {
         if (dine === 'tai_quan' && !(queue > 0)) fail('MISSING_QUEUE_NUMBER');
         o.dine_type = dine; o.queue_number = dine === 'tai_quan' ? queue : null; if (dine !== 'mang_ve') o.pickup = false;
         const dup = dine === 'tai_quan' && db.orders.find(x => x.id !== id && x.queue_number === queue);
+        demoApplyGifts(db, id); o.total = demoTotal(db, id); refreshOrder(db, id);
         return { duplicate_with: dup ? dup.customer_name : null };
       });
     },
