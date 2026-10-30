@@ -4,7 +4,7 @@
 
 ## Findings
 
-- Repo **không có** `_headers` / cấu hình header nào. Cloudflare Pages mặc định không gửi CSP, `X-Frame-Options`, `Permissions-Policy`. (Chưa xác nhận live vì mạng môi trường chặn `benoc-pos.pages.dev`.)
+- Repo **không có** `_headers` / cấu hình header nào. Cloudflare Pages mặc định không gửi CSP, `X-Frame-Options`, `Permissions-Policy`. **Đã xác nhận live:** vibe-check báo FAIL thiếu CSP, thiếu XFO / frame-ancestors, thiếu HSTS; có sẵn `nosniff` và `Referrer-Policy` (Cloudflare tự thêm).
 - Thiếu `X-Frame-Options` / `frame-ancestors`: trang khác nhúng được `quanly.html` vào khung để lừa chủ quán bấm (clickjacking).
 - HSTS: tên miền `.dev` đã nằm trong danh sách HSTS preload của trình duyệt, nên `pages.dev` luôn HTTPS.
 - GitHub Pages (bản cũ `nvtthai2802.github.io/benoc-pos`) không cho đặt header.

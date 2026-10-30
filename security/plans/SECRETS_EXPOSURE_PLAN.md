@@ -12,7 +12,7 @@
 
 - [x] Không có secret trong mã / lịch sử git
 - [x] Chỉ có anon key ở frontend
-- [ ] `https://benoc-pos.pages.dev/.git/config` và `/.env` trả 404 (cần kiểm tra live)
+- [x] `/.env`, `/.git/config` và các file dump không truy cập được (vibe-check live: PASS)
 
 ## Manual verification (for the human)
 

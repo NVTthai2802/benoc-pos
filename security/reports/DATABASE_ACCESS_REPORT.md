@@ -9,7 +9,8 @@
   - `refresh_order_status(uuid)` (security definer, không kiểm tra vai trò, có thể chốt đơn sang doanh thu),
   - `suggest_wait_minutes(uuid, text)` (lộ thời gian làm món trung bình, số đơn đang làm),
   - `apply_rounding`, `round_money`, `promo_usage`...
-- **Đăng ký mở:** app tạo tài khoản nhân viên bằng `auth.signUp` ngay trên trình duyệt (`core.js:246`, `core.js:467`), nên Supabase **phải** bật “Allow new users to sign up”. Ai có anon key cũng tự tạo tài khoản `authenticated`. Tài khoản lạ này không đọc được dữ liệu nhờ RLS, nhưng **tải được file vào bucket `checkin-photos`** (policy chỉ kiểm tra thư mục = uid). Đã sửa.
+  - **Đã xác nhận trên Product:** `POST /rest/v1/rpc/suggest_wait_minutes` bằng anon key trả `10`. Bảng `orders`, `employees`, `sales` trả `[]` (RLS chặn đúng).
+- **Đăng ký mở:** app tạo tài khoản nhân viên bằng `auth.signUp` ngay trên trình duyệt (`core.js:246`, `core.js:467`), nên Supabase **phải** bật “Allow new users to sign up” (Product: `disable_signup: false`, `mailer_autoconfirm: true`). Ai có anon key cũng tự tạo tài khoản `authenticated`. Tài khoản lạ này không đọc được dữ liệu nhờ RLS, nhưng **tải được file vào bucket `checkin-photos`** (policy chỉ kiểm tra thư mục = uid). Đã sửa.
 - **Lộ tên khách (LOW):** `place_order` báo lỗi `DUPLICATE_QUEUE` kèm *tên khách* đang ngồi ở số thẻ đó (`schema.sql:713`). Ai cũng dò được số 1..50 để xem tên khách đang ngồi. Đây là tính năng (“Số 7 đang có đơn của Lan”), nên tôi chưa đổi.
 
 ## What's at risk

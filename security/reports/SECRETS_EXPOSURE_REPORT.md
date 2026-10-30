@@ -10,7 +10,7 @@
 - Token bot Zalo/Telegram, khoá Gemini/Anthropic, service key đều đọc từ Supabase Secrets (`Deno.env`) trong `supabase/functions/bot-don/index.ts`. Đúng cách.
 - `tools/train/sample_export.jsonl` là dữ liệu mẫu tự tạo (thread_hash `aaaa…`), không chứa SĐT / tên khách thật. `tools/train/data/` đã nằm trong `.gitignore`.
 - **Lưu ý (LOW):** Cloudflare Pages xuất bản **toàn bộ thư mục gốc**, nên `sql/`, `supabase/functions/`, `tools/`, `scripts/`, `HUONG-DAN*.md` ai cũng tải được. Không lộ bí mật nhưng lộ toàn bộ cấu trúc database và logic bot cho người muốn tấn công.
-- Không quét live được (`benoc-pos.pages.dev` bị mạng của môi trường chặn), nên chưa xác nhận `/.git/config`, `/.env` trả 404 trên bản thật. Cloudflare Pages build từ git không xuất bản `.git/`.
+- **Live:** vibe-check thử 20 đường dẫn nhạy cảm (`.env*`, `.git`, dump, key, log) và 12 thư mục trên `benoc-pos.pages.dev` và Supabase: không lộ file nào, không liệt kê thư mục. `/sql/schema.sql`, `/supabase/functions/bot-don/index.ts`, `/HUONG-DAN.md` trả 200 (công khai).
 - `gitleaks` chưa cài (cài: `brew install gitleaks` hoặc tải ở https://github.com/gitleaks/gitleaks/releases); đã thay bằng quét regex toàn lịch sử ở trên.
 
 ## What's at risk

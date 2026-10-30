@@ -4,15 +4,24 @@ Date: 2026-10-30 · Phạm vi: mã nguồn nhánh `main` (commit `07e3652`), to�
 
 ## Live scan
 
-**Chưa chạy được.** Mạng của môi trường kiểm tra chặn `benoc-pos.pages.dev`, `nvtthai2802.github.io` và `*.supabase.co`, nên `check.py` trả lỗi “unreachable” (exit 2). Các mục 1, 5, 7, 8, 9, 15 dưới đây chỉ dựa trên mã nguồn. Chạy lại sau khi deploy:
+Quét `https://benoc-pos.pages.dev/` (Product) ngày 2026-10-30, trước khi deploy bản sửa:
 
 ```bash
 python3 check.py https://benoc-pos.pages.dev/ --api https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/bot-don
 ```
 
-| | Trước | Sau |
+| | Trước (bản đang chạy) | Sau |
 |---|---|---|
-| Live scan FAIL/WARN | chưa quét được | chưa quét được (cần deploy + mạng) |
+| FAIL | 3: thiếu CSP, thiếu chống nhúng khung (XFO / frame-ancestors), thiếu HSTS | chưa quét (cần deploy `_headers`) |
+| WARN | 3: HSTS thiếu ở file tĩnh, `Access-Control-Allow-Origin: *` ở trang và file tĩnh (Cloudflare tự thêm) | chưa quét |
+| PASS | 13: không lộ `.env` / `.git` / dump, không liệt kê thư mục, không có source map, có `nosniff` + `Referrer-Policy`, không có trang debug, function `bot-don` không mở CORS cho web lạ | |
+
+Kiểm tra live thêm (chỉ đọc, bằng anon key Product):
+
+- `GET /rest/v1/orders`, `employees`, `sales` → `[]`: RLS chặn đúng.
+- `POST /rest/v1/rpc/suggest_wait_minutes` bằng anon → trả `10`: **xác nhận lỗi quyền chạy hàm đang có trên Product** (cập nhật 30 sửa). Không thử `refresh_order_status` vì hàm đó ghi dữ liệu.
+- `GET /auth/v1/settings` → `disable_signup: false`, `mailer_autoconfirm: true`: **xác nhận ai cũng tự đăng ký được tài khoản** (xem AUTH_MIDDLEWARE).
+- `https://benoc-pos.pages.dev/sql/schema.sql`, `/supabase/functions/bot-don/index.ts`, `/HUONG-DAN.md` → 200: mã database và bot đang công khai (xem SECRETS_EXPOSURE). `security/` chưa có trên Product (đường dẫn lạ trả về trang chủ).
 
 ## Cách kiểm chứng phần database
 
@@ -49,7 +58,7 @@ Không có mục CRITICAL / HIGH. RLS bật ở mọi bảng, không lộ secret
    - `suggest_wait_minutes` chỉ cho nhân viên; `refresh_order_status` không gọi trực tiếp được nữa;
    - chỉ nhân viên mới tải được ảnh chấm công;
    - chống dò mã kết nối bot (5 lần sai / 10 phút / tài khoản, 30 lần / 10 phút toàn quán).
-2. `_headers`: X-Frame-Options, nosniff, Referrer-Policy, HSTS, Permissions-Policy, CSP ở chế độ Report-Only.
+2. `_headers`: X-Frame-Options, nosniff, Referrer-Policy, HSTS, Permissions-Policy, CSP ở chế độ Report-Only; bỏ `Access-Control-Allow-Origin: *` mặc định của Cloudflare.
 
 ## Critical issues
 
@@ -59,10 +68,11 @@ Không có.
 
 1. Chạy `sql/cap-nhat-30-bao-mat.sql` trên **Test**, thử đủ luồng, rồi chạy trên **Product**.
 2. Đưa `_headers` lên (test → product), chạy lại live scan, xem Console có báo CSP không, rồi bật CSP thật.
-3. Bật CAPTCHA (Turnstile) và mật khẩu tối thiểu 8 trong Supabase Auth.
-4. Chuyển việc tạo nhân viên sang edge function và **tắt đăng ký công khai** (hết chiếm trước SĐT, hết tài khoản rác).
-5. Giới hạn số đơn / độ dài chữ trong `place_order`, `call_staff` để chống bắn đơn giả lên màn bếp.
-6. SRI hoặc tải về `lib/` cho thư viện CDN; ghim bản `supabase-js` trong edge function; đặt giới hạn kích thước / loại file cho bucket.
+3. **Lưu ý khi đưa lên Product:** `security/` sẽ bị xuất bản công khai như `sql/` (Cloudflare xuất bản cả thư mục gốc). Bỏ `security/` ra trước khi chạy `scripts/dua-len-product.sh`, hoặc chỉ giữ nó trên nhánh này.
+4. Bật CAPTCHA (Turnstile) và mật khẩu tối thiểu 8 trong Supabase Auth.
+5. Chuyển việc tạo nhân viên sang edge function và **tắt đăng ký công khai** (hết chiếm trước SĐT, hết tài khoản rác).
+6. Giới hạn số đơn / độ dài chữ trong `place_order`, `call_staff` để chống bắn đơn giả lên màn bếp.
+7. SRI hoặc tải về `lib/` cho thư viện CDN; ghim bản `supabase-js` trong edge function; đặt giới hạn kích thước / loại file cho bucket.
 
 ## Remaining manual verification
 

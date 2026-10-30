@@ -1,11 +1,13 @@
 # Header bảo mật cho Cloudflare Pages (GitHub Pages bỏ qua file này).
 # - Không cho trang khác nhúng trang của quán vào khung (chống bấm lừa trên trang Quản lý).
 #   Bếp / pha chế mở trang khác trong khung cùng địa chỉ nên vẫn chạy (SAMEORIGIN).
+# - Bỏ Access-Control-Allow-Origin: * mà Cloudflare Pages tự thêm (trang của quán không cần cho web khác đọc).
 # - Camera chỉ trang của quán dùng (chấm công, quét mã vạch). Bluetooth máy in không bị chặn.
 # - CSP đang ở chế độ CHỈ BÁO (Report-Only): không chặn gì, chỉ báo lỗi trong Console.
 #   Mở các trang, nếu Console không có dòng "Content-Security-Policy" nào thì đổi tên
 #   header thành Content-Security-Policy để bật thật.
 /*
+  ! Access-Control-Allow-Origin
   X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
