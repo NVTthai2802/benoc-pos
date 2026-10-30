@@ -12,9 +12,11 @@ python3 check.py https://benoc-pos.pages.dev/ --api https://hixdacnaxfuxuccbajzn
 
 | | Trước (bản đang chạy) | Sau |
 |---|---|---|
-| FAIL | 3: thiếu CSP, thiếu chống nhúng khung (XFO / frame-ancestors), thiếu HSTS | chưa quét (cần deploy `_headers`) |
-| WARN | 3: HSTS thiếu ở file tĩnh, `Access-Control-Allow-Origin: *` ở trang và file tĩnh (Cloudflare tự thêm) | chưa quét |
-| PASS | 13: không lộ `.env` / `.git` / dump, không liệt kê thư mục, không có source map, có `nosniff` + `Referrer-Policy`, không có trang debug, function `bot-don` không mở CORS cho web lạ | |
+| FAIL | 3: thiếu CSP, thiếu chống nhúng khung (XFO / frame-ancestors), thiếu HSTS | **Test** (`/test/`, header chỉ áp cho `/test/*`): 1 — CSP mới ở chế độ Report-Only nên máy quét vẫn tính là thiếu |
+| WARN | 3: HSTS thiếu ở file tĩnh, `Access-Control-Allow-Origin: *` ở trang và file tĩnh (Cloudflare tự thêm) | **Test**: 0 |
+| PASS (Product) | 13: không lộ `.env` / `.git` / dump, không liệt kê thư mục, không có source map, có `nosniff` + `Referrer-Policy`, không có trang debug, function `bot-don` không mở CORS cho web lạ | |
+
+Trên Test, mở 8 trang (`/test/`, `?menu=an`, `?menu=tra`, `bep.html`, `phache.html`, `quanly.html`, `maytem.html`, `chinh-sach.html`) bằng Chromium headless: **0 vi phạm CSP**. Các trang nhân viên mới chỉ thử tới màn hình đăng nhập; cần thử thêm sau khi đăng nhập (ảnh món, realtime, camera, máy in, xuất Excel) trước khi bật CSP thật.
 
 Kiểm tra live thêm (chỉ đọc, bằng anon key Product):
 
