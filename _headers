@@ -1,0 +1,11 @@
+# Header bảo mật — TẠM CHỈ ÁP CHO MÔI TRƯỜNG TEST (/test/*) để thử trước.
+# Khi chạy scripts/dua-len-product.sh, file này được thay bằng bản ở nhánh test (áp cho cả trang /*).
+# Xem giải thích từng dòng trong _headers ở nhánh test.
+/test/*
+  ! Access-Control-Allow-Origin
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://world.openfoodfacts.org; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'
