@@ -29,6 +29,14 @@ Kiểm tra live thêm (chỉ đọc, bằng anon key Product):
 
 Dựng Postgres 16 + giả lập Supabase (role `anon` / `authenticated` / `service_role`, `auth.uid()`, `storage.objects`, quyền mặc định của Supabase), nạp `schema.sql` + `seed_menu.sql`, rồi thử từng vai trò **trước** và **sau** cập nhật 30. Kết quả nằm trong các report DATABASE_ACCESS và RATE_LIMITING.
 
+## Cập nhật 30 trên Supabase Test (đã chạy 2026-10-30)
+
+Kiểm tra bằng anon key Test:
+- Bị chặn (`42501 permission denied`): `refresh_order_status`, `suggest_wait_minutes`, `apply_rounding`, `round_money`, `promo_usage`, `bot_link_use`, `check_in`.
+- Vẫn chạy: `get_menu`, `get_promotions`, `get_payment_info`, `has_owner`, `get_my_order`, `call_staff`, `place_order`; đọc `menu_items` (RLS có gọi `my_role`) được 88 món; `orders` trả `[]`.
+- Trang `/test/?menu=an`, `?menu=tra` mở bằng Chromium: hiện 86 món, không lỗi, không vi phạm CSP.
+- Chưa thử (cần đăng nhập): luồng nhân viên, chấm công có ảnh, kết nối bot.
+
 ## Results
 
 | # | Category | Status | Report | Plan |
