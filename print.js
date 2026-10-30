@@ -99,20 +99,33 @@ function ticketCanvas(o, items, extra, set) {
   return cv;
 }
 
-/* ---------- Ảnh → lệnh ESC/POS (GS v 0, chia từng dải để máy in không tràn bộ nhớ) ---------- */
+/* ---------- Ảnh → lệnh ESC/POS (GS v 0) ----------
+   Máy in nhiệt rẻ (MPT-II…) qua Bluetooth không chặn luồng: gửi nhiều dữ liệu liền một lúc thì
+   bộ nhớ máy tràn, rơi mất vài byte → máy in phần ảnh còn lại thành chữ rác (phiếu dài hay bị).
+   Nên: hàng trắng không gửi ảnh mà đẩy giấy (ESC J), bỏ cột trắng bên phải, mỗi lệnh ảnh tối đa
+   24 hàng (≈1 KB) → ít dữ liệu hơn nhiều, và nếu có rơi byte thì chỉ hỏng một dải nhỏ. */
+const BAND = 24;
 function escpos(cv, copies) {
-  const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, px = ctx.getImageData(0, 0, W, H).data, bw = Math.ceil(W / 8);
+  const b = bits(cv), bw = b.bw, H = b.H;
+  const right = r => { for (let c = bw - 1; c >= 0; c--) if (b.data[r * bw + c]) return c + 1; return 0; }; // số byte tới chấm đen cuối hàng
+  const feed = (out, n) => { while (n > 0) { const s = Math.min(255, n); out.push(0x1B, 0x4A, s); n -= s; } }; // ESC J n: đẩy giấy n chấm
+  const body = [];
+  let blank = 0;
+  for (let y = 0; y < H;) {
+    if (!right(y)) { blank++; y++; continue; }
+    feed(body, blank); blank = 0;
+    // Dải liên tiếp các hàng có mực, tối đa BAND hàng
+    let y1 = y, wb = 0;
+    while (y1 < H && y1 - y < BAND) { const r = right(y1); if (!r) break; wb = Math.max(wb, r); y1++; }
+    const h = y1 - y;
+    body.push(0x1D, 0x76, 0x30, 0x00, wb & 255, wb >> 8, h & 255, h >> 8);
+    for (let r = y; r < y1; r++) for (let c = 0; c < wb; c++) body.push(b.data[r * bw + c]);
+    y = y1;
+  }
+  feed(body, blank);
   const out = [0x1B, 0x40]; // ESC @ khởi động
   for (let c = 0; c < (copies || 1); c++) {
-    for (let y0 = 0; y0 < H; y0 += 120) {
-      const h = Math.min(120, H - y0);
-      out.push(0x1D, 0x76, 0x30, 0x00, bw & 255, bw >> 8, h & 255, h >> 8);
-      for (let y = y0; y < y0 + h; y++) for (let xb = 0; xb < bw; xb++) {
-        let b = 0;
-        for (let bit = 0; bit < 8; bit++) { const x = xb * 8 + bit; if (x < W) { const i = (y * W + x) * 4; if (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11 < 150) b |= 0x80 >> bit; } }
-        out.push(b);
-      }
-    }
+    for (let i = 0; i < body.length; i++) out.push(body[i]);
     out.push(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x42, 0x00); // đẩy giấy 3 dòng + cắt (máy không có dao cắt thì bỏ qua)
   }
   return new Uint8Array(out);
