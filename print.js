@@ -139,6 +139,8 @@ function cups(items) {
   return out.map((i, n) => ({ i, n: n + 1, of: out.length }));
 }
 const whereShort = o => isDelivery(o) ? 'SHIP' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĐẶT BÀN' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'BÀN ' + o.queue_number;
+/* Giá 1 ly: món đã gộp (amount = cả dòng) thì chia theo số ly; quà tặng in "Tặng" */
+const cupPrice = i => { const v = i.amount != null ? i.amount / (i.qty || 1) : (i.unit_price || 0); return i.promo_part === 'tang' && !v ? 'Tặng' : money(v); };
 function labelCanvas(o, cup, set) {
   set = set || get();
   // Đầu in máy tem 2 inch (CLABEL CT221B…) chỉ rộng 48 mm = 384 chấm: tem 50 mm thì phần quá 384 chấm bị mất.
@@ -169,8 +171,10 @@ function labelCanvas(o, cup, set) {
     if (tops.length) line(tops.join(' '), 20, true, 2);
     if (i.note) line('* ' + i.note, 20, true, 1);
     const TIN = 24; // giờ in lùi vào trong và lên trên 3 mm (mép tem hay bị xén)
-    const fits = y <= H - pad - TIN - lh(16);
+    const fits = y <= H - pad - TIN - lh(22);
     if (!fits && k > 0.61) continue;
+    // Dòng cuối: giá 1 ly (gồm size, topping) bên trái, giờ in bên phải
+    ops.push({ t: cupPrice(i), font: F(22, true), y: H - pad - TIN });
     ops.push({ t: hhmm(Date.now()), font: F(18, true), y: H - pad - TIN, right: true, inset: TIN });
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
     if (set.offy < 0) ctx.translate(0, Math.round(set.offy * 8)); // căn lề lên
