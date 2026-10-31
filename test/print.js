@@ -27,6 +27,7 @@ function get() {
 }
 const save = s => store.set(KEY, s);
 const DOTS = { 58: 384, 80: 576 };   // số chấm in mỗi dòng
+const HEAD = 384;                    // bề rộng đầu in máy tem 2 inch (48 mm)
 /* Khổ tem (máy 203 dpi = 8 chấm/mm). "58" = cuộn giấy dán liên tục 58 mm, mỗi tem cao 30 mm */
 const LABELS = { '40x30': { w: 40, h: 30, gap: 2 }, '50x30': { w: 50, h: 30, gap: 2 }, '50x40': { w: 50, h: 40, gap: 2 }, '58': { w: 48, h: 30, gap: 0, roll: true } };
 const labelOf = set => LABELS[set.label] || LABELS['40x30'];
@@ -140,7 +141,12 @@ function cups(items) {
 const whereShort = o => isDelivery(o) ? 'SHIP' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĐẶT BÀN' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'BÀN ' + o.queue_number;
 function labelCanvas(o, cup, set) {
   set = set || get();
+  // Đầu in máy tem 2 inch (CLABEL CT221B…) chỉ rộng 48 mm = 384 chấm: tem 50 mm thì phần quá 384 chấm bị mất.
+  // Nội dung luôn nằm trong vùng in được; căn lề ngang dịch cả khối nội dung (không cắt ảnh).
   const L = labelOf(set), W = L.w * 8, H = L.h * 8, pad = 10, i = cup.i;
+  const PW = Math.min(W, HEAD), dx = Math.round((set.offx || 0) * 8);
+  // Khối chữ dịch theo căn lề; chạm mép vùng in thì khối hẹp lại (chữ tự xuống dòng) chứ không bị xén
+  const X0 = Math.max(0, Math.min(PW - 80, pad + dx)), X1 = Math.min(PW, Math.max(X0 + 80, PW - pad + dx)), CW = X1 - X0;
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   cv.width = W; cv.height = H;
   const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
@@ -148,10 +154,10 @@ function labelCanvas(o, cup, set) {
   const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
   // Vẽ thử với cỡ chữ giảm dần đến khi vừa tem
   for (let k = 1; k >= 0.6; k -= 0.05) {
-    const F = (px, b) => (b ? '800 ' : '600 ') + Math.round(px * k * W / 320) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
-    const lh = px => px * k * W / 320 * 1.2;
+    const F = (px, b) => (b ? '800 ' : '600 ') + Math.round(px * k * PW / 320) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
+    const lh = px => px * k * PW / 320 * 1.2;
     const ops = []; let y = pad;
-    const line = (t, px, b, max) => { ctx.font = F(px, b); let ls = wrap(ctx, t, W - pad * 2); if (max && ls.length > max) { ls = ls.slice(0, max); ls[max - 1] += '…'; } ls.forEach(l => { y += lh(px); ops.push({ t: l, font: F(px, b), y: y - lh(px) * 0.2 }); }); };
+    const line = (t, px, b, max) => { ctx.font = F(px, b); let ls = wrap(ctx, t, CW); if (max && ls.length > max) { ls = ls.slice(0, max); ls[max - 1] += '…'; } ls.forEach(l => { y += lh(px); ops.push({ t: l, font: F(px, b), y: y - lh(px) * 0.2 }); }); };
     // Dòng đầu: bàn / mang về … bên trái, số ly bên phải
     ctx.font = F(30, true); y += lh(30);
     ops.push({ t: whereShort(o), font: F(30, true), y: y - lh(30) * 0.2 });
@@ -167,11 +173,11 @@ function labelCanvas(o, cup, set) {
     if (!fits && k > 0.61) continue;
     ops.push({ t: hhmm(Date.now()), font: F(18, true), y: H - pad - TIN, right: true, inset: TIN });
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
-    if (set.offx < 0 || set.offy < 0) ctx.translate(Math.min(0, Math.round((set.offx || 0) * 8)), Math.min(0, Math.round((set.offy || 0) * 8))); // căn lề trái / lên
+    if (set.offy < 0) ctx.translate(0, Math.round(set.offy * 8)); // căn lề lên
     ops.forEach(op => {
-      if (op.rule) { ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); return; }
+      if (op.rule) { ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X0, op.y); ctx.lineTo(X1, op.y); ctx.stroke(); return; }
       ctx.font = op.font; ctx.textBaseline = 'alphabetic'; ctx.textAlign = op.right ? 'right' : 'left';
-      ctx.fillText(op.t, op.right ? W - pad - (op.inset || 0) : pad, op.y);
+      ctx.fillText(op.t, op.right ? X1 - (op.inset || 0) : X0, op.y);
     });
     break;
   }
@@ -200,7 +206,7 @@ function inkBands(b) {
 /* Lệnh TSPL cho máy in tem (Xprinter, TSC, Gprinter…): mỗi tem một lần CLS / BITMAP / PRINT */
 function tspl(cvs, set) {
   const L = labelOf(set), out = ascii('SIZE ' + L.w + ' mm,' + L.h + ' mm\r\nGAP ' + L.gap + ' mm,0 mm\r\nDIRECTION 1\r\nREFERENCE 0,0\r\n');
-  const x = Math.max(0, Math.round((set.offx || 0) * 8)), y = Math.max(0, Math.round((set.offy || 0) * 8)); // căn lề: dịch tem (mm)
+  const x = 0, y = Math.max(0, Math.round((set.offy || 0) * 8)); // căn lề ngang đã dịch trong ảnh tem (labelCanvas); dọc: dịch xuống ở đây
   cvs.forEach(cv => {
     const b = bits(cv);
     out.push(...ascii('CLS\r\n'));
