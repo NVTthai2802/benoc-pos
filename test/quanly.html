@@ -225,7 +225,7 @@ const TABS = {
   owner: [['doanhthu', 'Doanh thu', 'hong'], ['menu', 'Menu', 'vang'], ['uudai', 'Ưu đãi', 'tim'], ['kho', 'Kho', 'xanhla'], ['nhanvien', 'Nhân viên', 'xanhduong'], ['chamcong', 'Chấm công', 'cam'], ['caidat', 'Cài đặt', 'nau']],
   staff: [['chamcong', 'Chấm công', 'cam'], ['kho', 'Kho', 'xanhla']]
 };
-const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', promoQuery: '', stockQuery: '', stockSub: 'hang', packQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
+const state = { session: null, tab: null, menuSub: 'mon', menuCat: 'all', menuQuery: '', groupQuery: '', promoQuery: '', stockQuery: '', invQ: '', stockSub: 'hang', packQuery: '', range: '7d', staffRange: 'month', shiftEmp: '' };
 
 $('#demoNote').hidden = !DEMO;
 BN.staff.requireLogin($('#app'), { title: 'Quản lý quán', onReady: s => { state.session = s; boot(); } });
@@ -407,22 +407,42 @@ function wireChart(el, buckets) {
 /* Hoá đơn trong 1 ngày: hiện tất cả, mới nhất trên cùng; chọn ngày bằng lịch hoặc ‹ › */
 const invRow = x => '<tr><td class="num">' + hhmm(x.paid_at) + '</td><td class="num">' + (x.dine_type === 'giao_hang' ? '<span class="pill pill-mute">Đi ship</span>' : x.dine_type === 'mang_ve' ? '<span class="pill pill-mute">Mang về</span>' : x.queue_number) + '</td><td class="who">' + (x.customer_name ? '<b>' + esc(x.customer_name) + '</b>' + (x.customer_phone ? '<br><span class="small muted">' + esc(x.customer_phone) + '</span>' : '') + (x.address ? '<br><span class="small muted">' + esc(x.address) + '</span>' : '') : '<span class="muted">—</span>') + '</td><td>' + invoiceItems(x.items || []) + '</td><td class="r num">' + vnd(x.total) + '</td><td><span class="pill" style="background:' + PAY_COLOR[x.payment_method] + '1F;color:var(--ink)">' + PAY[x.payment_method] + '</span></td></tr>';
 const ymd = d => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+/* Tìm hoá đơn trong ngày đang xem: gõ số thứ tự, tên khách, SĐT, địa chỉ, món hoặc số tiền (không cần gõ dấu).
+   Số thuần: khớp đúng số thứ tự, hoặc SĐT chứa dãy số (từ 3 số), hoặc đúng tổng tiền (45000 hay 45.000). Chữ: khớp tên, địa chỉ, món, ship / mang về. Nhiều từ = phải khớp hết. */
+const invMatch = (x, words) => {
+  const phone = String(x.customer_phone || '').replace(/\D/g, '');
+  const hay = BN.fold([x.customer_name, x.address, x.dine_type === 'giao_hang' ? 'ship giao hang' : x.dine_type === 'mang_ve' ? 'mang ve' : '', (x.items || []).map(i => i.name + ' ' + (i.promo_name || '')).join(' ')].join(' '));
+  return words.every(w => {
+    const d = w.replace(/[.,]/g, '');
+    if (/^\d+$/.test(d)) return (x.queue_number != null && Number(x.queue_number) === Number(d)) || (d.length >= 3 && phone.includes(d)) || Number(x.total) === Number(d);
+    return hay.includes(w);
+  });
+};
 async function renderInvoices(box) {
   if (!box) return;
+  const tok = box._invTok = (box._invTok || 0) + 1; // bấm đổi ngày liên tục thì chỉ lấy kết quả của lần bấm cuối
   const day = state.invDay ? new Date(state.invDay + 'T00:00:00') : startOfDay(new Date()), isToday = ymd(day) === ymd(new Date());
-  const head = (body, list) => '<div class="ptitle" style="gap:8px"><h2 class="box-title" style="margin:0"><span>Hoá đơn ' + (isToday ? 'hôm nay' : 'ngày ' + ddmm(day)) + '</span></h2>' +
+  box.innerHTML = '<div class="ptitle" style="gap:8px"><h2 class="box-title" style="margin:0"><span>Hoá đơn ' + (isToday ? 'hôm nay' : 'ngày ' + ddmm(day)) + '</span></h2>' +
     '<div class="row inv-nav"><button class="btn btn-sm btn-line" type="button" data-inv="-1" aria-label="Ngày trước">‹</button><input type="date" id="invDay" value="' + ymd(day) + '" max="' + ymd(new Date()) + '" aria-label="Chọn ngày"><button class="btn btn-sm btn-line" type="button" data-inv="1" aria-label="Ngày sau"' + (isToday ? ' disabled' : '') + '>›</button>' + (isToday ? '' : '<button class="btn btn-sm btn-line" type="button" data-inv="0">Hôm nay</button>') + '</div></div>' +
-    (list ? '<p class="small muted" style="margin:6px 0 8px">' + list.length + ' hoá đơn · <b class="num">' + vnd(list.reduce((t, x) => t + x.total, 0)) + '</b> · tiền mặt ' + vnd(list.filter(x => x.payment_method === 'tien_mat').reduce((t, x) => t + x.total, 0)) + ' · chuyển khoản ' + vnd(list.filter(x => x.payment_method === 'chuyen_khoan').reduce((t, x) => t + x.total, 0)) + '</p>' : '') + body;
-  box.innerHTML = head('<p class="loading">Đang tải…</p>');
-  const wire = () => {
-    box.querySelectorAll('[data-inv]').forEach(b => b.onclick = () => { const d = Number(b.dataset.inv); state.invDay = d === 0 ? null : ymd(addDays(day, d)); if (state.invDay === ymd(new Date())) state.invDay = null; renderInvoices(box); });
-    const inp = box.querySelector('#invDay'); if (inp) inp.onchange = () => { state.invDay = inp.value && inp.value !== ymd(new Date()) ? inp.value : null; renderInvoices(box); };
+    '<div class="toolbar" style="margin:8px 0 0"><input class="search" id="invQ" type="search" placeholder="Tìm theo số, tên khách, SĐT, món, số tiền…" value="' + esc(state.invQ) + '" aria-label="Tìm hoá đơn"></div>' +
+    '<div id="invBody"><p class="loading">Đang tải…</p></div>';
+  const body = $('#invBody', box), qIn = $('#invQ', box);
+  box.querySelectorAll('[data-inv]').forEach(b => b.onclick = () => { const d = Number(b.dataset.inv); state.invDay = d === 0 ? null : ymd(addDays(day, d)); if (state.invDay === ymd(new Date())) state.invDay = null; renderInvoices(box); });
+  const inp = $('#invDay', box); if (inp) inp.onchange = () => { state.invDay = inp.value && inp.value !== ymd(new Date()) ? inp.value : null; renderInvoices(box); };
+  let all = null;
+  const draw = () => {
+    if (!all) return;
+    const words = BN.fold(state.invQ).split(/\s+/).filter(Boolean), list = words.length ? all.filter(x => invMatch(x, words)) : all;
+    const sum = '<p class="small muted" style="margin:6px 0 8px">' + (words.length ? 'Tìm thấy ' + list.length + '/' + all.length : list.length) + ' hoá đơn · <b class="num">' + vnd(list.reduce((t, x) => t + x.total, 0)) + '</b> · tiền mặt ' + vnd(list.filter(x => x.payment_method === 'tien_mat').reduce((t, x) => t + x.total, 0)) + ' · chuyển khoản ' + vnd(list.filter(x => x.payment_method === 'chuyen_khoan').reduce((t, x) => t + x.total, 0)) + '</p>';
+    body.innerHTML = !all.length ? '<p class="empty">Không có hoá đơn nào trong ngày này.</p>'
+      : !list.length ? '<p class="empty">Không có hoá đơn nào khớp “' + esc(state.invQ.trim()) + '” trong ngày ' + ddmm(day) + '. Thử đổi ngày hoặc gõ ngắn hơn.</p>'
+      : sum + '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th>Số</th><th>Khách</th><th>Món</th><th class="r">Tổng</th><th>Trả bằng</th></tr></thead><tbody>' + list.map(invRow).join('') + '</tbody></table></div>';
   };
-  wire();
-  let list; try { list = await api.sales({ from: day, to: addDays(day, 1) }); } catch (e) { box.innerHTML = head('<p class="msg">' + esc(errText(e)) + '</p>'); wire(); return; }
-  list = list.slice().sort((a, b) => a.paid_at < b.paid_at ? 1 : -1);
-  box.innerHTML = head(list.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th>Số</th><th>Khách</th><th>Món</th><th class="r">Tổng</th><th>Trả bằng</th></tr></thead><tbody>' + list.map(invRow).join('') + '</tbody></table></div>' : '<p class="empty">Không có hoá đơn nào trong ngày này.</p>', list);
-  wire();
+  qIn.oninput = () => { state.invQ = qIn.value; draw(); };
+  let list; try { list = await api.sales({ from: day, to: addDays(day, 1) }); } catch (e) { if (box._invTok === tok) body.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; return; }
+  if (box._invTok !== tok) return;
+  all = list.slice().sort((a, b) => a.paid_at < b.paid_at ? 1 : -1);
+  draw();
 }
 /* Xuất báo cáo Excel 1 tháng (doanh thu, món, hoá đơn, kho, nhân viên, lương) */
 function openExport() {
