@@ -15,7 +15,7 @@ const IS_BEP = STATION === 'bep';
 const SHORT = { bep: 'Bếp', pha_che: 'Pha chế' };
 const COLS = [['cho_nhan', 'Chờ nhận'], ['dang_lam', 'Đang làm'], ['thanh_toan', 'Chờ thanh toán']];
 const EMPTY = { cho_nhan: 'Chưa có đơn mới', dang_lam: 'Không có đơn đang làm', thanh_toan: 'Không có đơn chờ thanh toán' };
-const state = { orders: [], panels: {}, prq: [], self: new Set(), col: null, sound: false, seen: null, seenCalls: null, session: null };
+const state = { payQ: '', orders: [], panels: {}, prq: [], self: new Set(), col: null, sound: false, seen: null, seenCalls: null, session: null };
 let audio = null, wakeLock = null, voice = null;
 
 const demoNote = $('#demoNote'); if (demoNote) demoNote.hidden = !DEMO;
@@ -53,7 +53,7 @@ function start() {
     (role === 'owner' ? '<a class="btn btn-sm btn-line" href="' + (IS_BEP ? 'phache.html' : 'bep.html') + '">' + (IS_BEP ? 'Pha chế' : 'Bếp') + '</a><a class="btn btn-sm btn-line" href="quanly.html">Quản lý</a>' : '') +
     BN.staff.whoChip(state.session) + '</div></header>' +
     '<div class="wrap" style="max-width:none"><div class="prq" id="prq"></div><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
-    '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2><div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
+    '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2>' + (k === 'thanh_toan' ? '<input class="search kc-search" id="payQ" type="search" placeholder="Tìm số bàn, tên, SĐT, món, số tiền…" value="' + esc(state.payQ) + '" aria-label="Tìm đơn chờ thanh toán">' : '') + '<div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
   // Mở Quản lý / Đơn giao hàng / nơi khác đè lên trên, không rời trang này → máy in Bluetooth vẫn nối, vẫn tự in
   $('#app').querySelector('.topbar').addEventListener('click', e => {
@@ -297,6 +297,18 @@ async function saveDine(o, dine, q, btn) {
   });
 }
 document.addEventListener('focusout', e => { if (e.target.closest && e.target.closest('[data-eq]') && state.renderLater) { state.renderLater = false; setTimeout(render, 0); } });
+/* Tìm đơn trong cột Chờ thanh toán khi khách hỏi: số thuần = đúng số bàn, hoặc SĐT chứa dãy số (từ 3 số), hoặc đúng tổng tiền (45000 hay 45.000);
+   chữ = tên khách, địa chỉ, tên món, ship / mang về (không cần gõ dấu). Nhiều từ = phải khớp hết. */
+const payMatch = (o, words) => {
+  const phone = String(o.customer_phone || '').replace(/\D/g, '');
+  const hay = fold([o.customer_name, o.address, isDelivery(o) ? 'ship giao hang' : isTakeaway(o) ? 'mang ve' : '', (o.items || []).map(i => i.name).join(' ')].join(' '));
+  return words.every(w => {
+    const d = w.replace(/[.,]/g, '');
+    if (/^\d+$/.test(d)) return (o.queue_number != null && Number(o.queue_number) === Number(d)) || (d.length >= 3 && phone.includes(d)) || Number(o.total) === Number(d);
+    return hay.includes(w);
+  });
+};
+document.addEventListener('input', e => { if (e.target && e.target.id === 'payQ') { state.payQ = e.target.value; render(); } });
 function render() {
   const ae = document.activeElement; // đang gõ số bàn thì để gõ xong mới vẽ lại (không mất chữ đang gõ)
   if (ae && ae.matches && ae.matches('[data-eq]')) { state.renderLater = true; return; }
@@ -304,8 +316,9 @@ function render() {
   if (!state.col) state.col = by.cho_nhan.length || !by.dang_lam.length ? 'cho_nhan' : 'dang_lam';
   COLS.forEach(([k]) => {
     const list = $('#list-' + k); if (!list) return;
-    $('#n-' + k).textContent = by[k].length;
-    list.innerHTML = by[k].length ? by[k].map(o => cardHtml(o, k)).join('') : '<p class="col-empty">' + EMPTY[k] + '</p>';
+    const words = k === 'thanh_toan' ? fold(state.payQ).split(/\s+/).filter(Boolean) : [], shown = words.length ? by[k].filter(o => payMatch(o, words)) : by[k];
+    $('#n-' + k).textContent = words.length ? shown.length + '/' + by[k].length : by[k].length;
+    list.innerHTML = shown.length ? shown.map(o => cardHtml(o, k)).join('') : '<p class="col-empty">' + (by[k].length ? 'Không có đơn nào khớp “' + esc(state.payQ.trim()) + '”' : EMPTY[k]) + '</p>';
     document.querySelector('.col[data-col="' + k + '"]').classList.toggle('on', state.col === k);
   });
   $('#seg').innerHTML = COLS.map(([k, t]) => '<button type="button" class="cc-' + k + '" data-seg="' + k + '" aria-pressed="' + (state.col === k) + '">' + t + '<span class="n num">' + by[k].length + '</span></button>').join('');
