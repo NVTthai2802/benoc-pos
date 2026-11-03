@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Ảnh chụp chat</title>
+<style>
+:root{--bg:#f6f4f0;--card:#fff;--ink:#1d1b18;--mute:#6f6a62;--line:#e4dfd6;--accent:#c2410c;--left:#ecebe8;--right:#2563eb;--rightInk:#fff;--warn:#b45309;--ok:#15803d}
+@media (prefers-color-scheme:dark){:root{--bg:#151412;--card:#1f1d1a;--ink:#f1eee8;--mute:#a39d93;--line:#34302b;--accent:#fb923c;--left:#2c2a26;--right:#3b6fe0;--warn:#f59e0b;--ok:#4ade80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0;flex:1}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:7px 12px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:12px 16px 40px}
+.setup{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:10px}
+.setup label{display:grid;gap:4px;font-size:13px;color:var(--mute)}
+.setup input{font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%}
+.list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.item{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;text-align:left;padding:0}
+.item img{width:100%;aspect-ratio:9/14;object-fit:cover;object-position:top;display:block;background:var(--line)}
+.item .meta{padding:8px 10px;font-size:13px}
+.item .who{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute)}
+.tag.err{color:var(--warn);border-color:var(--warn)} .tag.ok{color:var(--ok);border-color:var(--ok)}
+.detail{display:grid;gap:16px;grid-template-columns:1fr}
+@media (min-width:800px){.detail{grid-template-columns:minmax(0,380px) 1fr}}
+.shot img{width:100%;border-radius:14px;border:1px solid var(--line)}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.top{font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.top small{display:block;font-weight:400;color:var(--mute)}
+.chat{display:flex;flex-direction:column;gap:6px}
+.row{display:flex;flex-direction:column;max-width:82%}
+.row.trai{align-self:flex-start}.row.phai{align-self:flex-end;align-items:flex-end}.row.giua{align-self:center;align-items:center;max-width:100%}
+.bub{padding:7px 11px;border-radius:16px;white-space:pre-wrap;word-break:break-word;background:var(--left)}
+.phai .bub{background:var(--right);color:var(--rightInk)}
+.giua .bub{background:none;color:var(--mute);font-size:12px;padding:2px}
+.quote{font-size:12px;color:var(--mute);border-left:3px solid var(--line);padding:2px 8px;margin-bottom:2px;white-space:pre-wrap}
+.sub{font-size:11px;color:var(--mute);margin-top:2px}
+.kind{font-size:11px;color:var(--mute)}
+.box{margin-top:12px;font-size:13px}
+.box h3{font-size:13px;margin:12px 0 4px;color:var(--mute);font-weight:600}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;max-height:420px;overflow:auto;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+textarea{font:inherit;width:100%;min-height:60px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.msg{color:var(--mute);padding:20px 0;text-align:center}
+.err{color:var(--warn)}
+</style>
+</head>
+<body>
+<header>
+  <button id="back" hidden>←</button>
+  <h1 id="title">Ảnh chụp chat</h1>
+  <button id="reload">Tải lại</button>
+  <button id="cfg">⚙︎</button>
+</header>
+<main id="app"></main>
+<script>
+const $ = (s) => document.querySelector(s);
+const app = $("#app");
+const store = {
+  get(k){ try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch {} },
+};
+let cfg = { url: store.get("cc_url"), key: store.get("cc_key") };
+let items = [], view = "list";
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const fmt = (t) => new Date(t).toLocaleString("vi-VN", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" });
+
+async function api(qs = "", opt = {}) {
+  const r = await fetch(cfg.url + qs, { ...opt, headers: { "x-capture-key": cfg.key, ...(opt.body ? { "content-type":"application/json" } : {}) } });
+  const d = await r.json().catch(() => ({ ok:false, loi:`HTTP ${r.status}` }));
+  if (!d.ok) throw new Error(d.loi || `HTTP ${r.status}`);
+  return d;
+}
+
+function showSetup(err) {
+  view = "setup"; $("#back").hidden = !cfg.url; $("#title").textContent = "Cài đặt";
+  app.innerHTML = `<div class="setup">
+    <label>Địa chỉ function<input id="u" placeholder="https://xxxx.supabase.co/functions/v1/chup-chat" value="${esc(cfg.url)}"></label>
+    <label>Mã (CAPTURE_KEY)<input id="k" type="password" value="${esc(cfg.key)}"></label>
+    ${err ? `<div class="err">${esc(err)}</div>` : ""}
+    <button class="primary" id="save">Lưu và xem</button>
+    <div class="sub">Mã chỉ lưu trên trình duyệt này.</div></div>`;
+  $("#save").onclick = () => {
+    cfg = { url: $("#u").value.trim(), key: $("#k").value.trim() };
+    store.set("cc_url", cfg.url); store.set("cc_key", cfg.key); loadList();
+  };
+}
+
+async function loadList() {
+  if (!cfg.url || !cfg.key) return showSetup();
+  const quiet = view === "list" && items.length;
+  view = "list"; $("#back").hidden = true; $("#title").textContent = "Ảnh chụp chat";
+  if (!quiet) app.innerHTML = `<div class="msg">Đang tải…</div>`;
+  try { items = (await api("?limit=60")).items; } catch (e) { return showSetup(e.message); }
+  if (!items.length) { app.innerHTML = `<div class="msg">Chưa có ảnh nào. Chạy Phím tắt trên iPhone để gửi ảnh đầu tiên.</div>`; return; }
+  app.innerHTML = `<div class="list">${items.map((it) => `
+    <button class="item" data-id="${it.id}">
+      <img loading="lazy" src="${esc(it.image_url)}" alt="">
+      <div class="meta">
+        <div class="who">#${it.id} · ${esc(it.thanh_tren?.ten_hien_thi || "—")}</div>
+        <div class="sub">${fmt(it.created_at)} · ${esc(it.ung_dung || "")}</div>
+        ${it.ai_error ? `<span class="tag err">chưa chép</span>` : !it.ai_model ? `<span class="tag">đang chép…</span>` : it.status === "labeled" ? `<span class="tag ok">đã kiểm</span>` : it.status === "ignored" ? `<span class="tag">bỏ qua</span>` : ""}
+      </div>
+    </button>`).join("")}</div>`;
+  app.querySelectorAll(".item").forEach((b) => b.onclick = () => loadDetail(b.dataset.id));
+  clearTimeout(window._poll);
+  if (items.some((it) => !it.ai_model && !it.ai_error)) window._poll = setTimeout(() => view === "list" && loadList(), 4000);
+}
+
+const KIND = { moc_thoi_gian:"mốc thời gian", he_thong:"hệ thống", anh:"ảnh", sticker:"sticker", tep:"tệp", cuoc_goi:"cuộc gọi", link:"link", da_xem:"đã xem" };
+
+function renderChat(ai) {
+  if (!ai) return `<div class="err">Chưa có bản chép.</div>`;
+  const t = ai.thanh_tren || {};
+  const rows = (ai.muc || []).map((m) => {
+    const ben = ["trai","phai","giua"].includes(m.ben) ? m.ben : "giua";
+    const sub = [m.nguoi_gui, m.cam_xuc && `cảm xúc ${m.cam_xuc}`, m.gio].filter(Boolean).join(" · ");
+    return `<div class="row ${ben}">
+      ${m.loai && m.loai !== "tin_nhan" && ben !== "giua" ? `<span class="kind">${esc(KIND[m.loai] || m.loai)}</span>` : ""}
+      ${m.tra_loi_cho ? `<div class="quote">↪ ${esc(m.tra_loi_cho)}</div>` : ""}
+      <div class="bub">${esc(m.noi_dung)}</div>
+      ${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
+  }).join("");
+  return `<div class="top">${esc(t.ten_hien_thi || "(không thấy tên)")}<small>${esc([ai.ung_dung, t.phu].filter(Boolean).join(" · "))}</small></div>
+    <div class="chat">${rows}</div>
+    ${ai.khong_ro?.length ? `<div class="box"><h3>Không rõ</h3>${ai.khong_ro.map(esc).join("<br>")}</div>` : ""}
+    ${ai.chu_khac?.length ? `<div class="box"><h3>Chữ khác trên màn hình</h3>${ai.chu_khac.map(esc).join(" · ")}</div>` : ""}`;
+}
+
+async function loadDetail(id) {
+  view = "detail"; $("#back").hidden = false; $("#title").textContent = `#${id}`;
+  app.innerHTML = `<div class="msg">Đang tải…</div>`;
+  let it;
+  try { it = (await api(`?id=${id}`)).item; } catch (e) { app.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+  app.innerHTML = `<div class="detail">
+    <div class="shot"><a href="${esc(it.image_url)}" target="_blank"><img src="${esc(it.image_url)}" alt="Ảnh gốc"></a>
+      <div class="sub">${fmt(it.created_at)} · ${esc(it.device || "")} · ${Math.round((it.image_bytes||0)/1024)} KB · ${esc(it.ai_model || "")} ${it.ai_ms ? `· ${(it.ai_ms/1000).toFixed(1)} giây` : ""}</div></div>
+    <div class="pane">
+      ${it.ai_error ? `<div class="err">Lỗi: ${esc(it.ai_error)}</div>` : ""}
+      ${renderChat(it.ai_json)}
+      <div class="box"><h3>Bản chép dạng chữ</h3><pre>${esc(it.ai_text || "")}</pre></div>
+      ${it.ios_text ? `<div class="box"><h3>Chữ do iPhone tự đọc</h3><pre>${esc(it.ios_text)}</pre></div>` : ""}
+      <div class="box"><h3>Ghi chú (sai chỗ nào?)</h3><textarea id="note">${esc(it.note || "")}</textarea></div>
+      <div class="actions">
+        <button class="primary" data-s="labeled">Đúng / đã kiểm</button>
+        <button data-s="seen">Lưu ghi chú</button>
+        <button data-s="ignored">Bỏ qua ảnh này</button>
+        <button id="raw">JSON</button>
+      </div>
+      <pre id="rawbox" hidden>${esc(JSON.stringify(it.ai_json, null, 2))}</pre>
+    </div></div>`;
+  $("#raw").onclick = () => $("#rawbox").hidden = !$("#rawbox").hidden;
+  app.querySelectorAll("[data-s]").forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await api("", { method:"PATCH", body: JSON.stringify({ id: it.id, status: b.dataset.s, note: $("#note").value }) }); b.textContent = "✓ Đã lưu"; }
+    catch (e) { b.textContent = "Lỗi: " + e.message; }
+    setTimeout(() => { b.disabled = false; }, 800);
+  });
+}
+
+$("#back").onclick = () => loadList();
+$("#reload").onclick = () => view === "detail" ? loadDetail($("#title").textContent.slice(1)) : loadList();
+$("#cfg").onclick = () => showSetup();
+loadList();
+</script>
+</body>
+</html>

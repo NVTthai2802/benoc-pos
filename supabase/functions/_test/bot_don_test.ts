@@ -426,3 +426,79 @@ Deno.test('AI lỗi → báo chủ quán gửi lại, không tạo đơn', async
   assertEquals((t.fb_drafts || []).length, 0);
   assertStringIncludes(sent[0], 'AI đang quá tải');
 });
+
+// ---------------------------------------------------------------------
+// Phím tắt iPhone (kênh ios): gõ lưng máy → chụp màn hình → POST thẳng ảnh vào bot-don
+// ---------------------------------------------------------------------
+async function shortcut(tables: Record<string, any[]>, body: BodyInit, headers: Record<string, string>, aiJson: unknown = null) {
+  gem(); Deno.env.set('CAPTURE_KEY', 'khoaPhimTat123');
+  tables.shop_settings ||= [{ id: 1, fb_open: '00:00', fb_close: '23:59', fb_train_on: true }];
+  const ai: any[] = [], outbound: string[] = []; const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: any) => {
+    const u = String(url);
+    if (u.includes('generativelanguage')) { ai.push(JSON.parse(init.body)); return aiOk(aiJson); }
+    if (u.includes('zaloplatforms.com') || u.includes('telegram.org')) outbound.push(u);
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  const f = fakeSb(tables);
+  try {
+    const res = await bot.handleShortcut(f.sb, new Request('https://x/bot-don', { method: 'POST', headers, body }));
+    return { status: res.status, j: await res.json(), ai, outbound, uploads: f.uploads };
+  } finally { globalThis.fetch = real; }
+}
+const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+const ORDER = {
+  intent: 'order', khach: 'Phạm Hà', nguon: 'messenger', dine_type: 'mang_ve', time: '18:00',
+  items: [{ m: num('Cơm gà viên'), qty: 2 }], convo: [{ s: 'khach', t: '2 cơm gà viên 6h qua lấy' }, { s: 'quan', t: 'Dạ' }],
+};
+
+Deno.test('Phím tắt: sai / thiếu mã thì từ chối, không gọi AI', async () => {
+  const t: Record<string, any[]> = {};
+  const a = await shortcut(t, JPG, { 'x-capture-key': 'sai', 'content-type': 'image/jpeg' });
+  assertEquals(a.status, 401); assertEquals(a.ai.length, 0);
+  Deno.env.delete('CAPTURE_KEY');
+  const f = fakeSb(t);
+  const b = await bot.handleShortcut(f.sb, new Request('https://x', { method: 'POST', headers: { 'x-capture-key': 'x' }, body: JPG }));
+  assertEquals(b.status, 503);
+});
+
+Deno.test('Phím tắt: ảnh → đơn vào thẳng bếp, trả lời trong kết quả (không cần kết nối mã, không nhắn Zalo)', async () => {
+  const t: Record<string, any[]> = {};
+  const r = await shortcut(t, JPG, { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'iphone-chu-quan', 'content-type': 'image/jpeg' }, ORDER);
+  assertEquals(r.status, 200);
+  assertEquals(r.ai.length, 1);
+  assertEquals(r.ai[0].contents[0].parts.find((p: any) => p.inlineData).inlineData.mimeType, 'image/jpeg');
+  const d = t.fb_drafts[0];
+  assertEquals([d.kenh, d.chat_id, d.status, d.customer_name, d.total_est], ['ios', 'iphone-chu-quan', 'da_duyet', 'Phạm Hà', 60000]);
+  assertEquals(t.orders.length, 1);
+  assertStringIncludes(r.j.tom_tat, '✅ Đã gửi bếp · Phạm Hà');
+  assert(!r.j.tom_tat.includes('Đang đọc'));
+  assertEquals(r.outbound, []);
+  assertEquals(t.bot_photos, undefined);           // không gom ảnh, đọc luôn
+  assertEquals(d.anh.length, 1); assertEquals(r.uploads, d.anh);
+  assertEquals(t.fb_train.length, 1);
+});
+
+Deno.test('Phím tắt: nhắn chữ sửa đơn vừa lên, "huỷ" huỷ đơn', async () => {
+  const t: Record<string, any[]> = {};
+  const H = { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'iphone-chu-quan' };
+  await shortcut(t, JPG, { ...H, 'content-type': 'image/jpeg' }, ORDER);
+  const e = await shortcut(t, JSON.stringify({ text: 'thêm 1 cơm gà viên' }), { ...H, 'content-type': 'application/json' },
+    { intent: 'order', khach: 'Phạm Hà', dine_type: 'mang_ve', time: '18:00', items: [{ m: num('Cơm gà viên'), qty: 3 }] });
+  assertEquals(t.fb_drafts.length, 1);
+  assertEquals(t.fb_drafts[0].items[0].qty, 3);
+  assertStringIncludes(e.j.tom_tat, '🔄 Đã sửa đơn ở bếp');
+  const c = await shortcut(t, 'huỷ', { ...H, 'content-type': 'text/plain' });
+  assertStringIncludes(c.j.tom_tat, '🗑 Đã huỷ đơn của Phạm Hà');
+  assertEquals(t.orders.length, 0);
+  assertEquals(c.ai.length, 0);
+});
+
+Deno.test('Phím tắt: không phải ảnh / mã 6 số không kết nối kênh ios', async () => {
+  const t: Record<string, any[]> = {};
+  const H = { 'x-capture-key': 'khoaPhimTat123' };
+  const a = await shortcut(t, new TextEncoder().encode('khong phai anh'), { ...H, 'content-type': 'application/octet-stream' });
+  assertEquals(a.status, 415);
+  await shortcut(t, '123456', { ...H, 'content-type': 'text/plain' }, { intent: 'khong_phai_don' });
+  assertEquals(t.bot_users, undefined);
+});

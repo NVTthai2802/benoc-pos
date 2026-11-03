@@ -278,7 +278,7 @@ const rerender = () => go(state.tab);
    BOT LÊN ĐƠN — chủ quán chụp màn hình đoạn chat với khách, gửi cho bot Zalo / Telegram;
    bot đọc ảnh và gửi thẳng đơn vào bếp / pha chế (nhãn ĐƠN ONLINE). Ở đây chỉ còn phần cài đặt bot.
    ===================================================================== */
-const KENH_TEXT = { zalo: 'Zalo', tele: 'Telegram', fb: 'Fanpage' };
+const KENH_TEXT = { zalo: 'Zalo', tele: 'Telegram', fb: 'Fanpage', ios: 'Phím tắt iPhone' };
 function openFbSettings(st) {
   const botLink = { zalo: null, tele: null };
   ui.sheet(ui.head('Cài đặt bot lên đơn', 'Bot đọc ảnh chụp đoạn chat theo menu đang bán') + '<div class="sh-body">' +
@@ -338,7 +338,7 @@ function openFbSettings(st) {
           const line = k => { const c = (x.kenh || {})[k] || {}; if (!c.token) return null; if (c.error) return '❌ ' + KENH_TEXT[k] + ': token sai (' + esc(c.error.slice(0, 120)) + ')'; if (k === 'zalo') botLink.zalo = c.name; else botLink.tele = c.username;
             return (c.webhook ? '✅ ' : '⚠️ ') + KENH_TEXT[k] + ' <b>' + esc(c.name || c.username || '') + '</b>' + (c.webhook ? ' · webhook đã cài' : ' · chưa cài webhook, bấm "Cài webhook"'); };
           const ls = [line('zalo'), line('tele')].filter(Boolean);
-          r.innerHTML = (ls.length ? ls : ['❌ Chưa có ZALO_BOT_TOKEN (hoặc TELEGRAM_BOT_TOKEN) trong Supabase Secrets']).concat([x.has_ai_key ? '✅ AI: ' + esc(x.ai) : '❌ Chưa có khoá AI']).join('<br>');
+          r.innerHTML = (ls.length ? ls : ['❌ Chưa có ZALO_BOT_TOKEN (hoặc TELEGRAM_BOT_TOKEN) trong Supabase Secrets']).concat([x.has_ai_key ? '✅ AI: ' + esc(x.ai) : '❌ Chưa có khoá AI', x.phim_tat ? '✅ Phím tắt iPhone: đã có CAPTURE_KEY' : 'ℹ️ Phím tắt iPhone: chưa cài CAPTURE_KEY (không bắt buộc)']).join('<br>');
         }
       } catch (err) { r.textContent = '❌ ' + errText(err); }
       e.target.disabled = false;
@@ -1595,7 +1595,7 @@ async function renderSettings(main) {
     '<p class="small muted" style="margin:0">Hai số này dùng để ước tính thời gian chờ báo cho khách.</p>' +
     '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
-    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
+    '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo · iPhone)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán (hoặc gõ lưng iPhone bằng Phím tắt) → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
     (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
     '<section class="box cc-vang"><h2 class="box-title"><span>Mã QR chung (khách tự điền số)</span></h2>' +
       '<p style="margin:0 0 10px">Một mã dùng cho mọi chỗ ngồi. Khách quét, tự nhập số thẻ ở bàn (hoặc chọn mang về) rồi gọi cả đồ ăn và đồ uống. Mã này vẫn dùng được song song với mã theo bàn.</p>' +
