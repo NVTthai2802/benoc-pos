@@ -1,69 +1,154 @@
-# Lên đơn bằng Phím tắt iPhone (gõ lưng máy)
+# Cài Phím tắt lên đơn trên iPhone (làm từ đầu)
 
-Cập nhật 33. Luồng giống **bot Zalo**: chụp đoạn chat → AI đọc → **đơn vào thẳng bếp / pha chế** (nhãn **ĐƠN ONLINE**), chỉ khác là không phải mở Zalo gửi ảnh.
+Dùng khi cài cho **một iPhone mới** (chủ quán đổi máy, thêm máy nhân viên trực tin nhắn…). Phía Supabase đã cài xong, chỉ cần làm trên iPhone.
 
-## Cách dùng
+**Kết quả:** đang mở đoạn chat với khách → **gõ 3 lần vào lưng máy** → iPhone tự chụp màn hình gửi cho bot → vài giây sau hiện thông báo **"✅ Đã gửi bếp · tên khách"**. Đơn vào thẳng bếp / pha chế với nhãn **ĐƠN ONLINE**, giống bot Zalo.
 
-| Làm gì | Kết quả |
-|---|---|
-| Đang mở đoạn chat với khách, **gõ 3 lần vào lưng iPhone** | Phím tắt tự chụp màn hình gửi cho bot. Vài giây sau hiện thông báo **"✅ Đã gửi bếp · tên khách"** kèm món, giờ, phần còn thiếu |
-| Đoạn chat dài: cuộn xuống, gõ lưng máy tiếp | Ảnh sau của **cùng khách** trong 90 phút (bếp chưa nhận) thì **sửa đơn đó**, không tạo đơn mới |
-| Chạy Phím tắt **"Sửa đơn Bé Nốc"**, gõ/đọc "thêm 1 trà đào", "giờ 18h30", "ship 12 ngõ 5…" | Sửa đơn vừa lên. Thông báo **"🔄 Đã sửa đơn ở bếp"** |
-| "Sửa đơn Bé Nốc" → **huỷ** | Huỷ đơn vừa lên (khi bếp chưa nhận) |
-
-Giống bot Zalo: chưa rõ hình thức thì tạm **Mang về**; chưa có tên thì **Khách online**; món tạm hết, thiếu giờ, thiếu địa chỉ ship… đều báo trong thông báo. Bếp đã bấm **Nhận** thì sửa trên màn hình bếp. Ảnh lưu ở `don-anh`, mẫu huấn luyện ghi vào `fb_train` như bot Zalo. Bot Zalo vẫn chạy song song, dùng bên nào cũng được.
-
-Phím tắt chạy ngầm: gõ lưng máy xong cứ nhắn tiếp với khách, không phải đợi.
+Cần: iPhone 8 trở lên (iOS 14+), có app **Phím tắt** (Shortcuts, có sẵn; bị xoá thì tải lại trên App Store).
 
 ---
 
-## Bước 1. Supabase Product
+## Chuẩn bị 3 thông tin
 
-1. **SQL Editor** → chạy `sql/cap-nhat-33-phim-tat-iphone.sql` (cho phép đơn kênh `ios`).
-2. **Edge Functions → `bot-don`** → **Code** → dán đè toàn bộ `supabase/functions/bot-don/index.ts` mới → **Deploy**. Verify JWT vẫn **tắt**.
-3. Secret `CAPTURE_KEY` đã có từ lúc thử `chup-chat` (secret dùng chung cả project) → không phải thêm.
-4. Kiểm tra: Quản lý → Đơn online → **Cài đặt bot** → **Kiểm tra bot** → có dòng **✅ Phím tắt iPhone: đã có CAPTURE_KEY**.
+| Thông tin | Giá trị |
+|---|---|
+| **Địa chỉ bot** | `https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/bot-don` |
+| **Mã bí mật** (`CAPTURE_KEY`) | Lấy từ người quản lý POS. Supabase không cho xem lại mã sau khi lưu, nên chép từ Phím tắt trên máy đang chạy (mở phím tắt, xem tiêu đề `x-capture-key`) |
+| **Tên máy** (`x-device`) | Đặt riêng cho máy này, **không dấu, không cách**, vd `iphone-chu-quan`, `iphone-nhan-vien-2` |
 
-## Bước 2. Sửa Phím tắt "Gửi chat Bé Nốc" có sẵn
+Tên máy là cách bot biết "đơn vừa lên" của máy nào: nhắn "huỷ" / "thêm 1 trà đào" chỉ sửa đơn **của chính máy đó**. Hai máy không dùng chung tên.
 
-Mở app **Phím tắt** → bấm giữ phím tắt → **Sửa**:
+> **Cách nhanh hơn:** trên máy đang chạy, mở app Phím tắt → bấm giữ phím tắt → **Chia sẻ** → **AirDrop** sang máy mới (làm cho cả 2 phím tắt). Sang máy mới chỉ cần làm **Bước 1**, sửa **tên máy** ở tác vụ "Nhận nội dung của URL", rồi làm **Bước 4–5**. Chỉ AirDrop / gửi riêng: mã bí mật nằm trong phím tắt, không đăng lên nhóm.
 
-1. Tác vụ **Nhận nội dung của URL**: đổi URL cuối từ `/chup-chat` thành **`/bot-don`**
-   (`https://xxxx.supabase.co/functions/v1/bot-don`).
-2. Tiêu đề: giữ `x-capture-key` và `x-device` (`iphone-chu-quan`). **Xoá `x-wait`** nếu có.
-3. Các tác vụ còn lại giữ nguyên (thông báo vẫn lấy `tom_tat`).
-4. Đổi tên thành **Gửi đơn Bé Nốc** cho dễ nhớ (không bắt buộc).
+---
 
-Chạy thử 1 lần từ trong app Phím tắt (sẽ báo "không thấy đoạn chat đặt món", không tạo đơn), rồi mở một đoạn chat đặt món thật và gõ lưng máy.
+## Bước 1. Cho phép gửi ảnh
+
+**Cài đặt** → kéo xuống chọn **Phím tắt** → **Nâng cao** → bật **Cho phép chia sẻ số lượng lớn dữ liệu**.
+
+(Không bật thì mỗi lần gửi ảnh iOS có thể hỏi lại, mất "gõ là gửi".)
+
+## Bước 2. Phím tắt "Gửi đơn Bé Nốc" (chụp và gửi)
+
+Mở **app Phím tắt** (biểu tượng ô vuông xanh-hồng, không phải trong Cài đặt) → tab **Phím tắt** → **+** (góc trên phải). Bấm tên ở trên cùng → **Đổi tên** → `Gửi đơn Bé Nốc`.
+
+Thêm lần lượt 5 tác vụ bằng ô **Tìm kiếm tác vụ** ở dưới:
+
+**① Chụp ảnh màn hình**
+Gõ `chụp ảnh màn hình` → chọn. Không chỉnh gì.
+
+**② Chuyển đổi hình ảnh**
+Gõ `chuyển đổi hình ảnh` → chọn. Câu phải đọc là: *Chuyển đổi* **Ảnh chụp màn hình** *sang* **JPEG**.
+Bấm mũi tên **›** mở rộng: **Chất lượng** khoảng 80%, **Bảo toàn siêu dữ liệu**: tắt.
+
+**③ Nhận nội dung của URL**
+Gõ `URL` → chọn tác vụ có biểu tượng **quả địa cầu / mũi tên tải xuống màu xanh lá** (tên kiểu *Nhận nội dung của URL* hoặc *Lấy nội dung URL*; **không** chọn tác vụ chỉ tên "URL").
+- Bấm vào chữ **URL** màu xanh → dán **Địa chỉ bot**.
+- Bấm mũi tên **›** mở rộng:
+  - **Phương thức**: chọn `POST`.
+  - **Tiêu đề** → **Thêm tiêu đề mới**, làm 2 lần:
+
+    | Khoá | Văn bản |
+    |---|---|
+    | `x-capture-key` | mã bí mật |
+    | `x-device` | tên máy (vd `iphone-nhan-vien-2`) |
+
+  - **Phần thân yêu cầu**: chọn **Tệp** → bấm ô **Tệp** → chọn biến **Ảnh đã chuyển đổi** (kết quả tác vụ ②).
+
+**④ Lấy giá trị từ điển**
+Gõ `từ điển` → chọn **Lấy giá trị từ điển** (biểu tượng cam). Câu phải đọc là: *Lấy* **Giá trị** *cho* `tom_tat` *trong* **Nội dung của URL**.
+`tom_tat` dùng **gạch dưới** `_` (bàn phím **123** → **#+=**), không phải gạch ngang.
+
+**⑤ Hiển thị thông báo**
+Gõ `hiển thị thông báo` → chọn.
+- Bấm vào ô **Văn bản** (chữ "Xin chào thế giới!"), xoá hết, rồi chọn biến **Giá trị từ điển** trên thanh gợi ý phía trên bàn phím.
+- Ô **Tệp đính kèm** để **trống** (đặt nhầm biến vào đây thì bấm vào → Xoá).
+
+Bấm **Xong**.
 
 ## Bước 3. Phím tắt "Sửa đơn Bé Nốc" (sửa / huỷ bằng chữ)
 
-Phím tắt mới → thêm 4 tác vụ:
+Phím tắt mới → đổi tên `Sửa đơn Bé Nốc` → thêm 4 tác vụ:
 
-1. **Yêu cầu đầu vào** (Ask for Input): loại **Văn bản**, lời nhắc *"Sửa đơn (vd: thêm 1 trà đào / huỷ)"*.
-2. **Nhận nội dung của URL**: URL `…/functions/v1/bot-don`, **POST**, tiêu đề `x-capture-key` = mã, `x-device` = **`iphone-chu-quan`** (phải **giống hệt** phím tắt chụp, bot dựa vào đây để biết "đơn vừa lên" là đơn nào). **Phần thân yêu cầu: JSON** → thêm trường **Văn bản**, khoá `text`, giá trị = biến **Đầu vào được cung cấp**.
-3. **Lấy giá trị từ điển**: `tom_tat` trong **Nội dung của URL**.
-4. **Hiển thị thông báo**: **Giá trị từ điển**.
+**① Yêu cầu đầu vào**
+Gõ `yêu cầu đầu vào` → chọn. Loại **Văn bản**, lời nhắc: `Sửa đơn (vd: thêm 1 trà đào / giờ 18h30 / huỷ)`.
+Muốn nói thay gõ: dùng tác vụ **Đọc chính tả văn bản** (ngôn ngữ Tiếng Việt) thay cho tác vụ này.
 
-Muốn nói thay gõ: thay tác vụ 1 bằng **Đọc chính tả văn bản** (ngôn ngữ Tiếng Việt). Có thể đặt phím tắt này vào AssistiveTouch (chạm hai lần) hoặc Chạm vào mặt sau → **Chạm hai lần**.
+**② Nhận nội dung của URL**
+Như ③ ở Bước 2, cùng **Địa chỉ bot**, **POST**, 2 tiêu đề `x-capture-key` và `x-device` (**cùng tên máy** với Bước 2). Khác ở:
+- **Phần thân yêu cầu**: chọn **JSON** → **Thêm trường mới** → **Văn bản** → khoá `text`, giá trị = biến **Đầu vào được cung cấp** (hoặc **Văn bản đã đọc chính tả**).
+
+**③ Lấy giá trị từ điển**: `tom_tat` trong **Nội dung của URL** (như ④ ở Bước 2).
+
+**④ Hiển thị thông báo**: ô Văn bản = **Giá trị từ điển** (như ⑤ ở Bước 2).
+
+Bấm **Xong**.
+
+## Bước 4. Chạy thử lần đầu (bắt buộc)
+
+1. Trong app Phím tắt, bấm vào **Gửi đơn Bé Nốc**.
+2. iOS hỏi cho phép kết nối tới **hixdacnaxfuxuccbajzn.supabase.co** → chọn **Luôn cho phép**.
+3. Lần này chụp trúng màn hình app Phím tắt nên thông báo sẽ là *"Ảnh này không thấy đoạn chat đặt món…"*: **đúng như vậy là đã thông**, không có đơn nào được tạo.
+4. Bấm thử **Sửa đơn Bé Nốc**, gõ `hd` → thông báo hướng dẫn của bot. Lần đầu cũng chọn **Luôn cho phép**.
+
+Không chọn "Luôn cho phép" ở bước này thì lúc gõ lưng máy phím tắt sẽ bị dừng để hỏi.
+
+## Bước 5. Gán gõ lưng máy / nút nổi
+
+**Gõ lưng máy:** **Cài đặt** → **Trợ năng** → **Cảm ứng** → kéo xuống cuối → **Chạm vào mặt sau**:
+- **Chạm ba lần** → **Gửi đơn Bé Nốc**
+- **Chạm hai lần** → **Sửa đơn Bé Nốc** (tuỳ chọn)
+
+Dùng *ba lần* cho phím gửi đơn để đỡ chạm nhầm khi cầm máy. Ốp lưng quá dày có thể khó nhận.
+
+**Hoặc nút nổi:** **Cài đặt** → **Trợ năng** → **Cảm ứng** → **AssistiveTouch** → bật → **Chạm hai lần** → **Gửi đơn Bé Nốc** (chạm một lần vẫn mở menu bình thường). Kéo nút tròn ra mép màn hình cho đỡ vướng.
 
 ---
+
+## Dùng hằng ngày
+
+| Làm gì | Kết quả |
+|---|---|
+| Đang mở đoạn chat đã chốt đơn → gõ lưng 3 lần | **✅ Đã gửi bếp · tên khách** + món, giờ, phần còn thiếu |
+| Đoạn chat dài: cuộn tiếp, gõ lưng lần nữa | Ảnh sau của **cùng khách** trong 90 phút (bếp chưa nhận) thì **sửa đơn đó**, không tạo đơn mới |
+| Sửa đơn Bé Nốc → `thêm 1 trà đào`, `bỏ kimbap`, `giờ 18h30`, `ship 12 ngõ 5…, sđt 09…` | **🔄 Đã sửa đơn ở bếp** |
+| Sửa đơn Bé Nốc → `huỷ` | **🗑 Đã huỷ đơn** (khi bếp chưa nhận) |
+
+- Chụp sao cho thấy **tên khách ở đầu màn hình** và phần có món, giờ hẹn, địa chỉ.
+- Chưa rõ qua lấy / ăn tại quán / ship thì bot tạm để **Mang về**; thiếu gì thông báo sẽ ghi **⚠️ Còn thiếu…**, nhắn bổ sung bằng "Sửa đơn".
+- Bếp đã bấm **Nhận** thì bot không sửa / huỷ nữa: sửa trên màn hình bếp.
+- Phím tắt chạy ngầm: gõ xong cứ nhắn tiếp với khách, thông báo hiện sau vài giây.
+- Mỗi lần gõ lưng là **đơn thật ở bếp**. Chụp nhầm đơn thử thì "Sửa đơn" → `huỷ` ngay.
 
 ## Khi có sự cố
 
 | Thông báo / hiện tượng | Cách xử lý |
 |---|---|
-| ⛔ Sai mã x-capture-key | Mã trong Phím tắt khác secret `CAPTURE_KEY` |
-| ⚠️ Chưa cài secret CAPTURE_KEY | Thêm secret ở Edge Functions → Secrets |
-| ⚠️ Không phải ảnh JPG / PNG | Phần thân yêu cầu phải là **Tệp** = *Ảnh đã chuyển đổi* (JPEG) |
-| AI đang quá tải | Gõ lưng máy lại sau ít phút |
-| Ảnh này không thấy đoạn chat đặt món | Chụp đúng màn hình chat có món / giờ hẹn |
-| Đơn không hiện ở bếp, lỗi ràng buộc `fb_drafts_kenh_check` | Chưa chạy SQL cập nhật 33 |
+| ⛔ Sai mã x-capture-key | Mã trong tiêu đề sai hoặc thừa dấu cách. Chép lại từ máy đang chạy |
+| ⚠️ Không phải ảnh JPG / PNG | ③ *Phần thân yêu cầu* phải là **Tệp** = **Ảnh đã chuyển đổi** |
+| Thông báo trống | ④ khoá phải là `tom_tat` (gạch dưới); ⑤ biến phải nằm ở ô **Văn bản**, không phải Tệp đính kèm |
+| Phím tắt dừng lại hỏi quyền | Làm lại **Bước 4**, chọn **Luôn cho phép**; kiểm tra **Bước 1** |
 | Nhắn sửa nhưng bot nói "không có đơn nào vừa lên" | `x-device` ở 2 phím tắt khác nhau, hoặc đơn đã quá 90 phút |
-| Thông báo trống | Chạy tay trong app Phím tắt để xem lỗi; xem Supabase → Edge Functions → `bot-don` → Logs |
+| AI đang quá tải | Gõ lưng lại sau ít phút |
+| Ảnh này không thấy đoạn chat đặt món | Chụp đúng màn hình chat có món / giờ hẹn |
+| Gõ lưng không chạy | Kiểm tra **Bước 5**; thử tháo ốp; hoặc dùng nút AssistiveTouch |
+| Không tìm thấy tác vụ khi gõ tên | Tên tác vụ trên iOS tiếng Việt hơi khác: gõ ít chữ hơn (`URL`, `từ điển`, `thông báo`) rồi chọn theo biểu tượng |
 
-## Riêng tư
+## Bảo mật
 
-Giống bot Zalo: ảnh gửi cho Google Gemini để đọc; ảnh lưu ở bucket riêng tư `don-anh`; mẫu huấn luyện đã ẩn tên, SĐT. Không ai có `CAPTURE_KEY` thì không gửi được đơn, nên **đừng chia sẻ phím tắt** (mã nằm trong đó). Lộ mã thì đổi secret và sửa lại Phím tắt.
+- Mã bí mật nằm trong 2 phím tắt: chỉ chia sẻ qua AirDrop / gửi riêng cho người trong quán.
+- Máy bị mất hoặc nhân viên nghỉ: đổi secret `CAPTURE_KEY` trên Supabase (Edge Functions → Secrets), rồi sửa mã mới trong phím tắt của các máy còn dùng.
+- Ảnh chụp được gửi cho AI (Google Gemini) để đọc và lưu ở kho ảnh riêng tư của quán, giống bot Zalo.
 
-Trang `tools/chup-chat.html` + function `chup-chat` (cập nhật 32) vẫn giữ để thu ảnh chép nguyên văn cho việc tự build mô hình; quán dùng hằng ngày thì chỉ cần `bot-don`.
+---
+
+<details>
+<summary>Dành cho người quản lý POS: phía Supabase (đã cài trên Product ngày 03/11/2026)</summary>
+
+- SQL `sql/cap-nhat-33-phim-tat-iphone.sql`: cho phép đơn kênh `ios`.
+- Function `bot-don` bản có `handleShortcut` (Verify JWT tắt).
+- Secret `CAPTURE_KEY` (chữ và số, ~32 ký tự), dùng chung cả project.
+- Kiểm tra: Quản lý → Đơn online → Cài đặt bot → **Kiểm tra bot** → *✅ Phím tắt iPhone: đã có CAPTURE_KEY*.
+- Function `chup-chat` (cập nhật 32) + `tools/chup-chat.html` chỉ dùng để thu ảnh chép nguyên văn cho mô hình tự build; quán dùng hằng ngày không cần.
+
+</details>
