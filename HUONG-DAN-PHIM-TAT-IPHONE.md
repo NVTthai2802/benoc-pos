@@ -2,7 +2,7 @@
 
 Dùng khi cài cho **một iPhone mới** (chủ quán đổi máy, thêm máy nhân viên trực tin nhắn…). Phía Supabase đã cài xong, chỉ cần làm trên iPhone.
 
-**Kết quả:** đang mở đoạn chat với khách → **gõ 3 lần vào lưng máy** → iPhone tự chụp màn hình gửi cho bot → vài giây sau hiện thông báo **"✅ Đã gửi bếp · tên khách"**. Đơn vào thẳng bếp / pha chế với nhãn **ĐƠN ONLINE**, giống bot Zalo.
+**Kết quả:** đang mở đoạn chat với khách → **gõ 3 lần vào lưng máy** → 1–2 giây sau hiện **"📥 Đã nhận ảnh"** → **chụp tiếp đơn khác ngay**, không phải đợi. Bot gom các ảnh chụp liền nhau, đọc và đưa đơn vào thẳng bếp / pha chế với nhãn **ĐƠN ONLINE** (khoảng 10–20 giây sau), giống bot Zalo. Kết quả không báo lại trên iPhone: xem đơn ở màn hình bếp / Quản lý.
 
 Cần: iPhone 8 trở lên (iOS 14+), có app **Phím tắt** (Shortcuts, có sẵn; bị xoá thì tải lại trên App Store).
 
@@ -109,15 +109,17 @@ Dùng *ba lần* cho phím gửi đơn để đỡ chạm nhầm khi cầm máy.
 
 | Làm gì | Kết quả |
 |---|---|
-| Đang mở đoạn chat đã chốt đơn → gõ lưng 3 lần | **✅ Đã gửi bếp · tên khách** + món, giờ, phần còn thiếu |
-| Đoạn chat dài: cuộn tiếp, gõ lưng lần nữa | Ảnh sau của **cùng khách** trong 90 phút (bếp chưa nhận) thì **sửa đơn đó**, không tạo đơn mới |
+| Đang mở đoạn chat đã chốt đơn → gõ lưng 3 lần | **📥 Đã nhận ảnh** → mở chat khách khác, gõ lưng tiếp |
+| Chụp liên tục nhiều khách | Bot gom ảnh chụp cách nhau dưới ~3 giây thành 1 lượt đọc, **mỗi khách 1 đơn** |
+| Đoạn chat dài: cuộn tiếp, gõ lưng lần nữa | Ảnh của **cùng khách** chụp liền nhau gộp 1 đơn; chụp sau (trong 90 phút, bếp chưa nhận) thì **sửa đơn đó** |
+| Muốn xem bot đọc ra gì | Màn hình bếp / Quản lý → Đơn online. Hoặc **Sửa đơn Bé Nốc** gõ bất kỳ sửa đổi nào: thông báo hiện lại tóm tắt đơn |
 | Sửa đơn Bé Nốc → `thêm 1 trà đào`, `bỏ kimbap`, `giờ 18h30`, `ship 12 ngõ 5…, sđt 09…` | **🔄 Đã sửa đơn ở bếp** |
 | Sửa đơn Bé Nốc → `huỷ` | **🗑 Đã huỷ đơn** (khi bếp chưa nhận) |
 
 - Chụp sao cho thấy **tên khách ở đầu màn hình** và phần có món, giờ hẹn, địa chỉ.
-- Chưa rõ qua lấy / ăn tại quán / ship thì bot tạm để **Mang về**; thiếu gì thông báo sẽ ghi **⚠️ Còn thiếu…**, nhắn bổ sung bằng "Sửa đơn".
+- Chưa rõ qua lấy / ăn tại quán / ship thì bot tạm để **Mang về**. Thiếu địa chỉ / giờ hoặc món tạm hết thì đơn ở bếp hiện thiếu, nhắn bổ sung bằng "Sửa đơn" (thông báo của "Sửa đơn" luôn hiện kết quả).
+- Muốn từng ảnh đều hiện kết quả trên iPhone (chậm hơn, phải đợi): thêm tiêu đề thứ 3 `x-wait` = `1` vào phím tắt Gửi đơn.
 - Bếp đã bấm **Nhận** thì bot không sửa / huỷ nữa: sửa trên màn hình bếp.
-- Phím tắt chạy ngầm: gõ xong cứ nhắn tiếp với khách, thông báo hiện sau vài giây.
 - Mỗi lần gõ lưng là **đơn thật ở bếp**. Chụp nhầm đơn thử thì "Sửa đơn" → `huỷ` ngay.
 
 ## Khi có sự cố
@@ -129,8 +131,7 @@ Dùng *ba lần* cho phím gửi đơn để đỡ chạm nhầm khi cầm máy.
 | Thông báo trống | ④ khoá phải là `tom_tat` (gạch dưới); ⑤ biến phải nằm ở ô **Văn bản**, không phải Tệp đính kèm |
 | Phím tắt dừng lại hỏi quyền | Làm lại **Bước 4**, chọn **Luôn cho phép**; kiểm tra **Bước 1** |
 | Nhắn sửa nhưng bot nói "không có đơn nào vừa lên" | `x-device` ở 2 phím tắt khác nhau, hoặc đơn đã quá 90 phút |
-| AI đang quá tải | Gõ lưng lại sau ít phút |
-| Ảnh này không thấy đoạn chat đặt món | Chụp đúng màn hình chat có món / giờ hẹn |
+| Gõ lưng xong mà bếp không có đơn (sau ~30 giây) | Ảnh không có đoạn chat đặt món, hoặc AI quá tải: chụp lại; muốn biết lý do thì thêm tạm `x-wait` = `1` rồi chụp lại. Hoặc xem Supabase → Edge Functions → `bot-don` → Logs |
 | Gõ lưng không chạy | Kiểm tra **Bước 5**; thử tháo ốp; hoặc dùng nút AssistiveTouch |
 | Không tìm thấy tác vụ khi gõ tên | Tên tác vụ trên iOS tiếng Việt hơi khác: gõ ít chữ hơn (`URL`, `từ điển`, `thông báo`) rồi chọn theo biểu tượng |
 
@@ -146,7 +147,7 @@ Dùng *ba lần* cho phím gửi đơn để đỡ chạm nhầm khi cầm máy.
 <summary>Dành cho người quản lý POS: phía Supabase (đã cài trên Product ngày 03/11/2026)</summary>
 
 - SQL `sql/cap-nhat-33-phim-tat-iphone.sql`: cho phép đơn kênh `ios`.
-- Function `bot-don` bản có `handleShortcut` (Verify JWT tắt).
+- Function `bot-don` bản có `handleShortcut` (Verify JWT tắt). Ảnh chế độ nhanh lưu tạm ở `don-anh/ios-tam/`, đọc xong tự xoá; gom qua bảng `bot_photos` như Zalo.
 - Secret `CAPTURE_KEY` (chữ và số, ~32 ký tự), dùng chung cả project.
 - Kiểm tra: Quản lý → Đơn online → Cài đặt bot → **Kiểm tra bot** → *✅ Phím tắt iPhone: đã có CAPTURE_KEY*.
 - Function `chup-chat` (cập nhật 32) + `tools/chup-chat.html` chỉ dùng để thu ảnh chép nguyên văn cho mô hình tự build; quán dùng hằng ngày không cần.

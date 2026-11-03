@@ -222,8 +222,13 @@ function fakeSb(tables: Record<string, any[]>, links: Record<string, boolean> = 
     if (n === 'bot_link_use') { const ok = !!links[a.p_code]; if (ok) { delete links[a.p_code]; (tables.bot_users ||= []).push({ kenh: a.p_kenh, chat_id: a.p_chat, name: a.p_name }); } return { data: ok, error: null }; }
     return { data: null, error: null };
   };
-  const storage = { from: (_b: string) => ({ upload: async (path: string) => { uploads.push(path); return { error: null }; } }) };
-  return { sb: { from, rpc, storage } as any, uploads };
+  const files = new Map<string, Uint8Array>();
+  const storage = { from: (_b: string) => ({
+    upload: async (path: string, body: any) => { uploads.push(path); if (body instanceof Uint8Array) files.set(path, body); return { error: null }; },
+    download: async (path: string) => files.has(path) ? { data: new Blob([files.get(path)! as Uint8Array<ArrayBuffer>]), error: null } : { data: null, error: { message: 'not found' } },
+    remove: async (paths: string[]) => { paths.forEach(p => files.delete(p)); return { data: null, error: null }; },
+  }) };
+  return { sb: { from, rpc, storage } as any, uploads, files };
 }
 
 /* Chạy 1 tin qua bot với Zalo / AI giả. Trả về các tin bot nhắn lại */
@@ -462,9 +467,9 @@ Deno.test('Phím tắt: sai / thiếu mã thì từ chối, không gọi AI', as
   assertEquals(b.status, 503);
 });
 
-Deno.test('Phím tắt: ảnh → đơn vào thẳng bếp, trả lời trong kết quả (không cần kết nối mã, không nhắn Zalo)', async () => {
+Deno.test('Phím tắt (x-wait: 1): ảnh → đơn vào thẳng bếp, trả lời trong kết quả (không cần kết nối mã, không nhắn Zalo)', async () => {
   const t: Record<string, any[]> = {};
-  const r = await shortcut(t, JPG, { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'iphone-chu-quan', 'content-type': 'image/jpeg' }, ORDER);
+  const r = await shortcut(t, JPG, { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'iphone-chu-quan', 'x-wait': '1', 'content-type': 'image/jpeg' }, ORDER);
   assertEquals(r.status, 200);
   assertEquals(r.ai.length, 1);
   assertEquals(r.ai[0].contents[0].parts.find((p: any) => p.inlineData).inlineData.mimeType, 'image/jpeg');
@@ -482,7 +487,7 @@ Deno.test('Phím tắt: ảnh → đơn vào thẳng bếp, trả lời trong k�
 Deno.test('Phím tắt: nhắn chữ sửa đơn vừa lên, "huỷ" huỷ đơn', async () => {
   const t: Record<string, any[]> = {};
   const H = { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'iphone-chu-quan' };
-  await shortcut(t, JPG, { ...H, 'content-type': 'image/jpeg' }, ORDER);
+  await shortcut(t, JPG, { ...H, 'x-wait': '1', 'content-type': 'image/jpeg' }, ORDER);
   const e = await shortcut(t, JSON.stringify({ text: 'thêm 1 cơm gà viên' }), { ...H, 'content-type': 'application/json' },
     { intent: 'order', khach: 'Phạm Hà', dine_type: 'mang_ve', time: '18:00', items: [{ m: num('Cơm gà viên'), qty: 3 }] });
   assertEquals(t.fb_drafts.length, 1);
@@ -501,4 +506,33 @@ Deno.test('Phím tắt: không phải ảnh / mã 6 số không kết nối kên
   assertEquals(a.status, 415);
   await shortcut(t, '123456', { ...H, 'content-type': 'text/plain' }, { intent: 'khong_phai_don' });
   assertEquals(t.bot_users, undefined);
+});
+
+Deno.test('Phím tắt chế độ nhanh (mặc định): trả "Đã nhận" ngay, ảnh đi đường gom như Zalo, lên đơn ngầm, xoá ảnh tạm', async () => {
+  const t: Record<string, any[]> = {};
+  const H = { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'iphone-chu-quan', 'content-type': 'image/jpeg' };
+  gem(); Deno.env.set('CAPTURE_KEY', 'khoaPhimTat123');
+  t.shop_settings = [{ id: 1, fb_open: '00:00', fb_close: '23:59', fb_train_on: true }];
+  const ai: any[] = []; const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: any) => String(url).includes('generativelanguage') ? (ai.push(JSON.parse(init.body)), aiOk(ORDER)) : new Response('{}')) as typeof fetch;
+  const f = fakeSb(t);
+  const bg: Promise<unknown>[] = [];
+  (globalThis as any).EdgeRuntime = { waitUntil: (p: Promise<unknown>) => bg.push(p) };
+  try {
+    const res = await bot.handleShortcut(f.sb, new Request('https://x/bot-don', { method: 'POST', headers: H, body: JPG }));
+    const j = await res.json();
+    assertStringIncludes(j.tom_tat, '📥 Đã nhận ảnh');
+    assertEquals(bg.length, 1);
+    assertEquals(t.bot_photos.length, 1);
+    assertEquals([t.bot_photos[0].kenh, t.bot_photos[0].chat_id], ['ios', 'iphone-chu-quan']);
+    assertMatch(t.bot_photos[0].ref, /^ios-tam\/iphone-chu-quan\/\d+-\w+\.jpg$/);
+    await Promise.all(bg);
+  } finally { globalThis.fetch = real; delete (globalThis as any).EdgeRuntime; }
+  assertEquals(ai.length, 1);
+  assertEquals(t.bot_photos[0].done, true);
+  const d = t.fb_drafts[0];
+  assertEquals([d.kenh, d.status, d.customer_name], ['ios', 'da_duyet', 'Phạm Hà']);
+  assertEquals(t.orders.length, 1);
+  assert(![...f.files.keys()].some(k => k.startsWith('ios-tam/')));   // ảnh tạm đã xoá
+  assertEquals(d.anh.length, 1);                                          // ảnh lưu lại theo đơn
 });
