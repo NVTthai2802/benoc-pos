@@ -40,3 +40,18 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tbl th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); font-weight: 600; padding: 8px 8px; border-bottom: 1.5px solid var(--line); white-space: nowrap; }
 .tbl td { padding: 10px 8px; border-bottom: 1.5px dashed var(--line); vertical-align: top; }
 .tbl td.r, .tbl th.r { text-align: right; }
+.tbl tfoot th { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--ink); font-weight: 800; border-top: 2px solid var(--line); border-bottom: 0; }
+
+/* Lương theo tháng (màn Nhân viên) */
+.paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.paygrid .pay-total { grid-column: 1 / -1; }
+.paygrid .stat b { font-size: 20px; white-space: nowrap; }
+.paygrid .pay-total b { font-size: 26px; }
+.paygrid .stat small { display: block; margin-top: 2px; }
+.paytbl { width: 100%; }
+.paytbl td, .paytbl th { padding-left: 6px; padding-right: 6px; }
+.paytbl td { white-space: normal; font-size: 14px; }
+.paytbl b, .paytbl th.num, .paytbl td.num { white-space: nowrap; }
+.paytbl td .small { white-space: normal; font-size: 12px; }
+.paytbl td:last-child { padding-right: 0; }
+@media (min-width: 760px) { .paygrid { grid-template-columns: 2fr 1fr 1fr; } .paygrid .pay-total { grid-column: auto; } }
