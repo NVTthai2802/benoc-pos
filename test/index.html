@@ -78,8 +78,14 @@
 #fQueue[hidden] + #fName { grid-column: 1 / -1; }
 
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-block: 10px 0; padding: 12px 14px; border: 2px solid var(--red); border-radius: 14px; background: var(--red-soft); color: var(--ink); text-align: left; font-weight: 600; }
-.phien { display: grid; gap: 2px; margin-block: 10px 0; padding: 10px 14px; border: 2px solid var(--warn); border-radius: 14px; background: var(--warn-soft); color: var(--ink); font-size: 14px; }
-.phien b { color: var(--warn); font-size: 15px; }
+.phien { display: grid; gap: 2px; margin-block: 10px 0; padding: 10px 14px; border: 2px dashed var(--line); border-radius: 14px; background: var(--card); color: var(--ink); font-size: 14px; }
+.phien-line { font-size: 15px; font-weight: 600; }
+.phien-line b, .phien-cart b { font-variant-numeric: tabular-nums; font-size: 17px; }
+.phien-sub { color: var(--ink-2); font-size: 13px; }
+.phien--warn { border: 2px solid var(--warn); background: var(--warn-soft); }
+.phien--warn .phien-line b { color: var(--warn); }
+.phien-cart { margin: 0 0 8px; text-align: center; font-size: 14px; }
+.phien-cart--warn b { color: var(--warn); }
 .phien--het { border-color: var(--red); background: var(--red-soft); }
 .phien--het b { color: var(--red); }
 .banner span:last-child { white-space: nowrap; color: var(--red); }
@@ -339,18 +345,18 @@ const state = {
 };
 const GIAO = state.kind === 'giao';
 /* ---------- Phiên gọi món (chống gọi món khi đã về nhà) ----------
-   Quét mã QR ở quán (link có ?qr, ?ban=, hoặc mã cũ ?menu=) mở một phiên ORDER_SESSION_MINUTES phút (mặc định 30).
-   Ngay khi mở, dấu mã QR bị xoá khỏi địa chỉ trang, nên mở lại từ tab cũ / lịch sử trình duyệt
-   không tạo được phiên mới. Hết phiên vẫn xem menu, giỏ và đơn đã gửi; muốn gửi đơn phải quét lại mã. */
+   Mở trang từ mã QR (mọi mã đã in: mã chung, mã bàn ?ban=, mã cũ ?menu=) là mở một phiên
+   ORDER_SESSION_MINUTES phút (mặc định 30). Không cần in lại mã: ngay khi mở, địa chỉ trang được đổi
+   thành ...?tiep=1 ("đang trong phiên đã có"). Khách về nhà mở lại tab cũ / tải lại trang thì địa chỉ
+   có ?tiep → không tạo phiên mới. Hết phiên vẫn xem menu, giỏ và đơn đã gửi; muốn gửi đơn phải quét lại mã. */
 const SESSION_MS = Math.max(1, Number(CONFIG.ORDER_SESSION_MINUTES) || 30) * 60e3;
-const QR_KEYS = ['qr', 'ban', 'menu'];
 let phien = GIAO ? null : store.get('phien', null);
-if (!GIAO && QR_KEYS.some(k => BN.PARAMS.has(k))) {
+if (!GIAO && !BN.PARAMS.has('tiep')) {
   /* Mã QR theo bàn: ?ban=5 → khách ngồi bàn 5, tự điền số bàn, ăn tại quán (vẫn đổi sang mang về được) */
   const ban = (n => n >= 1 && n <= 999 ? n : 0)(parseInt(BN.PARAMS.get('ban'), 10));
   phien = { at: Date.now(), ban: ban };
   store.set('phien', phien);
-  try { const u = new URL(location.href); QR_KEYS.forEach(k => u.searchParams.delete(k)); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ }
+  try { const u = new URL(location.href); ['qr', 'ban', 'menu'].forEach(k => u.searchParams.delete(k)); u.searchParams.set('tiep', '1'); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ }
 }
 const phienLeft = () => {
   if (GIAO) return Infinity;
@@ -358,13 +364,23 @@ const phienLeft = () => {
   return l > SESSION_MS ? 0 : l; // đồng hồ máy bị chỉnh lùi: coi như hết phiên
 };
 const PHIEN_HET = 'Phiên gọi món đã hết (' + Math.round(SESSION_MS / 60e3) + ' phút kể từ lúc quét mã). Bạn quét lại mã QR ở bàn hoặc ở quầy để gửi đơn nhé, món trong giỏ vẫn được giữ.';
+/* Đếm ngược "Phiên hết hạn sau: mm:ss" — ở đầu menu và trong giỏ (cạnh nút gửi đơn), cập nhật mỗi giây */
+const mmss = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+const phienLineHtml = left => left <= 0 ? '<b>Phiên đã hết hạn</b>' : 'Phiên hết hạn sau: <b class="num">' + mmss(left) + '</b>';
+let phienWasLive = null;
 function renderPhien() {
-  const el = $('#phien'); if (!el) return;
-  const left = phienLeft();
-  if (GIAO || left > 5 * 60e3) { el.innerHTML = ''; return; }
-  el.innerHTML = left <= 0
-    ? '<div class="phien phien--het" role="status"><b>Quét lại mã QR để gọi món</b><span>' + esc(PHIEN_HET) + '</span></div>'
-    : '<div class="phien" role="status"><b>Còn ' + Math.max(1, Math.ceil(left / 60e3)) + ' phút để gửi đơn</b><span>Hết giờ thì quét lại mã QR ở bàn là gọi tiếp được.</span></div>';
+  if (GIAO) return;
+  const left = phienLeft(), live = left > 0, warn = left <= 5 * 60e3;
+  const el = $('#phien');
+  if (el) {
+    if (live !== phienWasLive) { // đổi khung chỉ khi vừa hết phiên; các giây khác chỉ đổi số
+      el.innerHTML = live ? '<div class="phien" role="timer" aria-live="off"><span class="phien-line"></span><span class="phien-sub">Hết giờ thì quét lại mã QR ở quán là gọi tiếp được.</span></div>'
+        : '<div class="phien phien--het" role="status"><b>Quét lại mã QR để gọi món</b><span>' + esc(PHIEN_HET) + '</span></div>';
+      phienWasLive = live;
+    }
+    const box = $('.phien', el); if (live && box) { box.classList.toggle('phien--warn', warn); $('.phien-line', box).innerHTML = phienLineHtml(left); }
+  }
+  const sc = $('#cPhien'); if (sc) { sc.innerHTML = phienLineHtml(left); sc.classList.toggle('phien-cart--warn', warn); }
 }
 const BAN = GIAO ? 0 : (phien && phien.ban) || 0;
 if (GIAO) state.orders = []; // trang tạo đơn không theo dõi đơn như khách
@@ -932,8 +948,9 @@ function openCart() {
     '<label class="field wide" id="fPhone" for="cPhone">Số điện thoại <span class="req">*</span><input id="cPhone" type="tel" inputmode="tel" maxlength="15" autocomplete="tel" placeholder="Để quán liên hệ khi có sự cố" value="' + esc(state.info.phone) + '"></label>' +
     '<label class="field wide" for="cNote">Ghi chú cho quán (không bắt buộc)<textarea id="cNote" maxlength="300">' + esc(state.cartNote) + '</textarea></label>' +
     '<p class="msg wide" id="cMsg" hidden></p><div class="dup wide" id="cDup" hidden></div></div></div>' +
-    '<div class="sh-foot"><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho quán</button></div>',
+    '<div class="sh-foot"><p class="phien-cart" id="cPhien"></p><button class="btn btn-block" type="button" id="cSend">Gửi đơn cho quán</button></div>',
     sh => {
+      renderPhien();
       const repaint = () => { $('#cLines', sh).innerHTML = linesHtml(); $('#cTotal', sh).textContent = vnd(cartTotal()); $('#cSend', sh).disabled = !state.cart.length; };
       repaint();
       sh.addEventListener('click', e => {
@@ -1198,7 +1215,7 @@ async function loadMenu() {
 api.watchMenu(() => { clearTimeout(menuReloadT); menuReloadT = setTimeout(loadMenu, 500 + Math.random() * 2000); }).catch(() => { /* vẫn còn tải lại khi mở lại màn hình */ });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastMenuAt > 60e3) loadMenu(); });
 $('#demoNote').hidden = !DEMO;
-ui.init(); renderTicket(); renderPhien(); setInterval(renderPhien, 15e3);
+ui.init(); renderTicket(); renderPhien(); setInterval(renderPhien, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) renderPhien(); });
 if (GIAO) api.staffSession().then(e => { state.staff = e || false; renderTicket(); });
 const wantMenu = BN.PARAMS.get('xem') === 'menu';
