@@ -26,7 +26,8 @@
   const isTest = isPreview || /\/test(\/|$)/.test(location.pathname);
   window.BENOC_ENV = isTest ? 'test' : 'product';
   window.BENOC_CONFIG = Object.assign({
-    POLL_SECONDS: 15,         // trang khách tự cập nhật trạng thái đơn mỗi 15 giây
+    POLL_SECONDS: 15,
+    ORDER_SESSION_MINUTES: 30, // quét mã QR gọi món xong có 30 phút để gửi đơn, hết giờ phải quét lại         // trang khách tự cập nhật trạng thái đơn mỗi 15 giây
     LOGIN_DOMAIN: 'benoc.app' // nhân viên đăng nhập bằng số điện thoại; hệ thống đổi thành <sđt>@benoc.app
   }, ENVS[window.BENOC_ENV]);
 })();

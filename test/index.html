@@ -78,6 +78,10 @@
 #fQueue[hidden] + #fName { grid-column: 1 / -1; }
 
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-block: 10px 0; padding: 12px 14px; border: 2px solid var(--red); border-radius: 14px; background: var(--red-soft); color: var(--ink); text-align: left; font-weight: 600; }
+.phien { display: grid; gap: 2px; margin-block: 10px 0; padding: 10px 14px; border: 2px solid var(--warn); border-radius: 14px; background: var(--warn-soft); color: var(--ink); font-size: 14px; }
+.phien b { color: var(--warn); font-size: 15px; }
+.phien--het { border-color: var(--red); background: var(--red-soft); }
+.phien--het b { color: var(--red); }
 .banner span:last-child { white-space: nowrap; color: var(--red); }
 
 /* Danh mục kiểu ô khung trên menu giấy */
@@ -281,6 +285,7 @@
 <main id="menuView">
   <div class="wrap">
     <section class="ticket" id="ticket" aria-label="Số thứ tự của bạn"></section>
+    <div id="phien"></div>
     <div id="banner"></div>
     <div id="menuList"><p class="loading">Đang tải menu…</p></div>
     <p class="empty" id="mEmpty" hidden></p>
@@ -333,8 +338,35 @@ const state = {
   staff: null, giao: { name: '', phone: '', address: '', time: '', paid: false, kind: BN.store.get('giaoKind', 'ship') === 'lay' ? 'lay' : 'ship' }
 };
 const GIAO = state.kind === 'giao';
-/* Mã QR theo bàn: ?ban=5 → khách ngồi bàn 5, tự điền số bàn, ăn tại quán (vẫn đổi sang mang về được) */
-const BAN = GIAO ? 0 : (n => n >= 1 && n <= 999 ? n : 0)(parseInt(BN.PARAMS.get('ban'), 10));
+/* ---------- Phiên gọi món (chống gọi món khi đã về nhà) ----------
+   Quét mã QR ở quán (link có ?qr, ?ban=, hoặc mã cũ ?menu=) mở một phiên ORDER_SESSION_MINUTES phút (mặc định 30).
+   Ngay khi mở, dấu mã QR bị xoá khỏi địa chỉ trang, nên mở lại từ tab cũ / lịch sử trình duyệt
+   không tạo được phiên mới. Hết phiên vẫn xem menu, giỏ và đơn đã gửi; muốn gửi đơn phải quét lại mã. */
+const SESSION_MS = Math.max(1, Number(CONFIG.ORDER_SESSION_MINUTES) || 30) * 60e3;
+const QR_KEYS = ['qr', 'ban', 'menu'];
+let phien = GIAO ? null : store.get('phien', null);
+if (!GIAO && QR_KEYS.some(k => BN.PARAMS.has(k))) {
+  /* Mã QR theo bàn: ?ban=5 → khách ngồi bàn 5, tự điền số bàn, ăn tại quán (vẫn đổi sang mang về được) */
+  const ban = (n => n >= 1 && n <= 999 ? n : 0)(parseInt(BN.PARAMS.get('ban'), 10));
+  phien = { at: Date.now(), ban: ban };
+  store.set('phien', phien);
+  try { const u = new URL(location.href); QR_KEYS.forEach(k => u.searchParams.delete(k)); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ }
+}
+const phienLeft = () => {
+  if (GIAO) return Infinity;
+  const l = phien ? phien.at + SESSION_MS - Date.now() : 0;
+  return l > SESSION_MS ? 0 : l; // đồng hồ máy bị chỉnh lùi: coi như hết phiên
+};
+const PHIEN_HET = 'Phiên gọi món đã hết (' + Math.round(SESSION_MS / 60e3) + ' phút kể từ lúc quét mã). Bạn quét lại mã QR ở bàn hoặc ở quầy để gửi đơn nhé, món trong giỏ vẫn được giữ.';
+function renderPhien() {
+  const el = $('#phien'); if (!el) return;
+  const left = phienLeft();
+  if (GIAO || left > 5 * 60e3) { el.innerHTML = ''; return; }
+  el.innerHTML = left <= 0
+    ? '<div class="phien phien--het" role="status"><b>Quét lại mã QR để gọi món</b><span>' + esc(PHIEN_HET) + '</span></div>'
+    : '<div class="phien" role="status"><b>Còn ' + Math.max(1, Math.ceil(left / 60e3)) + ' phút để gửi đơn</b><span>Hết giờ thì quét lại mã QR ở bàn là gọi tiếp được.</span></div>';
+}
+const BAN = GIAO ? 0 : (phien && phien.ban) || 0;
 if (GIAO) state.orders = []; // trang tạo đơn không theo dõi đơn như khách
 const MENU = {
   bep: { hero: 'BÉ NỐC ĂN VẶT', tag: 'Ăn ngon · Giá xinh · Ship nhanh', query: '?menu=an', link: 'Ăn vặt', linkDesc: 'Cơm trộn · Mì trộn · Kimbap · Đồ ăn vặt' },
@@ -918,6 +950,7 @@ function openCart() {
       $$('input[name=cDine]', sh).forEach(r => r.onchange = () => { setDine(r.value); $('#fQueue', sh).hidden = isTake(); $('#fDine', sh).classList.remove('invalid'); $('#cMsg', sh).hidden = true; $('#cDup', sh).hidden = true; renderTicket(); repaint(); });
       nt.oninput = () => { state.cartNote = nt.value; saveCart(); };
       $('#cSend', sh).onclick = () => sendOrder(sh, false);
+      if (phienLeft() <= 0) { $('#cMsg', sh).textContent = PHIEN_HET; $('#cMsg', sh).hidden = false; }
     });
 }
 /* ---------- Đơn giao hàng (chủ quán / nhân viên tạo) ---------- */
@@ -993,6 +1026,7 @@ const phoneOk = v => /^0\d{9}$/.test(String(v || '').replace(/[\s.\-()]/g, '').r
 async function sendOrder(sh, confirm) {
   const msg = $('#cMsg', sh), dup = $('#cDup', sh), btn = $('#cSend', sh);
   msg.hidden = true; dup.hidden = true;
+  if (phienLeft() <= 0) { msg.textContent = PHIEN_HET; msg.hidden = false; msg.scrollIntoView({ block: 'nearest' }); renderPhien(); return; }
   if (!dineMode()) { $('#fDine', sh).classList.add('invalid'); msg.textContent = 'Bạn ăn tại quán hay mang về? Chọn một ô ở trên nhé.'; msg.hidden = false; msg.scrollIntoView({ block: 'nearest' }); return; }
   if (!isTake() && !(queueNum() > 0)) { $('#fQueue', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_QUEUE_NUMBER; msg.hidden = false; $('#cQueue', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
   if (!state.info.name.trim()) { $('#fName', sh).classList.add('invalid'); msg.textContent = ERR.MISSING_NAME; msg.hidden = false; $('#cName', sh).focus(); msg.scrollIntoView({ block: 'nearest' }); return; }
@@ -1164,7 +1198,8 @@ async function loadMenu() {
 api.watchMenu(() => { clearTimeout(menuReloadT); menuReloadT = setTimeout(loadMenu, 500 + Math.random() * 2000); }).catch(() => { /* vẫn còn tải lại khi mở lại màn hình */ });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastMenuAt > 60e3) loadMenu(); });
 $('#demoNote').hidden = !DEMO;
-ui.init(); renderTicket();
+ui.init(); renderTicket(); renderPhien(); setInterval(renderPhien, 15e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderPhien(); });
 if (GIAO) api.staffSession().then(e => { state.staff = e || false; renderTicket(); });
 const wantMenu = BN.PARAMS.get('xem') === 'menu';
 if (wantMenu) { try { const u = new URL(location.href); u.searchParams.delete('xem'); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ } }
