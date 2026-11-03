@@ -1401,16 +1401,59 @@ function editEmployee(e) {
     '<label class="field" for="eRate">Lương mỗi giờ (VNĐ)<input id="eRate" class="num" type="number" min="0" step="1000" value="' + (e.hourly_rate || 0) + '"></label>' +
     (isNew && !DEMO ? '<label class="field" for="ePass">Mật khẩu đăng nhập (ít nhất 6 ký tự)<input id="ePass" type="text" autocomplete="new-password"></label><p class="small muted" style="margin:0">Đưa số điện thoại và mật khẩu này cho nhân viên. Đổi mật khẩu sau này làm trong Supabase (Authentication > Users).</p>' : '') +
     (isNew ? '' : '<label class="switch"><input type="checkbox" id="eActive"' + (e.is_active ? ' checked' : '') + '><span class="track"></span>Đang làm việc (tắt khi nhân viên nghỉ hẳn)</label>') +
-    '<p class="small muted" style="margin:0">Đổi lương chỉ áp dụng cho các ca từ nay về sau, ca cũ giữ nguyên.</p><p class="msg" id="eMsg" hidden></p></div>' +
+    (isNew ? '' : '<div class="reprice"><label class="switch"><input type="checkbox" id="eRe"><span class="track"></span>Tính lại các ca cũ theo mức lương này</label>' +
+      '<p class="small muted" style="margin:4px 0 0" id="eReOff">Tắt: lương mới chỉ áp dụng cho ca từ nay về sau, ca cũ giữ nguyên. Bật khi bạn quên đổi lương vài buổi.</p>' +
+      '<div id="eReBox" hidden><label class="field" for="eFrom" style="margin-top:8px">Tính lại các ca từ ngày<input id="eFrom" type="date" value="' + isoDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) + '" max="' + isoDay(new Date()) + '"></label><div id="ePrev" class="small"></div></div></div>') +
+    '<p class="msg" id="eMsg" hidden></p></div>' +
     '<div class="sh-foot"><button class="btn grow" type="button" id="eSave">' + (isNew ? 'Thêm nhân viên' : 'Lưu') + '</button></div>', sh => {
     $('#eSave', sh).onclick = async () => {
       const msg = $('#eMsg', sh), name = $('#eName', sh).value.trim(); msg.hidden = true;
       if (!name) { msg.textContent = 'Nhập họ tên.'; msg.hidden = false; return; }
       const btn = $('#eSave', sh); btn.disabled = true;
-      try { await api.saveEmployee(Object.assign({}, e, { full_name: name, phone: $('#ePhone', sh).value.replace(/\D/g, ''), role: $('#eRole', sh).value, hourly_rate: Number($('#eRate', sh).value) || 0, is_active: $('#eActive', sh) ? $('#eActive', sh).checked : true, password: $('#ePass', sh) ? $('#ePass', sh).value : undefined })); ui.close(); ui.toast('Đã lưu'); rerender(); }
+      const rate = Number($('#eRate', sh).value) || 0, re = $('#eRe', sh) && $('#eRe', sh).checked;
+      let changed = 0;
+      try {
+        if (re) { const pv = await sh._reprice.plan(rate); changed = await api.setShiftRate(pv.ids, rate); }
+      } catch (err) { msg.textContent = errText(err); msg.hidden = false; btn.disabled = false; return; }
+      try { if (re) ui.toast('Đã tính lại ' + changed + ' ca theo lương mới'); await api.saveEmployee(Object.assign({}, e, { full_name: name, phone: $('#ePhone', sh).value.replace(/\D/g, ''), role: $('#eRole', sh).value, hourly_rate: Number($('#eRate', sh).value) || 0, is_active: $('#eActive', sh) ? $('#eActive', sh).checked : true, password: $('#ePass', sh) ? $('#ePass', sh).value : undefined })); ui.close(); ui.toast('Đã lưu'); rerender(); }
       catch (err) { msg.textContent = errText(err); msg.hidden = false; btn.disabled = false; }
     };
+    if (isNew) return;
+    const reprice = repricer(e, sh);
+    const draw = () => { const on = $('#eRe', sh).checked; $('#eReBox', sh).hidden = !on; $('#eReOff', sh).hidden = on; $('#eSave', sh).textContent = on ? 'Lưu và tính lại lương' : 'Lưu'; if (on) reprice.show(Number($('#eRate', sh).value) || 0); };
+    $('#eRe', sh).onchange = draw; $('#eFrom', sh).onchange = draw; $('#eRate', sh).oninput = () => { if ($('#eRe', sh).checked) draw(); };
+    // Thêm biến dùng trong nút Lưu
+    Object.assign(sh, { _reprice: reprice });
   });
+}
+const isoDay = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+/* Tính trước: những ca nào sẽ đổi khi áp lương mới từ 1 ngày (chỉ ca chưa trả; ca đã trả giữ nguyên) */
+function repricer(e, sh) {
+  let cacheKey = '', cacheList = null;
+  const load = async () => {
+    const v = $('#eFrom', sh).value; if (!v) return [];
+    const [y, m, d] = v.split('-').map(Number); const from = new Date(y, m - 1, d);
+    if (cacheKey !== v) { cacheList = await api.shifts({ employeeId: e.id, from }); cacheKey = v; }
+    return cacheList;
+  };
+  const payAt = (s, rate) => s.paid_minutes == null ? null : Math.round(s.paid_minutes * rate / 60 / Math.max(1, s.pay_round || 1000)) * Math.max(1, s.pay_round || 1000);
+  const plan = async rate => {
+    const list = await load(), todo = list.filter(s => !s.paid_out_at && s.hourly_rate !== rate), paid = list.filter(s => s.paid_out_at && s.hourly_rate !== rate);
+    const done = todo.filter(s => s.check_out_at), old = done.reduce((t, s) => t + (s.pay_amount || 0), 0), neu = done.reduce((t, s) => t + (payAt(s, rate) || 0), 0);
+    const pDiff = paid.filter(s => s.check_out_at).reduce((t, s) => t + (payAt(s, rate) || 0) - (s.pay_amount || 0), 0);
+    return { ids: todo.map(s => s.id), done: done.length, open: todo.length - done.length, old, neu, paid: paid.length, pDiff, total: list.length };
+  };
+  const show = async rate => {
+    const box = $('#ePrev', sh); box.innerHTML = '<span class="muted">Đang tính…</span>';
+    try {
+      const p = await plan(rate), d = p.neu - p.old;
+      box.innerHTML = !p.ids.length && !p.paid ? '<p class="msg" style="margin:6px 0 0">Từ ngày này không có ca nào khác mức ' + vnd(rate) + '/giờ. Không cần tính lại.</p>' :
+        '<div class="msg msg-ok" style="margin:6px 0 0">' + (p.done ? '<b>' + p.done + ' ca chưa trả</b> sẽ tính lại: ' + vnd(p.old) + ' → <b>' + vnd(p.neu) + '</b> (' + (d >= 0 ? '+' : '−') + vnd(Math.abs(d)) + ')' : 'Không có ca chưa trả nào cần tính lại.') +
+        (p.open ? '<br>' + p.open + ' ca đang làm sẽ tính theo mức mới khi ra ca.' : '') + '</div>' +
+        (p.paid ? '<p class="msg" style="margin:6px 0 0;background:#FFF3C4;color:#7A5A00">' + p.paid + ' ca <b>đã đánh dấu trả</b> giữ nguyên. Nếu tính theo mức mới thì ' + (p.pDiff >= 0 ? 'còn thiếu nhân viên' : 'đã trả dư') + ' <b>' + vnd(Math.abs(p.pDiff)) + '</b>. Phần này bạn tự trả bù bên ngoài.</p>' : '');
+    } catch (err) { box.innerHTML = '<p class="msg">' + esc(errText(err)) + '</p>'; }
+  };
+  return { plan, show };
 }
 async function editShift(s) {
   const urls = await Promise.all([s.check_in_photo, s.check_out_photo].map(p => p ? api.photoUrl(p).catch(() => null) : null));
@@ -1418,13 +1461,21 @@ async function editShift(s) {
     '<div class="pbig">' + ['Ảnh vào ca', 'Ảnh ra ca'].map((t, i) => '<figure>' + (urls[i] ? '<img src="' + esc(urls[i]) + '" alt="' + t + '">' : '<div class="ph">Không có ảnh</div>') + '<figcaption>' + t + ' · ' + (i ? (s.check_out_at ? hhmm(s.check_out_at) : 'chưa ra ca') : hhmm(s.check_in_at)) + '</figcaption></figure>').join('') + '</div>' +
     (s.check_out_at ? '<p class="msg msg-ok">' + payLine(s) + '<br><span class="small">Quy tắc của ca này: ' + ruleText(s) + '</span></p>' : '') +
     (isOwner() ? '<h3 class="box-title" style="margin:0">Sửa giờ (khi nhân viên quên chấm)</h3><div class="grid2"><label class="field" for="sIn">Giờ vào<input id="sIn" type="datetime-local" value="' + toLocalInput(s.check_in_at) + '"></label><label class="field" for="sOut">Giờ ra<input id="sOut" type="datetime-local" value="' + (s.check_out_at ? toLocalInput(s.check_out_at) : '') + '"></label></div>' +
-      '<label class="field" for="sNote">Ghi chú<input id="sNote" maxlength="120" value="' + esc(s.note || '') + '"></label><p class="msg" id="sMsg" hidden></p>' : '') + '</div>' +
+      '<label class="field" for="sRate">Lương mỗi giờ của ca này (VNĐ)<input id="sRate" class="num" type="number" min="0" step="1000" value="' + (s.hourly_rate || 0) + '"' + (s.paid_out_at ? ' disabled' : '') + '></label>' +
+      '<p class="small muted" style="margin:-4px 0 0">' + (s.paid_out_at ? 'Ca đã đánh dấu trả nên không đổi lương được. Thiếu thì trả bù bên ngoài.' : 'Sửa khi quên đổi lương cho ca này. Chỉ đổi ca này, không đổi lương của nhân viên.') + '</p>' +
+      '<label class="field" for="sNote">Ghi chú<input id="sNote" maxlength="200" value="' + esc(s.note || '') + '"></label><p class="msg" id="sMsg" hidden></p>' : '') + '</div>' +
     (isOwner() ? '<div class="sh-foot"><button class="btn grow" type="button" id="sSave">Lưu và tính lại lương</button></div>' : ''), sh => {
     if (!$('#sSave', sh)) return;
     $('#sSave', sh).onclick = async () => {
       const msg = $('#sMsg', sh), a = $('#sIn', sh).value, b = $('#sOut', sh).value; msg.hidden = true;
       if (!a) { msg.textContent = 'Nhập giờ vào.'; msg.hidden = false; return; }
-      try { await api.updateShift(s.id, new Date(a), b ? new Date(b) : null, $('#sNote', sh).value); ui.close(); ui.toast('Đã lưu, lương đã tính lại'); rerender(); }
+      const rate = Number($('#sRate', sh).value);
+      if (!s.paid_out_at && !(rate >= 0)) { msg.textContent = errText({ code: 'BAD_RATE' }); msg.hidden = false; return; }
+      try {
+        await api.updateShift(s.id, new Date(a), b ? new Date(b) : null, $('#sNote', sh).value);
+        if (!s.paid_out_at && rate !== s.hourly_rate) await api.setShiftRate([s.id], rate);
+        ui.close(); ui.toast('Đã lưu, lương đã tính lại'); rerender();
+      }
       catch (err) { msg.textContent = errText(err); msg.hidden = false; }
     };
   }, { wide: true });

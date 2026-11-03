@@ -84,6 +84,8 @@ const ERR = {
   NOT_EMPLOYEE: 'Tài khoản này chưa được gắn với nhân viên nào.',
   BAD_QTY: 'Số lượng phải lớn hơn 0.',
   BAD_TIME: 'Giờ ra phải sau giờ vào.',
+  BAD_RATE: 'Lương mỗi giờ không hợp lệ.',
+  NEED_SQL_31: 'Supabase chưa có chức năng tính lại lương ca cũ. Chạy file sql/cap-nhat-31-ap-luong-moi-cho-ca-cu.sql trong SQL Editor rồi thử lại.',
   NOT_SIGNED_IN: 'Bạn chưa đăng nhập.',
   PROMO_ENDED: 'Ưu đãi này vừa hết giờ. Giỏ đã được cập nhật, bạn xem lại nhé.',
   PROMO_INVALID: 'Ưu đãi chưa chọn đủ món. Mở lại ưu đãi để chọn.',
@@ -483,6 +485,11 @@ function supabaseApi() {
       if (!path) return null; const c = await cl();
       const { data } = await c.storage.from('checkin-photos').createSignedUrl(path, 3600);
       return data && data.signedUrl;
+    },
+    async setShiftRate(ids, rate) {
+      if (!ids.length) return 0;
+      try { return await rpc('owner_set_shift_rate', { p_ids: ids, p_rate: Math.round(rate) }); }
+      catch (e) { if (/owner_set_shift_rate|Could not find the function|PGRST202/i.test((e && (e.code + ' ' + (e.hint || ''))) || '')) fail('NEED_SQL_31'); throw e; }
     },
     updateShift: (id, inAt, outAt, note) => rpc('owner_update_shift', { p_id: id, p_in: new Date(inAt).toISOString(), p_out: outAt ? new Date(outAt).toISOString() : null, p_note: note || '' }),
     async markShiftsPaid(ids) { const c = await cl(); await q(c.from('shifts').update({ paid_out_at: new Date().toISOString() }).in('id', ids)); },
@@ -1293,6 +1300,14 @@ function demoApi() {
         .sort((a, b) => a.check_in_at < b.check_in_at ? 1 : -1).slice(0, f.limit || 1e9);
     },
     async photoUrl(path) { return path || null; },
+    async setShiftRate(ids, rate) {
+      need('owner'); if (!(rate >= 0)) fail('BAD_RATE');
+      const f = n => Math.round(n).toLocaleString('vi-VN') + 'đ';
+      return tx(db => { let n = 0; db.shifts.forEach(s => {
+        if (!ids.includes(s.id) || s.paid_out_at || s.hourly_rate === rate) return;
+        s.note = [s.note && String(s.note).trim(), 'Lương/giờ ' + f(s.hourly_rate) + ' → ' + f(rate)].filter(Boolean).join(' · ');
+        s.hourly_rate = rate; if (s.check_out_at && s.paid_minutes != null) s.pay_amount = roundMoney(s.paid_minutes * rate / 60, s.pay_round || db.shop_settings.pay_round || 1000); n++; }); return n; });
+    },
     async updateShift(id, inAt, outAt, note) {
       need('owner');
       return tx(db => {

@@ -55,3 +55,4 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .paytbl td .small { white-space: normal; font-size: 12px; }
 .paytbl td:last-child { padding-right: 0; }
 @media (min-width: 760px) { .paygrid { grid-template-columns: 2fr 1fr 1fr; } .paygrid .pay-total { grid-column: auto; } }
+.reprice { border: 1.5px dashed var(--line); border-radius: 12px; padding: 10px 12px; }
