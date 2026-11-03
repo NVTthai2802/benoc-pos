@@ -6,6 +6,9 @@
 //                                              └─ nhắn lại tóm tắt đơn cho chủ quán
 //  (fb_drafts vẫn lưu bản bot đọc để sửa tiếp và làm dữ liệu huấn luyện; cập nhật 27)
 //
+//  Hoặc trên iPhone: Phím tắt "Gửi đơn Bé Nốc" (gõ lưng máy) tự chụp màn hình, gửi thẳng ảnh vào đây
+//  (kênh "ios", tiêu đề x-capture-key = secret CAPTURE_KEY). Bot trả lời ngay trong kết quả để iPhone hiện thông báo.
+//
 //  Nhắn chữ cho bot để sửa đơn vừa lên ("thêm 1 trà đào", "giờ 18h"), hoặc gõ thẳng cả đơn.
 //  Nhắn "huỷ" để huỷ đơn vừa lên. Bếp đã bấm Nhận thì bot không sửa / huỷ nữa (sửa ở màn hình bếp). Chỉ tài khoản đã kết nối bằng mã (lấy trong Quản lý) mới dùng được.
 //
@@ -13,6 +16,7 @@
 //    ZALO_BOT_TOKEN       token bot Zalo (tạo ở https://bot.zapps.me)          ┐ cần ít nhất 1 trong 2
 //    TELEGRAM_BOT_TOKEN   token bot Telegram (tạo bằng @BotFather)            ┘
 //    GEMINI_API_KEY       khoá AI Gemini   (GEMINI_MODEL: để trống tự thử gemini-3.5-flash-lite → 3.8-flash → 2.5-flash)
+//    CAPTURE_KEY          mã bí mật cho Phím tắt iPhone (chỉ chữ và số, ~32 ký tự). Không có thì tắt kênh iPhone
 //    ANTHROPIC_API_KEY    hoặc khoá Claude (CLAUDE_MODEL, mặc định claude-haiku-5-5); AI_PROVIDER = gemini | claude để chọn
 //  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: Supabase tự cấp sẵn.
 //
@@ -21,6 +25,7 @@
 //  Webhook Zalo / Telegram: bấm "Cài webhook" trong Quản lý → Đơn online → Cài đặt bot.
 // =====================================================================
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const env = (k: string, d = '') => (globalThis as any).Deno?.env.get(k) ?? d;
 const PHOTO_WAIT_MS = 3000;     // chủ quán hay gửi nhiều ảnh liền nhau: đợi gom đủ rồi đọc một lượt
@@ -28,8 +33,8 @@ const MAX_PHOTOS = 30;          // tối đa 30 ảnh / lần gửi (nhiều kh�
 const PHOTOS_PER_AI = 6;        // mỗi lần gọi AI đọc tối đa 6 ảnh; nhiều hơn thì chia nhóm, đọc song song
 const MAX_PHOTO_BYTES = 8e6;    // ảnh lớn hơn 8MB thì bỏ
 const OPEN_MINUTES = 90;        // đơn nháp gửi trong 90 phút gần nhất coi là "đơn đang ghi" (nhắn chữ là sửa đơn này)
-export const KENH = { zalo: 'zalo', tele: 'tele' } as const;
-export type Kenh = 'zalo' | 'tele';
+export const KENH = { zalo: 'zalo', tele: 'tele', ios: 'ios' } as const;
+export type Kenh = 'zalo' | 'tele' | 'ios';   // ios = Phím tắt iPhone (trả lời qua kết quả HTTP, không nhắn tin)
 
 // ---------------------------------------------------------------------
 // Giờ Việt Nam (UTC+7, không đổi giờ mùa hè)
@@ -420,7 +425,7 @@ const db = () => createClient(env('SUPABASE_URL'), serviceKey() as string, { aut
 // ---------------------------------------------------------------------
 // Zalo Bot / Telegram: nhận tin, gửi tin, lấy ảnh
 // ---------------------------------------------------------------------
-const tokenOf = (k: Kenh) => (k === 'zalo' ? env('ZALO_BOT_TOKEN') : env('TELEGRAM_BOT_TOKEN')).trim();
+const tokenOf = (k: Kenh) => (k === 'zalo' ? env('ZALO_BOT_TOKEN') : k === 'tele' ? env('TELEGRAM_BOT_TOKEN') : '').trim();
 /* Mã bí mật gắn vào webhook (Zalo / Telegram gửi kèm mỗi lần gọi). Suy ra từ token nên không phải nhập thêm secret */
 export async function webhookSecret(k: Kenh) { const t = tokenOf(k); return t ? (await sha('benoc-bot-don:' + k + ':' + t)).slice(0, 48) : ''; }
 const apiBase = (k: Kenh) => (k === 'zalo' ? 'https://bot-api.zaloplatforms.com/bot' : 'https://api.telegram.org/bot') + tokenOf(k) + '/';
@@ -437,7 +442,12 @@ export async function sendText(k: Kenh, chatId: string, text: string) {
   parts.push(rest);
   for (const p of parts) await botApi(k, 'sendMessage', { chat_id: chatId, text: p });
 }
-const say = (k: Kenh, chatId: string, text: string) => sendText(k, chatId, text).catch(e => console.error('Gửi tin lỗi', e));
+/* Phím tắt iPhone không có kênh nhắn lại: các câu trả lời được gom vào hộp của lượt gọi đó, trả về trong kết quả HTTP */
+const replyBox = new AsyncLocalStorage<string[]>();
+const say = (k: Kenh, chatId: string, text: string) => {
+  if (k === 'ios') { replyBox.getStore()?.push(text); return Promise.resolve(); }
+  return sendText(k, chatId, text).catch(e => console.error('Gửi tin lỗi', e));
+};
 
 export type Incoming = { kenh: Kenh; chatId: string; name: string | null; text: string | null; photo: string | null; caption: string | null; unsupported?: string };
 /* Đọc 1 lần gọi webhook thành tin thống nhất. Không phải tin nhắn thì trả null */
@@ -464,7 +474,9 @@ const sniff = (b: Uint8Array) => b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg' :
   : b[0] === 0x52 && b[8] === 0x57 && b[9] === 0x45 ? 'image/webp' : '';
 export function b64(u8: Uint8Array) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); }
 /* Tải ảnh về. Zalo: ref là link ảnh. Telegram: ref là file_id */
+const memImages = new Map<string, { bytes: Uint8Array; mime: string }>();   // ảnh Phím tắt gửi kèm lượt gọi
 async function fetchImage(k: Kenh, ref: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (k === 'ios') return memImages.get(ref) ?? null;
   try {
     let url = ref;
     if (k === 'tele') { const f = await botApi(k, 'getFile', { file_id: ref }); url = 'https://api.telegram.org/file/bot' + tokenOf(k) + '/' + f.result.file_path; }
@@ -542,14 +554,18 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
   const text = (m.text || '').trim();
   // Mã kết nối 6 số (Telegram: "/start 123456" khi mở link)
   const code = /^(?:\/start\s+)?(\d{6})$/.exec(text);
-  if (code) {
+  if (code && m.kenh !== 'ios') {
     const { data: ok, error } = await sb.rpc('bot_link_use', { p_code: code[1], p_kenh: m.kenh, p_chat: m.chatId, p_name: m.name || '' });
     if (error) console.error('Kết nối lỗi', error);
     await say(m.kenh, m.chatId, ok ? '✅ Đã kết nối' + (m.name ? ' ' + m.name : '') + ' với bot lên đơn Bé Nốc.\n\n' + HELP : 'Mã không đúng hoặc đã hết hạn (mã chỉ dùng được 10 phút). Lấy mã mới trong Quản lý nha.');
     return;
   }
-  if (!(await isAllowed(sb, m.kenh, m.chatId))) { await say(m.kenh, m.chatId, NOT_LINKED); return; }
+  // Phím tắt iPhone đã qua kiểm tra CAPTURE_KEY; Zalo / Telegram phải kết nối bằng mã
+  if (m.kenh !== 'ios' && !(await isAllowed(sb, m.kenh, m.chatId))) { await say(m.kenh, m.chatId, NOT_LINKED); return; }
   const now = new Date();
+
+  // Phím tắt: mỗi lần gõ lưng máy là 1 ảnh, đọc luôn (không gom). Ảnh sau của cùng khách trong 90 phút thì sửa đơn đó.
+  if (m.photo && m.kenh === 'ios') { await buildDraft(sb, m, now, { refs: [m.photo], caption: m.caption }); return; }
 
   if (m.photo) {
     const { data: me, error } = await sb.from('bot_photos').insert({ kenh: m.kenh, chat_id: m.chatId, ref: m.photo, caption: m.caption }).select('id').single();
@@ -736,7 +752,7 @@ async function appAction(sb: SupabaseClient, req: Request, body: any) {
   if (!owner) return json({ error: 'FORBIDDEN' }, 403);
   const kenhs: Kenh[] = (['zalo', 'tele'] as Kenh[]).filter(k => tokenOf(k));
   if (body.action === 'status') {
-    const out: any = { ok: true, ai: aiProvider(), has_ai_key: !!(aiProvider() === 'gemini' ? env('GEMINI_API_KEY') : env('ANTHROPIC_API_KEY')), kenh: {} };
+    const out: any = { ok: true, phim_tat: !!env('CAPTURE_KEY'), ai: aiProvider(), has_ai_key: !!(aiProvider() === 'gemini' ? env('GEMINI_API_KEY') : env('ANTHROPIC_API_KEY')), kenh: {} };
     for (const k of ['zalo', 'tele'] as Kenh[]) {
       if (!tokenOf(k)) { out.kenh[k] = { token: false }; continue; }
       const x: any = { token: true };
@@ -769,7 +785,7 @@ async function appAction(sb: SupabaseClient, req: Request, body: any) {
   return json({ error: 'BAD_ACTION' }, 400);
 }
 
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-capture-key, x-device', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: Object.assign({ 'content-type': 'application/json' }, CORS) });
 
 /* Tin này từ Zalo hay Telegram? (so mã bí mật gửi kèm) */
@@ -780,11 +796,61 @@ async function channelOf(req: Request): Promise<Kenh | null> {
   return null;
 }
 
+// ---------------------------------------------------------------------
+// Phím tắt iPhone: POST ảnh (thân yêu cầu = tệp ảnh) hoặc chữ ({"text": "..."} / text/plain)
+// Trả {ok, tom_tat, tin[]}: tom_tat là câu bot trả lời, Phím tắt hiện thành thông báo
+// ---------------------------------------------------------------------
+function sameKey(a: string, b: string) {
+  const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
+  if (!x.length || x.length !== y.length) return false;
+  let d = 0; for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
+  return d === 0;
+}
+export async function handleShortcut(sb: SupabaseClient, req: Request): Promise<Response> {
+  const key = env('CAPTURE_KEY').trim();
+  if (!key) return json({ ok: false, tom_tat: '⚠️ Chưa cài secret CAPTURE_KEY cho bot-don.' }, 503);
+  if (!sameKey(req.headers.get('x-capture-key') || '', key)) return json({ ok: false, tom_tat: '⛔ Sai mã x-capture-key trong Phím tắt.' }, 401);
+  const device = (req.headers.get('x-device') || 'iphone').replace(/[^\w.-]/g, '').slice(0, 40) || 'iphone';
+  const m: Incoming = { kenh: 'ios', chatId: device, name: 'Phím tắt ' + device, text: null, photo: null, caption: null };
+  const ct = (req.headers.get('content-type') || '').toLowerCase();
+  let bytes: Uint8Array | null = null;
+  if (ct.startsWith('multipart/form-data')) {
+    const f = await req.formData();
+    const file = f.get('anh') ?? f.get('file');
+    if (file instanceof File) bytes = new Uint8Array(await file.arrayBuffer());
+    const t = f.get('text') ?? f.get('chu');
+    if (typeof t === 'string' && t.trim()) { if (bytes) m.caption = t.trim().slice(0, 500); else m.text = t.trim().slice(0, 2000); }
+  } else if (ct.startsWith('application/json') || ct.startsWith('text/')) {
+    const raw = await req.text();
+    let t: unknown = raw;
+    if (ct.startsWith('application/json')) { try { t = JSON.parse(raw)?.text; } catch (_) { t = ''; } }
+    m.text = String(t ?? '').trim().slice(0, 2000) || null;
+  } else {
+    bytes = new Uint8Array(await req.arrayBuffer());
+  }
+  if (bytes) {
+    if (!bytes.length) return json({ ok: false, tom_tat: '⚠️ Không nhận được ảnh.' }, 400);
+    if (bytes.length > MAX_PHOTO_BYTES) return json({ ok: false, tom_tat: '⚠️ Ảnh quá 8MB.' }, 413);
+    const mime = sniff(bytes);
+    if (!mime) return json({ ok: false, tom_tat: '⚠️ Không phải ảnh JPG / PNG. Kiểm tra tác vụ "Chuyển đổi hình ảnh" sang JPEG.' }, 415);
+    m.photo = 'mem:' + crypto.randomUUID();
+    memImages.set(m.photo, { bytes, mime });
+  }
+  if (!m.photo && !m.text) return json({ ok: false, tom_tat: '⚠️ Không có ảnh hay chữ nào.' }, 400);
+  const box: string[] = [];
+  try { await replyBox.run(box, () => handleIncoming(sb, m)); }
+  catch (e) { console.error('Phím tắt lỗi', e); box.push('⚠️ Bot gặp lỗi, gửi lại giúp em nha.'); }
+  finally { if (m.photo) memImages.delete(m.photo); }
+  const tin = box.filter(t => !t.startsWith('⏳'));
+  return json({ ok: true, tom_tat: tin.join('\n\n') || 'Đã nhận.', tin });
+}
+
 export async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method === 'GET') return new Response('Bé Nốc bot-don đang chạy', { status: 200 });
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   const sb = db();
+  if (req.headers.has('x-capture-key')) return handleShortcut(sb, req);
   const k = await channelOf(req);
   const raw = await req.text();
   if (!k) {

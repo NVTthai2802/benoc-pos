@@ -2,3 +2,6 @@
 # Zalo / Telegram không gửi JWT nên phải tắt kiểm tra JWT; bot tự kiểm tra mã bí mật webhook.
 [functions.bot-don]
 verify_jwt = false
+
+[functions.chup-chat]
+verify_jwt = false

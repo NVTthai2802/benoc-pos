@@ -2057,7 +2057,7 @@ revoke all on function private.fb_items_sig(jsonb), private.fb_train_close(uuid,
 alter table fb_drafts alter column psid drop not null;
 alter table fb_drafts add column if not exists kenh      text not null default 'fb';
 alter table fb_drafts drop constraint if exists fb_drafts_kenh_check;
-alter table fb_drafts add constraint fb_drafts_kenh_check check (kenh in ('fb', 'zalo', 'tele'));
+alter table fb_drafts add constraint fb_drafts_kenh_check check (kenh in ('fb', 'zalo', 'tele', 'ios'));  -- ios: cập nhật 33
 alter table fb_drafts add column if not exists chat_id   text;                       -- tài khoản Zalo / Telegram đã gửi ảnh (để bot nhắn lại)
 alter table fb_drafts add column if not exists nguoi_gui text;                       -- tên người gửi ảnh
 alter table fb_drafts add column if not exists anh       text[] not null default '{}'; -- đường dẫn ảnh trong bucket don-anh
