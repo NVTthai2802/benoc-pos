@@ -475,8 +475,20 @@ const sniff = (b: Uint8Array) => b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg' :
 export function b64(u8: Uint8Array) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); }
 /* Tải ảnh về. Zalo: ref là link ảnh. Telegram: ref là file_id */
 const memImages = new Map<string, { bytes: Uint8Array; mime: string }>();   // ảnh Phím tắt gửi kèm lượt gọi
-async function fetchImage(k: Kenh, ref: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  if (k === 'ios') return memImages.get(ref) ?? null;
+const IOS_TMP = 'ios-tam/';   // ảnh Phím tắt chờ gom (bucket don-anh), đọc xong thì xoá
+async function fetchImage(k: Kenh, ref: string, sb?: SupabaseClient): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (k === 'ios') {
+    if (ref.startsWith('mem:')) return memImages.get(ref) ?? null;
+    if (!sb || !ref.startsWith(IOS_TMP)) return null;
+    try {
+      const { data, error } = await sb.storage.from('don-anh').download(ref);
+      if (error || !data) { console.warn('Tải ảnh Phím tắt lỗi', error); return null; }
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      sb.storage.from('don-anh').remove([ref]).then(() => {}, () => {});   // ảnh gốc được lưu lại theo đơn ở placeOne
+      const mime = sniff(bytes);
+      return mime ? { bytes, mime } : null;
+    } catch (e) { console.warn('Tải ảnh Phím tắt lỗi', e); return null; }
+  }
   try {
     let url = ref;
     if (k === 'tele') { const f = await botApi(k, 'getFile', { file_id: ref }); url = 'https://api.telegram.org/file/bot' + tokenOf(k) + '/' + f.result.file_path; }
@@ -564,8 +576,9 @@ export async function handleIncoming(sb: SupabaseClient, m: Incoming, wait = PHO
   if (m.kenh !== 'ios' && !(await isAllowed(sb, m.kenh, m.chatId))) { await say(m.kenh, m.chatId, NOT_LINKED); return; }
   const now = new Date();
 
-  // Phím tắt: mỗi lần gõ lưng máy là 1 ảnh, đọc luôn (không gom). Ảnh sau của cùng khách trong 90 phút thì sửa đơn đó.
-  if (m.photo && m.kenh === 'ios') { await buildDraft(sb, m, now, { refs: [m.photo], caption: m.caption }); return; }
+  // Phím tắt chế độ đợi (x-wait: 1): đọc luôn ảnh này, trả kết quả cho iPhone. Chế độ nhanh (mặc định):
+  // ảnh đã lưu tạm, đi đường gom ảnh như Zalo bên dưới (ảnh chụp liền nhau đọc một lượt, mỗi khách 1 đơn).
+  if (m.photo && m.kenh === 'ios' && m.photo.startsWith('mem:')) { await buildDraft(sb, m, now, { refs: [m.photo], caption: m.caption }); return; }
 
   if (m.photo) {
     const { data: me, error } = await sb.from('bot_photos').insert({ kenh: m.kenh, chat_id: m.chatId, ref: m.photo, caption: m.caption }).select('id').single();
@@ -620,7 +633,7 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
       return d;
     }),
     sb.rpc('get_menu'),
-    Promise.all((src.refs || []).map(ref => fetchImage(m.kenh, ref))),
+    Promise.all((src.refs || []).map(ref => fetchImage(m.kenh, ref, sb))),
   ]);
   // Nhắn chữ sửa đơn mà bếp đã nhận: báo luôn, khỏi gọi AI
   if (src.text && cur?.order_id && cur._open === false) { await say(m.kenh, m.chatId, LOCKED); return; }
@@ -785,7 +798,7 @@ async function appAction(sb: SupabaseClient, req: Request, body: any) {
   return json({ error: 'BAD_ACTION' }, 400);
 }
 
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-capture-key, x-device', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-capture-key, x-device, x-wait', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: Object.assign({ 'content-type': 'application/json' }, CORS) });
 
 /* Tin này từ Zalo hay Telegram? (so mã bí mật gửi kèm) */
@@ -798,6 +811,8 @@ async function channelOf(req: Request): Promise<Kenh | null> {
 
 // ---------------------------------------------------------------------
 // Phím tắt iPhone: POST ảnh (thân yêu cầu = tệp ảnh) hoặc chữ ({"text": "..."} / text/plain)
+// Ảnh: mặc định trả "📥 Đã nhận" ngay, lên đơn ngầm (chụp liên tục được). Tiêu đề x-wait: 1 → đợi đọc xong, trả kết quả.
+// Chữ (sửa / huỷ): luôn đợi, trả kết quả.
 // Trả {ok, tom_tat, tin[]}: tom_tat là câu bot trả lời, Phím tắt hiện thành thông báo
 // ---------------------------------------------------------------------
 function sameKey(a: string, b: string) {
@@ -837,6 +852,20 @@ export async function handleShortcut(sb: SupabaseClient, req: Request): Promise<
     memImages.set(m.photo, { bytes, mime });
   }
   if (!m.photo && !m.text) return json({ ok: false, tom_tat: '⚠️ Không có ảnh hay chữ nào.' }, 400);
+
+  // Ảnh, chế độ nhanh (mặc định): lưu tạm rồi trả lời ngay để chụp tiếp; bot gom ảnh và lên đơn ngầm (không báo lại)
+  if (m.photo && req.headers.get('x-wait') !== '1') {
+    const img = memImages.get(m.photo)!; memImages.delete(m.photo);
+    const path = IOS_TMP + device + '/' + Date.now() + '-' + crypto.randomUUID().slice(0, 8) + (img.mime === 'image/png' ? '.png' : img.mime === 'image/webp' ? '.webp' : '.jpg');
+    const { error } = await sb.storage.from('don-anh').upload(path, img.bytes, { contentType: img.mime, upsert: true });
+    if (error) { console.error('Lưu ảnh Phím tắt lỗi', error); return json({ ok: false, tom_tat: '⚠️ Chưa lưu được ảnh, gõ lưng lại giúp em nha.' }, 502); }
+    m.photo = path;
+    const work = handleIncoming(sb, m).catch(e => console.error('Phím tắt lỗi', e));
+    const ER = (globalThis as any).EdgeRuntime;
+    if (ER && ER.waitUntil) ER.waitUntil(work); else await work;
+    return json({ ok: true, nhanh: true, tom_tat: '📥 Đã nhận ảnh, bot đang lên đơn. Chụp tiếp được.' });
+  }
+
   const box: string[] = [];
   try { await replyBox.run(box, () => handleIncoming(sb, m)); }
   catch (e) { console.error('Phím tắt lỗi', e); box.push('⚠️ Bot gặp lỗi, gửi lại giúp em nha.'); }
