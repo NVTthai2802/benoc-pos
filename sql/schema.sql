@@ -2686,3 +2686,31 @@ end $$;
 revoke all on function private.bot_link_use(text, text, text, text) from public;
 
 revoke all on all functions in schema private from public;
+
+-- ===== Cập nhật 31: áp mức lương mới cho các ca đã làm (ca đã trả không đổi) =====
+create or replace function owner_set_shift_rate(p_ids uuid[], p_rate int)
+returns int  -- số ca đã đổi
+language plpgsql security definer set search_path = public as $$
+declare
+  n   int;
+  cfg shop_settings;
+begin
+  if my_role() is distinct from 'owner' then raise exception 'FORBIDDEN'; end if;
+  if p_rate is null or p_rate < 0 then raise exception 'BAD_RATE'; end if;
+  select * into cfg from shop_settings where id = 1;
+  update shifts s
+     set hourly_rate = p_rate,
+         pay_amount  = case when s.check_out_at is null or s.paid_minutes is null then s.pay_amount
+                            else round_money(s.paid_minutes * p_rate / 60.0, coalesce(s.pay_round, cfg.pay_round)) end,
+         note        = left(concat_ws(' · ', nullif(trim(s.note), ''),
+                         'Lương/giờ ' || replace(to_char(s.hourly_rate, 'FM999,999,999'), ',', '.') || 'đ → '
+                                      || replace(to_char(p_rate, 'FM999,999,999'), ',', '.') || 'đ'), 300)
+   where s.id = any(p_ids)
+     and s.paid_out_at is null
+     and s.hourly_rate is distinct from p_rate;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+revoke execute on function owner_set_shift_rate(uuid[], int) from public, anon;
+grant execute on function owner_set_shift_rate(uuid[], int) to authenticated;
