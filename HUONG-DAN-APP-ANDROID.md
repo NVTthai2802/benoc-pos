@@ -21,15 +21,16 @@ Cập nhật bản mới: tải lại link trên rồi cài đè, dữ liệu v�
 
 1. App mở **Quản lý**. Đăng nhập như trên web.
 2. Bấm tên màn hình trên thanh cam (vd *Quản lý / chấm công ▾*) để đổi sang **Bếp**, **Pha chế** hoặc **Menu khách**. App nhớ màn hình đã chọn. Bếp và Pha chế giữ màn hình luôn sáng.
-3. **⋮** → **Chuyển sang TEST** khi muốn thử trên môi trường Test (thanh tiêu đề có chữ **TEST**).
+3. **⋮** → **Chuyển sang TEST** khi muốn thử trên môi trường Test (thanh tiêu đề có chữ **TEST**). Từ bản 1.1, **nút chụp đơn cũng gửi theo môi trường này** (xem phần *PRODUCT và TEST* bên dưới).
 
 ## Cài nút chụp đơn
 
 1. **⋮** → **Cài đặt chụp đơn**:
-   - **Mã bí mật**: giống mã `x-capture-key` trong Phím tắt iPhone (hỏi người quản lý POS).
+   - **Mã bí mật PRODUCT**: giống mã `x-capture-key` trong Phím tắt iPhone (hỏi người quản lý POS).
+   - **Mã bí mật TEST**: mã riêng của Supabase Test (chỉ cần nếu dùng chế độ TEST).
    - **Tên máy**: tự điền `android-<tên máy>`. Không trùng máy khác.
    - **Đợi kết quả từng ảnh**: để **tắt** (chụp liên tục được).
-   - Bấm **Lưu và kiểm tra kết nối** → phải hiện **✅ Kết nối được bot**.
+   - Bấm **Lưu và kiểm tra kết nối** → phải hiện **✅ PRODUCT: kết nối được bot** (và **✅ TEST…** nếu đã nhập mã Test).
 2. Về màn hình chính, bấm **📸 Nút chụp đơn** trên thanh cam:
    - Lần đầu Android mở trang **Hiển thị trên ứng dụng khác** → bật cho **Bé Nốc POS** → quay lại app → bấm **📸 Nút chụp đơn** lần nữa.
    - Cho phép **thông báo**.
@@ -37,6 +38,21 @@ Cập nhật bản mới: tải lại link trên rồi cài đè, dữ liệu v�
 3. Nút tròn cam hiện lên, thanh thông báo có **"Nút chụp đơn đang bật"**.
 
 Mỗi lần khởi động lại điện thoại hoặc tắt nút thì bấm **📸 Nút chụp đơn** lại (Android bắt xác nhận ghi màn hình mỗi lần bật).
+
+## PRODUCT và TEST
+
+Nút chụp đơn gửi vào **môi trường đang chọn trong app** (⋮ → Chuyển sang TEST / PRODUCT). Nhìn màu nút là biết:
+
+| Nút | Gửi vào | Ghi chú |
+|---|---|---|
+| 🟠 **Cam** | **PRODUCT**: bếp của quán, **đơn thật** | Thông báo: *Nút chụp đơn · PRODUCT (đơn thật)* |
+| 🟣 **Tím, huy hiệu vàng chữ T** | **TEST**: Supabase Test, quán không thấy | Mọi câu báo bắt đầu bằng **🧪 TEST ·** |
+
+- Đổi môi trường khi nút đang bật thì nút đổi màu ngay, có báo *"Nút chụp đơn giờ gửi vào TEST / PRODUCT"*.
+- Mỗi ảnh gửi vào môi trường **lúc chạm nút**; đổi môi trường ngay sau đó không làm ảnh vừa chụp đi nhầm chỗ.
+- Ô **Sửa đơn** cũng theo môi trường (tiêu đề *🧪 Sửa đơn vừa gửi · TEST*).
+- Chưa nhập **Mã bí mật TEST** mà ở chế độ TEST thì nút báo *"Chưa nhập mã bí mật TEST"*, **không gửi đi đâu cả** (không lọt sang Product).
+- Phím tắt iPhone vẫn chỉ gửi vào Product.
 
 ## Dùng hằng ngày
 
@@ -67,7 +83,8 @@ Mỗi lần chạm là **đơn thật ở bếp**. Chụp nhầm thì giữ nút
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| ⛔ Sai mã x-capture-key | Sửa mã trong **Cài đặt chụp đơn** |
+| ⛔ Sai mã x-capture-key | Sửa mã đúng môi trường trong **Cài đặt chụp đơn** (mã PRODUCT và TEST khác nhau) |
+| 🧪 TEST · … AI đang quá tải / không lên đơn | Supabase Test chưa có khoá AI: thêm secret `GEMINI_API_KEY` cho project **benoc-pos-test** |
 | Bấm **📸 Nút chụp đơn** không thấy nút cam | Chưa bật **Hiển thị trên ứng dụng khác**: Cài đặt → Ứng dụng → Bé Nốc POS → bật |
 | Nút cam biến mất sau một lúc | Máy tắt app chạy nền để tiết kiệm pin: Cài đặt → Ứng dụng → Bé Nốc POS → **Pin** → **Không hạn chế**. Xiaomi / Oppo / Vivo thêm **Tự khởi động** |
 | Ảnh gửi đi bị đen | App kia chặn chụp màn hình (ngân hàng…); Messenger / Zalo không bị |
@@ -105,6 +122,11 @@ Phải ký bằng **cùng khoá** thì điện thoại mới cài đè được;
 | `EditOrderActivity.kt` | Ô sửa đơn (gửi chữ cho bot) |
 | `SettingsActivity.kt`, `Prefs.kt`, `BotClient.kt` | Cài đặt, gọi `bot-don` (tiêu đề `x-capture-key`, `x-device`, tuỳ chọn `x-wait`) |
 
-App dùng chung kênh `ios` của `bot-don` (cập nhật 33), phân biệt máy bằng `x-device`.
+App dùng chung kênh `ios` của `bot-don` (cập nhật 33), phân biệt máy bằng `x-device`. Địa chỉ bot: PRODUCT `hixdacnaxfuxuccbajzn…/bot-don`, TEST `bsnpcinocphuruahpzwr…/bot-don`; mỗi project có secret `CAPTURE_KEY` riêng.
+
+| Phiên bản | Thay đổi |
+|---|---|
+| 1.1 | Nút chụp gửi theo môi trường đang chọn (mã / địa chỉ riêng PRODUCT và TEST), nút tím khi TEST |
+| 1.0 | Bản đầu: POS trong WebView + nút nổi chụp đơn (luôn gửi PRODUCT) |
 
 </details>

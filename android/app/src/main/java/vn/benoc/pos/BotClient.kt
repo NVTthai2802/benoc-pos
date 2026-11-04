@@ -11,24 +11,32 @@ import java.net.URL
 object BotClient {
     data class Result(val ok: Boolean, val text: String)
 
-    fun sendImage(p: Prefs, jpeg: ByteArray): Result =
-        post(p, jpeg, "image/jpeg", wait = p.waitResult)
+    fun sendImage(p: Prefs, jpeg: ByteArray, test: Boolean = p.testEnv): Result =
+        post(p, test, jpeg, "image/jpeg", wait = p.waitResult)
 
-    fun sendText(p: Prefs, text: String): Result =
-        post(p, JSONObject().put("text", text).toString().toByteArray(), "application/json", wait = false)
+    fun sendText(p: Prefs, text: String, test: Boolean = p.testEnv): Result =
+        post(p, test, JSONObject().put("text", text).toString().toByteArray(), "application/json", wait = false)
 
-    private fun post(p: Prefs, body: ByteArray, type: String, wait: Boolean): Result {
-        if (!p.ready) return Result(false, "⚠️ Chưa nhập mã bí mật. Mở app Bé Nốc POS → ⋮ → Cài đặt chụp đơn.")
+    /** Chữ đứng đầu mọi câu báo khi đang gửi vào TEST, để không nhầm với đơn thật */
+    const val TEST_TAG = "🧪 TEST · "
+
+    private fun post(p: Prefs, test: Boolean, body: ByteArray, type: String, wait: Boolean): Result {
+        val r = postRaw(p, test, body, type, wait)
+        return if (test) r.copy(text = TEST_TAG + r.text) else r
+    }
+
+    private fun postRaw(p: Prefs, test: Boolean, body: ByteArray, type: String, wait: Boolean): Result {
+        if (!p.readyFor(test)) return Result(false, "⚠️ Chưa nhập mã bí mật " + (if (test) "TEST" else "PRODUCT") + ". Mở app Bé Nốc POS → ⋮ → Cài đặt chụp đơn.")
         var c: HttpURLConnection? = null
         return try {
-            c = (URL(p.botUrl).openConnection() as HttpURLConnection).apply {
+            c = (URL(p.url(test)).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 15_000
                 readTimeout = if (wait || type.startsWith("application")) 150_000 else 30_000
                 doOutput = true
                 setFixedLengthStreamingMode(body.size)
                 setRequestProperty("content-type", type)
-                setRequestProperty("x-capture-key", p.captureKey)
+                setRequestProperty("x-capture-key", p.key(test))
                 setRequestProperty("x-device", p.device)
                 if (wait) setRequestProperty("x-wait", "1")
             }

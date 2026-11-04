@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nút nổi khi đang ở TEST: tím, có huy hiệu vàng chữ T -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp" android:height="56dp" android:viewportWidth="56" android:viewportHeight="56">
+    <path android:fillColor="#7C3AED" android:pathData="M28,2 A26,26 0 1,1 27.99,2 Z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2" android:fillColor="#00000000" android:pathData="M28,3 A25,25 0 1,1 27.99,3 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M15,24 L20,24 L22.5,20.5 L29.5,20.5 L32,24 L37,24 C38.1,24 39,24.9 39,26 L39,39 C39,40.1 38.1,41 37,41 L15,41 C13.9,41 13,40.1 13,39 L13,26 C13,24.9 13.9,24 15,24 Z" />
+    <path android:fillColor="#7C3AED" android:pathData="M26,27.5 A5.5,5.5 0 1,1 25.99,27.5 Z" />
+    <path android:fillColor="#FACC15" android:pathData="M42,4 A10,10 0 1,1 41.99,4 Z" />
+    <path android:fillColor="#3B0764" android:pathData="M37,9 L47,9 L47,11.5 L43.3,11.5 L43.3,21 L40.7,21 L40.7,11.5 L37,11.5 Z" />
+</vector>
