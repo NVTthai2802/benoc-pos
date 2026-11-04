@@ -8,6 +8,8 @@ Mô hình nằm ở `android/app/src/ocr/assets/ocr/`.
 |---|---|
 | `ocr_ref.py` | Pipeline tham chiếu, **giống hệt** `OcrEngine.kt` (tiền xử lý, ngưỡng, unclip, giải mã CTC). Dùng để so kết quả app với máy tính |
 | `gen_chat.py` | Sinh ảnh giả lập Messenger / Zalo (sáng / tối) kèm đáp án từng dòng — chỉ để đo nhanh |
+| `danh_gia_ocr.ipynb` | **Notebook đánh giá cho đồ án** (mở bằng Colab → Run all, ~10 phút CPU): bảng ký tự, det P/R/F1, rec CER/WER/lỗi theo loại ký tự, đầu–cuối theo giao diện, tốc độ, kích thước, quét tham số, so sánh mô hình (có chỗ cắm mô hình fine-tune), số liệu máy thật từ `ocr_mau`. Bảng CSV + hình PNG lưu ở `ket_qua/` |
+| `tao_notebook.py` | Sinh lại notebook từ mã nguồn (sửa ở đây rồi chạy `python3 tao_notebook.py`) |
 | `eval_ocr.py` | Đo CER, CER bỏ dấu, số dòng đúng hết, thời gian trên một thư mục ảnh có đáp án |
 
 ```bash
