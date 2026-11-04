@@ -63,6 +63,7 @@ class BubbleService : Service() {
     // Khung hình mới nhất (giữ 1 ảnh, đóng ảnh cũ) + yêu cầu chụp đang chờ
     @Volatile private var latest: Image? = null
     @Volatile private var wantAfter = 0L          // cần khung hình chụp SAU thời điểm này (đã ẩn nút)
+    @Volatile private var shotTest = false        // môi trường lúc chạm nút (chốt luôn, đổi môi trường sau cũng không ảnh hưởng)
     private var width = 0
     private var height = 0
 
@@ -78,6 +79,7 @@ class BubbleService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
+            ACTION_REFRESH -> { refreshEnv(); return START_NOT_STICKY }
             ACTION_START -> {
                 val code = intent.getIntExtra(EXTRA_CODE, Activity.RESULT_CANCELED)
                 @Suppress("DEPRECATION")
@@ -126,6 +128,8 @@ class BubbleService : Service() {
 
     private fun capture() {
         if (wantAfter > 0) return
+        refreshEnv()
+        shotTest = prefs.testEnv
         bubble?.alpha = 0f    // ẩn nút để không lọt vào ảnh (đổi màn hình → có khung hình mới)
         wantAfter = SystemClock.elapsedRealtime() + 60
         // Màn hình đứng yên không sinh khung hình mới: quá 350ms thì lấy khung hình đang giữ
@@ -140,11 +144,13 @@ class BubbleService : Service() {
         if (img == null) { toast("⚠️ Chưa lấy được hình, chạm lại giúp em"); return }
         val jpeg = try { toJpeg(img) } catch (e: Exception) { toast("⚠️ Lỗi chụp: ${e.message}"); return } finally { img.close() }
         vibrate()
+        val test = shotTest
         val n = sending.incrementAndGet()
         main.post { setBusy(true) }
-        if (n == 1 || prefs.waitResult) toast(if (prefs.waitResult) "⏳ Đang đọc đơn…" else "⏳ Đang gửi…")
+        val tag = if (test) BotClient.TEST_TAG else ""
+        if (n == 1 || prefs.waitResult) toast(tag + if (prefs.waitResult) "⏳ Đang đọc đơn…" else "⏳ Đang gửi…")
         net.execute {
-            val res = BotClient.sendImage(prefs, jpeg)
+            val res = BotClient.sendImage(prefs, jpeg, test)
             val left = sending.decrementAndGet()
             main.post { if (left == 0) setBusy(false) }
             toast(res.text, long = prefs.waitResult || !res.ok)
@@ -169,7 +175,7 @@ class BubbleService : Service() {
     private fun addBubble() {
         val size = (56 * resources.displayMetrics.density).toInt()
         val v = ImageView(this).apply {
-            setImageResource(R.drawable.ic_bubble)
+            setImageResource(if (prefs.testEnv) R.drawable.ic_bubble_test else R.drawable.ic_bubble)
             elevation = 8f
             contentDescription = "Chụp đơn"
         }
@@ -209,6 +215,18 @@ class BubbleService : Service() {
         }
         wm.addView(v, lp)
         bubble = v; params = lp
+        shownTest = prefs.testEnv
+    }
+
+    private var shownTest = false
+    /** Đổi môi trường trong app → đổi màu nút (cam = PRODUCT, tím có chữ T = TEST) và thông báo */
+    private fun refreshEnv() = main.post {
+        val t = prefs.testEnv
+        if (t == shownTest && bubble != null) return@post
+        shownTest = t
+        bubble?.setImageResource(if (t) R.drawable.ic_bubble_test else R.drawable.ic_bubble)
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTI_ID, notification())
+        toast(if (t) "🧪 Nút chụp đơn giờ gửi vào TEST" else "Nút chụp đơn giờ gửi vào PRODUCT (đơn thật)")
     }
 
     private fun setBusy(b: Boolean) { bubble?.scaleX = if (b) 0.85f else 1f; bubble?.scaleY = if (b) 0.85f else 1f }
@@ -234,8 +252,8 @@ class BubbleService : Service() {
         val stop = PendingIntent.getService(this, 2, Intent(this, BubbleService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_noti)
-            .setContentTitle("Nút chụp đơn đang bật")
-            .setContentText("Chạm nút cam để gửi đơn · giữ nút để sửa đơn")
+            .setContentTitle(if (prefs.testEnv) "🧪 Nút chụp đơn · TEST" else "Nút chụp đơn · PRODUCT (đơn thật)")
+            .setContentText(if (prefs.testEnv) "Đơn gửi vào môi trường TEST · giữ nút để sửa đơn" else "Chạm nút cam để gửi đơn · giữ nút để sửa đơn")
             .setOngoing(true)
             .setContentIntent(pi(Intent(this, MainActivity::class.java), 1))
             .addAction(Notification.Action.Builder(null, "Sửa đơn", pi(Intent(this, EditOrderActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), 3)).build())
@@ -259,6 +277,7 @@ class BubbleService : Service() {
     companion object {
         const val ACTION_START = "vn.benoc.pos.START"
         const val ACTION_STOP = "vn.benoc.pos.STOP"
+        const val ACTION_REFRESH = "vn.benoc.pos.REFRESH"
         const val EXTRA_CODE = "code"
         const val EXTRA_DATA = "data"
         private const val CHANNEL = "nut-chup"
@@ -267,5 +286,6 @@ class BubbleService : Service() {
             private set
 
         fun stop(ctx: Context) { ctx.startService(Intent(ctx, BubbleService::class.java).setAction(ACTION_STOP)) }
+        fun refresh(ctx: Context) { if (running) ctx.startService(Intent(ctx, BubbleService::class.java).setAction(ACTION_REFRESH)) }
     }
 }

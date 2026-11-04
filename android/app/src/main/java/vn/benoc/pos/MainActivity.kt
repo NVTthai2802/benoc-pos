@@ -183,6 +183,7 @@ class MainActivity : ComponentActivity() {
         val name = pages.firstOrNull { it.first == prefs.page }?.second ?: "Bé Nốc POS"
         title.text = name + (if (prefs.testEnv) " · TEST" else "") + "  ▾"
         bubbleBtn.text = if (BubbleService.running) "● Tắt nút chụp" else "📸 Nút chụp đơn"
+        bubbleBtn.setBackgroundColor(if (prefs.testEnv) 0x667C3AED else 0x33FFFFFF)
     }
 
     private fun showPages(anchor: View) {
@@ -204,7 +205,13 @@ class MainActivity : ComponentActivity() {
                     1 -> startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
                     2 -> startActivity(Intent(this@MainActivity, EditOrderActivity::class.java))
                     3 -> web.reload()
-                    4 -> { prefs.testEnv = !prefs.testEnv; openPage(prefs.page.ifEmpty { "quanly.html" }) }
+                    4 -> {
+                        prefs.testEnv = !prefs.testEnv
+                        openPage(prefs.page.ifEmpty { "quanly.html" })
+                        BubbleService.refresh(this@MainActivity)
+                        if (prefs.testEnv && !prefs.readyFor(true))
+                            Toast.makeText(this@MainActivity, "Nút chụp đơn ở TEST cần mã bí mật TEST: ⋮ → Cài đặt chụp đơn.", Toast.LENGTH_LONG).show()
+                    }
                 }
                 true
             }

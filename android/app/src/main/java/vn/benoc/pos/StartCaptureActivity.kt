@@ -28,7 +28,7 @@ class StartCaptureActivity : ComponentActivity() {
                 .setAction(BubbleService.ACTION_START)
                 .putExtra(BubbleService.EXTRA_CODE, r.resultCode)
                 .putExtra(BubbleService.EXTRA_DATA, r.data))
-            Toast.makeText(this, "✅ Đã bật nút chụp đơn. Mở Messenger / Zalo, chạm nút cam để gửi đơn.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, if (Prefs(this).testEnv) "🧪 Đã bật nút chụp đơn (TEST, nút màu tím). Đơn gửi vào môi trường TEST." else "✅ Đã bật nút chụp đơn. Mở Messenger / Zalo, chạm nút cam để gửi đơn.", Toast.LENGTH_LONG).show()
             if (intent.getBooleanExtra(EXTRA_HOME, false)) moveToHome()
         } else {
             Toast.makeText(this, "Chưa cho phép ghi màn hình nên chưa bật được nút chụp đơn.", Toast.LENGTH_LONG).show()
@@ -40,7 +40,7 @@ class StartCaptureActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val p = Prefs(this)
         if (!p.ready) {
-            Toast.makeText(this, "Nhập mã bí mật trước đã.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Nhập mã bí mật " + (if (p.testEnv) "TEST" else "PRODUCT") + " trước đã.", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, SettingsActivity::class.java)); finish(); return
         }
         if (!Settings.canDrawOverlays(this)) {

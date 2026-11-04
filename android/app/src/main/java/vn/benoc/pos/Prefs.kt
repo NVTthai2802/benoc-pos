@@ -7,6 +7,7 @@ import android.os.Build
 class Prefs(ctx: Context) {
     private val p = ctx.getSharedPreferences("benoc", Context.MODE_PRIVATE)
 
+    // ---- PRODUCT (quán dùng thật)
     var botUrl: String
         get() = p.getString("bot_url", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_BOT_URL
         set(v) = p.edit().putString("bot_url", v.trim()).apply()
@@ -14,6 +15,19 @@ class Prefs(ctx: Context) {
     var captureKey: String
         get() = p.getString("capture_key", "") ?: ""
         set(v) = p.edit().putString("capture_key", v.trim()).apply()
+
+    // ---- TEST
+    var botUrlTest: String
+        get() = p.getString("bot_url_test", null)?.takeIf { it.isNotBlank() } ?: TEST_BOT_URL
+        set(v) = p.edit().putString("bot_url_test", v.trim()).apply()
+
+    var captureKeyTest: String
+        get() = p.getString("capture_key_test", "") ?: ""
+        set(v) = p.edit().putString("capture_key_test", v.trim()).apply()
+
+    fun url(test: Boolean) = if (test) botUrlTest else botUrl
+    fun key(test: Boolean) = if (test) captureKeyTest else captureKey
+    fun readyFor(test: Boolean) = key(test).isNotBlank() && url(test).startsWith("https://")
 
     var device: String
         get() = p.getString("device", null)?.takeIf { it.isNotBlank() } ?: defaultDevice()
@@ -29,14 +43,16 @@ class Prefs(ctx: Context) {
         get() = p.getString("page", null) ?: ""
         set(v) = p.edit().putString("page", v).apply()
 
+    /** Môi trường đang chọn: trang POS trong app VÀ nút chụp đơn cùng theo môi trường này. */
     var testEnv: Boolean
         get() = p.getBoolean("test_env", false)
         set(v) = p.edit().putBoolean("test_env", v).apply()
 
-    val ready get() = captureKey.isNotBlank() && botUrl.startsWith("https://")
+    val ready get() = readyFor(testEnv)
 
     companion object {
-        const val DEFAULT_BOT_URL = "https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/bot-don"
+        const val DEFAULT_BOT_URL = "https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/bot-don"   // Supabase benoc-pos
+        const val TEST_BOT_URL = "https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/bot-don"      // Supabase benoc-pos-test
         const val SITE = "https://benoc-pos.pages.dev/"
 
         fun cleanDevice(s: String) = s.trim().lowercase()

@@ -22,8 +22,9 @@ class EditOrderActivity : ComponentActivity() {
         val d = resources.displayMetrics.density
         val pad = (18 * d).toInt()
         val prefs = Prefs(this)
+        val test = prefs.testEnv
 
-        val title = TextView(this).apply { text = "Sửa đơn vừa gửi"; textSize = 18f; setTypeface(typeface, Typeface.BOLD) }
+        val title = TextView(this).apply { text = if (test) "🧪 Sửa đơn vừa gửi · TEST" else "Sửa đơn vừa gửi"; textSize = 18f; setTypeface(typeface, Typeface.BOLD) }
         val guide = TextView(this).apply { text = "Vd: thêm 1 trà đào · bỏ kimbap · giờ 18h30 · ship 12 ngõ 5…, sđt 09… · huỷ"; textSize = 13f; alpha = 0.7f; setPadding(0, (4 * d).toInt(), 0, (8 * d).toInt()) }
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -44,7 +45,7 @@ class EditOrderActivity : ComponentActivity() {
             if (t.isEmpty()) return
             send.isEnabled = false; send.text = "Đang gửi…"; result.text = ""
             io.execute {
-                val r = BotClient.sendText(prefs, t)
+                val r = BotClient.sendText(prefs, t, test)
                 runOnUiThread {
                     send.isEnabled = true; send.text = "Gửi"
                     result.text = r.text
