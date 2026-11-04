@@ -38,6 +38,16 @@ class Prefs(ctx: Context) {
         get() = p.getBoolean("wait", false)
         set(v) = p.edit().putBoolean("wait", v).apply()
 
+    /** Chế độ TEST: đọc chữ ngay trên máy (OCR PP-OCRv5 mobile) rồi gửi kèm ảnh để so với Gemini. Không ảnh hưởng PRODUCT. */
+    var ocrTest: Boolean
+        get() = p.getBoolean("ocr_test", true)
+        set(v) = p.edit().putBoolean("ocr_test", v).apply()
+
+    /** Kết quả OCR lần gần nhất (xem trong Cài đặt) */
+    var lastOcr: String
+        get() = p.getString("last_ocr", "") ?: ""
+        set(v) = p.edit().putString("last_ocr", v.take(6000)).apply()
+
     /** Trang POS đang mở trong app (đường dẫn sau tên miền, vd "quanly.html"). */
     var page: String
         get() = p.getString("page", null) ?: ""

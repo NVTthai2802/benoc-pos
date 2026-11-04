@@ -621,7 +621,7 @@ export function splitOrders(ai: AiOut, nImg: number): { out: AiOut; imgIdx: numb
   });
 }
 
-type Img2 = { bytes: Uint8Array; mime: string };
+type Img2 = { bytes: Uint8Array; mime: string; ref?: string };
 async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { refs?: string[]; caption?: string | null; text?: string }) {
   const t0 = Date.now(), tm: string[] = [];
   const lap = (what: string, since: number) => tm.push(what + ' ' + (Date.now() - since) + 'ms');
@@ -640,7 +640,7 @@ async function buildDraft(sb: SupabaseClient, m: Incoming, now: Date, src: { ref
   const open = st?.fb_open || '07:00', close = st?.fb_close || '22:00';
   const menuRaw: any[] = menuRes.data || [];
   const menu = buildMenu(menuRaw);
-  const imgs = got.filter((x): x is Img2 => !!x);
+  const imgs: Img2[] = got.flatMap((x, i) => x ? [{ ...x, ref: src.refs?.[i] }] : []);
   lap('chuẩn bị + tải ảnh', t0); const tAi = Date.now();
   if (src.refs && !imgs.length) { await say(m.kenh, m.chatId, 'Bot chưa tải được ảnh, gửi lại giúp em nha (ảnh JPG / PNG, dưới 8MB).'); return; }
   if (src.refs && imgs.length < src.refs.length) say(m.kenh, m.chatId, '⚠️ ' + (src.refs.length - imgs.length) + ' ảnh không tải được, gửi lại riêng ảnh đó giúp em nha.');
@@ -746,7 +746,8 @@ async function placeOne(sb: SupabaseClient, m: Incoming, now: Date, c: { menu: M
         convo: convo.map(x => ({ sender: x.s === 'sua' ? 'quan' : x.s, text: x.t, at })) }), menuRaw);
     } catch (e) { console.error('Chuẩn bị mẫu lỗi', e); }
   })();
-  await Promise.all([replied, saveImgs, saveTrain]);
+  const linkOcr = m.kenh === 'ios' && draftId ? ocrLink(sb, imgs.map(i => i.ref).filter((r): r is string => !!r), draftId, newConvo) : null;
+  await Promise.all([replied, saveImgs, saveTrain, linkOcr]);
 }
 
 // ---------------------------------------------------------------------
@@ -815,6 +816,70 @@ async function channelOf(req: Request): Promise<Kenh | null> {
 // Chữ (sửa / huỷ): luôn đợi, trả kết quả.
 // Trả {ok, tom_tat, tin[]}: tom_tat là câu bot trả lời, Phím tắt hiện thành thông báo
 // ---------------------------------------------------------------------
+
+// ---------------------------------------------------------------------
+// OCR trên máy (app Android, chế độ TEST): app tự đọc chữ bằng mô hình nhẹ (PP-OCRv5 mobile),
+// gửi kèm ảnh. Bot KHÔNG dùng kết quả này để lên đơn (Gemini vẫn đọc ảnh như cũ); chỉ lưu vào bảng
+// ocr_mau cùng 1 bản ảnh, rồi khi Gemini đọc xong thì gắn đơn + đoạn chat Gemini chép ra để so sánh.
+// Bảng chỉ có ở Supabase Test (cập nhật 34). Thiếu bảng thì chỉ ghi log, đơn vẫn lên bình thường.
+// ---------------------------------------------------------------------
+export type OcrLine = { b: [number, number, number, number]; t: string; c: number };
+export type Ocr = { model: string; w: number; h: number; det_ms: number; rec_ms: number; lines: OcrLine[] };
+const num = (x: unknown, max = 1e7) => { const n = Number(x); return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : 0; };
+export function parseOcr(o: any): Ocr | null {
+  if (!o || !Array.isArray(o.lines)) return null;
+  const lines = o.lines.slice(0, 600).map((l: any) => ({
+    b: (Array.isArray(l?.b) ? l.b : [0, 0, 0, 0]).slice(0, 4).map((v: unknown) => Math.round(num(v, 20000))) as OcrLine['b'],
+    t: String(l?.t ?? '').normalize('NFC').slice(0, 500), c: Math.round(num(l?.c, 1) * 1000) / 1000,
+  })).filter((l: OcrLine) => l.t.trim() && l.b.length === 4);
+  return { model: String(o.model || '?').slice(0, 80), w: Math.round(num(o.w, 20000)), h: Math.round(num(o.h, 20000)),
+    det_ms: Math.round(num(o.det_ms, 6e5)), rec_ms: Math.round(num(o.rec_ms, 6e5)), lines };
+}
+/* Chữ OCR theo thứ tự đọc: trên xuống dưới (cùng hàng thì trái sang phải), nối bằng dấu cách */
+export function ocrText(lines: OcrLine[]) {
+  const s = [...lines].sort((a, b) => { const ha = Math.max(1, a.b[3] - a.b[1]); return Math.abs(a.b[1] - b.b[1]) < ha / 2 ? a.b[0] - b.b[0] : a.b[1] - b.b[1]; });
+  return s.map(l => l.t.trim()).join(' ');
+}
+const norm = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim();
+/* Số ký tự phải sửa ít nhất để biến một ĐOẠN BẤT KỲ của `hay` thành `kim` (căn chỉnh nửa toàn cục). */
+export function editInside(kim: string, hay: string) {
+  const a = [...kim], b = [...hay];
+  if (!a.length) return 0;
+  let prev = new Array(b.length + 1).fill(0);          // đầu đoạn ở đâu cũng được: hàng 0 toàn số 0
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return Math.min(...prev);                               // cuối đoạn ở đâu cũng được
+}
+/* Tỉ lệ sai ký tự của OCR, lấy các tin Gemini chép ra làm đáp án tạm (gần đúng: Gemini cũng có thể chép sai) */
+export function ocrVsConvo(lines: OcrLine[], convo: { t: string }[]) {
+  const hay = norm(ocrText(lines));
+  let err = 0, n = 0;
+  for (const m of convo) { const t = norm(String(m.t || '')); if (!t || t.length > 400) continue; err += editInside(t, hay); n += [...t].length; }
+  return n ? { cer: Math.round(1e4 * err / n) / 100, n } : { cer: null, n: 0 };
+}
+async function ocrSave(sb: SupabaseClient, x: { device: string; ref: string; img: { bytes: Uint8Array; mime: string }; ocr: Ocr }) {
+  try {
+    const anh = 'ocr-mau/' + new Date().toISOString().slice(0, 10) + '/' + crypto.randomUUID() + (x.img.mime === 'image/png' ? '.png' : '.jpg');
+    const up = await sb.storage.from('don-anh').upload(anh, x.img.bytes, { contentType: x.img.mime, upsert: true });
+    const { error } = await sb.from('ocr_mau').insert({ device: x.device, ref: x.ref, anh: up.error ? null : anh, model: x.ocr.model, w: x.ocr.w, h: x.ocr.h,
+      det_ms: x.ocr.det_ms, rec_ms: x.ocr.rec_ms, n_dong: x.ocr.lines.length, lines: x.ocr.lines, chu: ocrText(x.ocr.lines) });
+    if (error) console.warn('Lưu OCR lỗi (đã chạy cập nhật 34 trên Supabase này chưa?)', error.message);
+  } catch (e) { console.warn('Lưu OCR lỗi', e); }
+}
+async function ocrLink(sb: SupabaseClient, refs: string[], draftId: string, convo: { s: string; t: string }[]) {
+  try {
+    for (const ref of refs) {
+      const { data } = await sb.from('ocr_mau').select('id, lines').eq('ref', ref).limit(1);
+      const row = data?.[0]; if (!row) continue;
+      const r = ocrVsConvo(row.lines || [], convo);
+      await sb.from('ocr_mau').update({ draft_id: draftId, gemini_convo: convo, cer_gemini: r.cer, n_ky_tu: r.n }).eq('id', row.id);
+    }
+  } catch (e) { console.warn('Gắn OCR với đơn lỗi', e); }
+}
+
 function sameKey(a: string, b: string) {
   const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
   if (!x.length || x.length !== y.length) return false;
@@ -829,12 +894,15 @@ export async function handleShortcut(sb: SupabaseClient, req: Request): Promise<
   const m: Incoming = { kenh: 'ios', chatId: device, name: 'Phím tắt ' + device, text: null, photo: null, caption: null };
   const ct = (req.headers.get('content-type') || '').toLowerCase();
   let bytes: Uint8Array | null = null;
+  let ocr: Ocr | null = null;
   if (ct.startsWith('multipart/form-data')) {
     const f = await req.formData();
     const file = f.get('anh') ?? f.get('file');
     if (file instanceof File) bytes = new Uint8Array(await file.arrayBuffer());
     const t = f.get('text') ?? f.get('chu');
     if (typeof t === 'string' && t.trim()) { if (bytes) m.caption = t.trim().slice(0, 500); else m.text = t.trim().slice(0, 2000); }
+    const o = f.get('ocr');
+    if (bytes && typeof o === 'string' && o.length < 400_000) { try { ocr = parseOcr(JSON.parse(o)); } catch (_) { /* bỏ qua OCR hỏng, ảnh vẫn lên đơn */ } }
   } else if (ct.startsWith('application/json') || ct.startsWith('text/')) {
     const raw = await req.text();
     let t: unknown = raw;
@@ -860,12 +928,14 @@ export async function handleShortcut(sb: SupabaseClient, req: Request): Promise<
     const { error } = await sb.storage.from('don-anh').upload(path, img.bytes, { contentType: img.mime, upsert: true });
     if (error) { console.error('Lưu ảnh Phím tắt lỗi', error); return json({ ok: false, tom_tat: '⚠️ Chưa lưu được ảnh, gõ lưng lại giúp em nha.' }, 502); }
     m.photo = path;
+    if (ocr) await ocrSave(sb, { device, ref: path, img, ocr });
     const work = handleIncoming(sb, m).catch(e => console.error('Phím tắt lỗi', e));
     const ER = (globalThis as any).EdgeRuntime;
     if (ER && ER.waitUntil) ER.waitUntil(work); else await work;
     return json({ ok: true, nhanh: true, tom_tat: '📥 Đã nhận ảnh, bot đang lên đơn. Chụp tiếp được.' });
   }
 
+  if (ocr && m.photo) await ocrSave(sb, { device, ref: m.photo, img: memImages.get(m.photo)!, ocr });
   const box: string[] = [];
   try { await replyBox.run(box, () => handleIncoming(sb, m)); }
   catch (e) { console.error('Phím tắt lỗi', e); box.push('⚠️ Bot gặp lỗi, gửi lại giúp em nha.'); }
