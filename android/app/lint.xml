@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Giao diện viết bằng code, chữ tiếng Việt cố định: không cần tách chuỗi -->
+    <issue id="SetTextI18n" severity="ignore" />
+    <!-- Biểu tượng thích ứng cần thư mục -v26 để aapt nhận -->
+    <issue id="ObsoleteSdkInt" severity="ignore" />
+</lint>

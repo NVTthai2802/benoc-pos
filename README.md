@@ -12,3 +12,4 @@ Gọi món qua QR, màn hình bếp nóng, màn hình quầy pha chế và quả
 - `scripts/` — đưa bản mới lên test / product
 - `HUONG-DAN.md` — hướng dẫn cài đặt, gồm cách dùng hai môi trường
 - `HUONG-DAN-PHIM-TAT-IPHONE.md` — lên đơn bằng Phím tắt iPhone (gõ lưng máy chụp màn hình chat)
+- `HUONG-DAN-APP-ANDROID.md` — app Android (APK): POS + nút nổi chụp đơn. Tải: https://benoc-pos.pages.dev/app/benoc-pos.apk. Mã nguồn `android/`
