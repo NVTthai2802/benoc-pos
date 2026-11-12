@@ -123,6 +123,21 @@
 .sc-hint { position: absolute; left: 0; right: 0; bottom: 8px; margin: 0; text-align: center; color: #fff; font-size: 14px; font-weight: 700; text-shadow: 0 1px 3px #000; }
 .sc-alt { display: flex; gap: 8px; margin: 10px 0 0; }
 .sc-codes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* Ảnh hoá đơn nhập kho */
+.link svg, .sc-btn svg, .rc-banner svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
+.rc-banner { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; margin: 0 0 12px; border-radius: 12px; background: var(--soft, #fff6d6); border: 1px solid var(--line); font-size: 14px; }
+.rc-banner span { flex: 1 1 200px; }
+.rc-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.rc-sel { margin-top: 8px; width: 100%; }
+.rc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.rc-card { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 6px; background: none; color: inherit; text-align: left; cursor: pointer; }
+.rc-img { display: block; aspect-ratio: 3 / 4; border-radius: 8px; overflow: hidden; background: var(--line); }
+.rc-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rc-cap { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.rc-cap b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-att { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; margin-top: 6px; }
+.rc-big { display: block; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.rc-big img { width: 100%; display: block; }
 .sc-code { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
 .sc-code .x { border: 0; background: none; font-size: 18px; line-height: 1; padding: 2px 6px; color: var(--ink-2); cursor: pointer; }
 .sc-new { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--card); }
@@ -776,8 +791,9 @@ const isLow = it => it.is_active !== false && Number(it.qty) <= Number(it.min_qt
 const STOCK_PRESETS = [['Thùng → gói', 'thùng', 'gói', 24], ['Thùng → can', 'thùng', 'can', 4], ['Can (nhập, dùng theo can)', 'can', 'can', 1], ['Bao → kg', 'bao', 'kg', 25], ['Thùng → hộp', 'thùng', 'hộp', 48], ['Thùng → cây (ly, ống hút)', 'thùng', 'cây', 20]];
 async function renderStock(main) {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const [items, moves, packs, codes, buys] = await Promise.all([api.stockItems(), api.stockMoves({ limit: 400, from: addDays(monthStart, -1) }), api.stockPacks(), api.stockBarcodes(),
-    isOwner() ? api.stockMoves({ kind: 'nhap', from: monthStart, limit: 5000 }).catch(() => null) : null]);
+  const [items, moves, packs, codes, buys, receipts] = await Promise.all([api.stockItems(), api.stockMoves({ limit: 400, from: addDays(monthStart, -1) }), api.stockPacks(), api.stockBarcodes(),
+    isOwner() ? api.stockMoves({ kind: 'nhap', from: monthStart, limit: 5000 }).catch(() => null) : null, api.stockReceipts({ limit: 12 })]);
+  state.receipts = receipts; // null: chưa chạy cập nhật 35 (chưa có ảnh hoá đơn)
   state.stockData = items; state.stockPacks = packs; // packs = null: chưa chạy cập nhật 17
   state.barcodes = codes; // codes = null: chưa chạy cập nhật 21 (chưa có mã vạch)
   const subBar = isOwner() && packs ? '<div class="chips">' + [['hang', 'Hàng hoá'], ['quycach', 'Quy cách nhập hàng']].map(([k, t]) => '<button class="chipbtn" type="button" data-ssub="' + k + '" aria-pressed="' + (state.stockSub === k) + '">' + t + '</button>').join('') + '</div>' : '';
@@ -795,12 +811,14 @@ async function renderStock(main) {
     '<span class="lsub"><b class="sk-qty num">' + esc(stockText(it)) + '</b>' + (twoUnits(it) ? ' · 1 ' + esc(it.buy_unit) + ' = ' + nf(it.per_buy) + ' ' + esc(it.use_unit) : '') + (it.pack_id && state.stockPacks && state.stockPacks.find(x => x.id === it.pack_id) ? ' · <span class="pill pill-mute">' + esc(state.stockPacks.find(x => x.id === it.pack_id).name) + '</span>' : '') + (Number(it.min_qty) ? ' · báo khi còn ≤ ' + nf(it.min_qty) + ' ' + esc(it.use_unit) : '') + '</span></button>' +
     '<span class="sk-acts"><button class="btn btn-sm" type="button" data-mv="nhap" data-id="' + esc(it.id) + '">Nhập</button><button class="btn btn-sm btn-line" type="button" data-mv="dung" data-id="' + esc(it.id) + '">Lấy dùng</button></span></div></li>';
   main.innerHTML = '<div class="ptitle"><h1>Kho hàng</h1>' + (isOwner() && spent ? '<span class="pill pill-ok">Tiền nhập tháng này: <b class="num">' + vnd(spent) + '</b></span>' : '') + '</div>' + subBar +
-    '<div class="toolbar"><input class="search" id="kq" type="search" placeholder="Tìm hàng hoá…" value="' + esc(state.stockQuery) + '" aria-label="Tìm hàng hoá">' + (codes ? '<button class="btn btn-line sc-btn" type="button" id="scanStock">' + ICON_SCAN + 'Quét mã</button>' : '') + (isOwner() ? '<button class="btn" type="button" id="addStock">+ Thêm hàng</button>' : '') + '</div>' +
+    '<div class="toolbar"><input class="search" id="kq" type="search" placeholder="Tìm hàng hoá…" value="' + esc(state.stockQuery) + '" aria-label="Tìm hàng hoá">' + (codes ? '<button class="btn btn-line sc-btn" type="button" id="scanStock">' + ICON_SCAN + 'Quét mã</button>' : '') + (receipts ? '<button class="btn btn-line sc-btn" type="button" id="newReceipt">' + ICON_BILL + 'Ảnh hoá đơn</button>' : '') + (isOwner() ? '<button class="btn" type="button" id="addStock">+ Thêm hàng</button>' : '') + '</div>' +
+    (receipts ? receiptBanner() : '') +
     (low.length ? '<section class="box cc-hong"><h2 class="box-title"><span>Sắp hết · cần nhập thêm</span></h2><ul class="list">' + low.map(row).join('') + '</ul></section>' : '') +
     (shown.length ? groups.map(g => '<section class="box cc-xanhla"><h2 class="box-title"><span>' + esc(g) + '</span></h2><ul class="list">' + shown.filter(i => (i.grp || 'Chưa xếp nhóm') === g).map(row).join('') + '</ul></section>').join('')
       : '<section class="box cc-xanhla"><p class="empty">' + (words.length ? 'Không có hàng nào khớp.' : 'Chưa có hàng hoá nào.' + (isOwner() ? ' Bấm “+ Thêm hàng”.' : ' Nhờ chủ quán thêm hàng.')) + '</p></section>') +
+    (receipts && receipts.length ? '<section class="box cc-vang"><h2 class="box-title"><span>Ảnh hoá đơn nhập gần đây</span></h2><div class="rc-grid">' + receipts.map(r => '<button type="button" class="rc-card" data-rc="' + r.id + '"><span class="rc-img" data-rcimg="' + esc(r.photo_path) + '"></span><span class="rc-cap"><b>' + esc(r.supplier || r.invoice_no || 'Hoá đơn') + '</b><span class="small muted num">' + ddmm(r.created_at) + ' ' + hhmm(r.created_at) + (r.invoice_no && r.supplier ? ' · ' + esc(r.invoice_no) : '') + '</span></span></button>').join('') + '</div></section>' : '') +
     '<section class="box cc-nau"><h2 class="box-title"><span>Lịch sử kho gần đây</span></h2>' + (moves.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th>Hàng</th><th>Việc</th><th class="r">Số lượng</th><th class="r">Tồn sau</th><th>Người</th></tr></thead><tbody>' +
-      moves.slice(0, 30).map(m => { const it = byId.get(m.item_id) || { use_unit: '', buy_unit: '', per_buy: 1, name: '(đã xoá)' }; return '<tr><td class="num">' + ddmm(m.created_at) + ' ' + hhmm(m.created_at) + '</td><td>' + esc(it.name) + '</td><td><span class="pill ' + KIND[m.kind][1] + '">' + KIND[m.kind][0] + '</span>' + (m.note ? '<br><span class="small muted">' + esc(m.note) + '</span>' : '') + '</td>' +
+      moves.slice(0, 30).map(m => { const it = byId.get(m.item_id) || { use_unit: '', buy_unit: '', per_buy: 1, name: '(đã xoá)' }; return '<tr><td class="num">' + ddmm(m.created_at) + ' ' + hhmm(m.created_at) + '</td><td>' + esc(it.name) + '</td><td><span class="pill ' + KIND[m.kind][1] + '">' + KIND[m.kind][0] + '</span>' + (m.receipt_id ? '<br><button class="link small" type="button" data-rc="' + m.receipt_id + '">' + ICON_BILL + 'Xem hoá đơn</button>' : '') + (m.note ? '<br><span class="small muted">' + esc(m.note) + '</span>' : '') + '</td>' +
         '<td class="r num">' + (m.kind === 'kiem' ? 'đếm ' + nf(m.amount) + ' ' + esc(m.unit) + '<br><span class="small muted">' + (m.delta >= 0 ? '+' : '') + nf(m.delta) + ' ' + esc(it.use_unit) + '</span>' : (m.delta >= 0 ? '+' : '−') + nf(m.amount) + ' ' + esc(m.unit)) + (isOwner() && m.cost ? '<br><span class="small muted">' + vnd(m.cost) + '</span>' : '') + '</td>' +
         '<td class="r num">' + esc(stockText(it, m.qty_after)) + '</td><td>' + esc(m.employee_name || '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="empty">Chưa có lần nhập / lấy hàng nào.</p>') + '</section>';
   const kq = $('#kq', main);
@@ -811,7 +829,11 @@ async function renderStock(main) {
     const sk = e.target.closest('[data-sk]'); if (sk) { openStockItem(state.stockData.find(x => x.id === sk.dataset.sk)); return; }
     if (e.target.closest('#addStock')) editStockItem(null);
     if (e.target.closest('#scanStock')) scanForMove();
+    if (e.target.closest('#newReceipt')) newReceiptSheet();
+    if (e.target.closest('#rcDrop')) { state.lastReceipt = null; rerender(); }
+    const rc = e.target.closest('[data-rc]'); if (rc) openReceipt(Number(rc.dataset.rc));
   };
+  loadReceiptThumbs(main);
 }
 function wireStockSub(main) { $$('[data-ssub]', main).forEach(b => b.onclick = () => { state.stockSub = b.dataset.ssub; rerender(); }); }
 /* Quy cách nhập hàng: dùng chung cho nhiều mặt hàng, giống nhóm tuỳ chọn của menu */
@@ -871,6 +893,7 @@ function openStockMove(it, kind, opt) {
   ui.sheet(ui.head(TITLE[kind] + ' · ' + esc(it.name), 'Đang còn ' + esc(stockText(it))) + '<div class="sh-body">' +
     '<div id="smU">' + unitSeg() + '</div><div id="smQ">' + qtyBox() + '</div>' +
     '<p class="sk-after" id="smAfter"></p>' +
+    (kind === 'nhap' && state.receipts ? '<div class="field">Ảnh hoá đơn (không bắt buộc)<div id="smRc"></div></div>' : '') +
     (kind === 'nhap' ? '<label class="field" for="smC">Tiền nhập (VNĐ, không bắt buộc)<input id="smC" class="num" type="number" inputmode="numeric" min="0" step="1000" placeholder="' + esc(costDef()) + '"></label>' : '') +
     '<label class="field" for="smN">Ghi chú<input id="smN" maxlength="200" placeholder="' + (kind === 'nhap' ? 'Ví dụ: nhà cung cấp, hạn dùng' : kind === 'hong' ? 'Ví dụ: hết hạn, đổ vỡ' : 'Không bắt buộc') + '"></label>' +
     '<p class="msg" id="smMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="smSave">' + TITLE[kind] + '</button></div>', sh => {
@@ -880,6 +903,8 @@ function openStockMove(it, kind, opt) {
       const w = $('#smW', sh), r = $('#smR', sh); if (w) w.oninput = () => { whole = w.value; paint(); }; if (r) r.oninput = () => { rest = r.value; paint(); };
     };
     wire(); paint();
+    let rcId = null; const rcBox = $('#smRc', sh);
+    if (rcBox) { const cur = currentReceipt(); rcId = cur ? cur.id : null; receiptPicker(rcBox, cur, v => { rcId = v; }); }
     sh.addEventListener('click', e => {
       const u = e.target.closest('[data-u]'); if (u) { inBuy = u.dataset.u === 'true'; $('#smU', sh).innerHTML = unitSeg(); $('#smQ', sh).innerHTML = qtyBox(); wire(); paint(); return; }
       const st = e.target.closest('[data-st]'); if (st) { amount = Math.max(0, (Number(amount) || 0) + Number(st.dataset.st)); $('#smA', sh).value = amount; paint(); }
@@ -890,9 +915,92 @@ function openStockMove(it, kind, opt) {
       if (!(amt >= 0) || (kind !== 'kiem' && !(amt > 0)) || (kind === 'kiem' && (two ? whole === '' && rest === '' : amount === ''))) { m.textContent = kind === 'kiem' ? 'Nhập số đếm được.' : 'Nhập số lượng lớn hơn 0.'; m.hidden = false; return; }
       const c = $('#smC', sh), cost = c ? (c.value !== '' ? Number(c.value) : (costDef() || null)) : null;
       const btn = $('#smSave', sh); btn.disabled = true;
-      try { const r = await api.stockMove(it.id, kind, amt, kind === 'kiem' ? false : inBuy, $('#smN', sh).value, cost); ui.close(); ui.toast(TITLE[kind] + ' xong · ' + it.name + ' còn ' + stockText(it, r.qty)); rerender(); }
+      if (rcBox && rcBox.dataset.busy) { m.textContent = 'Đang tải ảnh hoá đơn, đợi chút rồi bấm lại.'; m.hidden = false; return; }
+      try { const r = await api.stockMove(it.id, kind, amt, kind === 'kiem' ? false : inBuy, $('#smN', sh).value, cost, rcId); ui.close(); ui.toast(TITLE[kind] + ' xong · ' + it.name + ' còn ' + stockText(it, r.qty)); rerender(); }
       catch (err) { m.textContent = errText(err); m.hidden = false; btn.disabled = false; }
     };
+  });
+}
+/* ---------- Ảnh hoá đơn nhập kho (cập nhật 35) ----------
+   Một hoá đơn có nhiều mặt hàng: chụp 1 lần, các lần nhập trong 3 giờ sau tự gắn vào ảnh đó (bỏ được). */
+const ICON_BILL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>';
+const RECEIPT_KEEP = 3 * 3600e3;
+const currentReceipt = () => state.lastReceipt && Date.now() - state.lastReceipt.at < RECEIPT_KEEP ? state.lastReceipt.r : null;
+const receiptName = r => (r.supplier || 'Hoá đơn') + (r.invoice_no ? ' · ' + r.invoice_no : '') + ' · ' + hhmm(r.created_at) + ' ' + ddmm(r.created_at);
+function receiptBanner() {
+  const r = currentReceipt(); if (!r) return '';
+  return '<div class="rc-banner">' + ICON_BILL + '<span>Đang nhập theo hoá đơn <b>' + esc(receiptName(r)) + '</b>. Bấm <b>Nhập</b> ở từng mặt hàng, ảnh tự gắn vào.</span><button class="link small" type="button" id="rcDrop">Xong hoá đơn</button></div>';
+}
+async function loadReceiptThumbs(root) {
+  const boxes = $$('[data-rcimg]', root); if (!boxes.length) return;
+  let urls = {}; try { urls = await api.receiptUrls(boxes.map(b => b.dataset.rcimg)); } catch (e) { return; }
+  boxes.forEach(b => { const u = urls[b.dataset.rcimg]; if (u) b.innerHTML = '<img src="' + esc(u) + '" alt="" loading="lazy">'; });
+}
+/* 2 nút: chụp bằng camera / chọn ảnh có sẵn. onFile(file) */
+const photoBtns = (id) => '<div class="rc-btns"><label class="btn btn-sm filebtn">' + '📷 Chụp hoá đơn<input type="file" accept="image/*" capture="environment" data-rcf="' + id + '"></label><label class="btn btn-sm btn-line filebtn">Tải ảnh lên<input type="file" accept="image/*" data-rcf="' + id + '"></label></div>';
+/* Ô chọn ảnh hoá đơn trong phiếu Nhập hàng. onPick(id | null) */
+function receiptPicker(box, cur, onPick) {
+  const recent = (state.receipts || []).filter(r => Date.now() - new Date(r.created_at) < 3 * 86400e3);
+  const paint = async () => {
+    if (cur) {
+      box.innerHTML = '<div class="rc-att"><span class="rc-img" data-rcimg="' + esc(cur.photo_path) + '"></span><span class="rc-cap"><b>' + esc(receiptName(cur)) + '</b><span class="small muted">Đã gắn vào lần nhập này</span></span><button class="btn btn-sm btn-line" type="button" data-rcx>Bỏ ảnh</button></div>';
+      loadReceiptThumbs(box);
+    } else {
+      box.innerHTML = photoBtns('m') + (recent.length ? '<select class="rc-sel" data-rcs aria-label="Chọn hoá đơn đã chụp"><option value="">…hoặc chọn hoá đơn đã chụp</option>' + recent.map(r => '<option value="' + r.id + '">' + esc(receiptName(r)) + '</option>').join('') + '</select>' : '');
+    }
+  };
+  box.onclick = e => { if (e.target.closest('[data-rcx]')) { cur = null; onPick(null); paint(); } };
+  box.onchange = async e => {
+    const sel = e.target.closest('[data-rcs]');
+    if (sel) { cur = recent.find(r => r.id === Number(sel.value)) || null; if (cur) state.lastReceipt = { r: cur, at: Date.now() }; onPick(cur ? cur.id : null); paint(); return; }
+    const f = e.target.closest('[data-rcf]'); if (!f || !f.files || !f.files[0]) return;
+    box.dataset.busy = '1'; box.innerHTML = '<p class="small muted" style="margin:6px 0">Đang tải ảnh hoá đơn…</p>';
+    try { cur = await api.addStockReceipt(f.files[0]); state.lastReceipt = { r: cur, at: Date.now() }; state.receipts = [cur].concat(state.receipts || []); onPick(cur.id); ui.toast('Đã lưu ảnh hoá đơn'); }
+    catch (err) { ui.toast('Chưa tải được ảnh: ' + errText(err)); }
+    delete box.dataset.busy; paint();
+  };
+  paint();
+}
+/* Chụp hoá đơn trước rồi nhập lần lượt từng mặt hàng */
+function newReceiptSheet() {
+  let file = null;
+  ui.sheet(ui.head('Ảnh hoá đơn nhập', 'Chụp 1 lần cho cả hoá đơn, rồi bấm Nhập ở từng mặt hàng') + '<div class="sh-body">' +
+    '<div id="nrPh">' + photoBtns('n') + '</div>' +
+    '<div class="grid2"><label class="field" for="nrSup">Nhà cung cấp<input id="nrSup" maxlength="80" list="nrSups" placeholder="Ví dụ: Cương Hằng"><datalist id="nrSups">' + [...new Set((state.receipts || []).map(r => r.supplier).filter(Boolean))].map(x => '<option value="' + esc(x) + '">').join('') + '</datalist></label>' +
+    '<label class="field" for="nrNo">Số hoá đơn<input id="nrNo" maxlength="40" placeholder="Không bắt buộc"></label></div>' +
+    '<p class="msg" id="nrMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="nrSave">Lưu ảnh hoá đơn</button></div>', sh => {
+    const ph = $('#nrPh', sh);
+    ph.onchange = e => {
+      const f = e.target.closest('[data-rcf]'); if (!f || !f.files || !f.files[0]) return; file = f.files[0];
+      const u = URL.createObjectURL(file);
+      ph.innerHTML = '<div class="rc-att"><span class="rc-img"><img src="' + u + '" alt=""></span><span class="rc-cap"><b>' + esc(file.name || 'Ảnh hoá đơn') + '</b><span class="small muted">Chưa lưu</span></span><button class="btn btn-sm btn-line" type="button" data-rcx>Chụp lại</button></div>';
+    };
+    ph.onclick = e => { if (e.target.closest('[data-rcx]')) { file = null; ph.innerHTML = photoBtns('n'); } };
+    $('#nrSave', sh).onclick = async () => {
+      const m = $('#nrMsg', sh); if (!file) { m.textContent = 'Chụp hoặc chọn ảnh hoá đơn trước.'; m.hidden = false; return; }
+      const btn = $('#nrSave', sh); btn.disabled = true; btn.textContent = 'Đang tải ảnh…';
+      try {
+        const r = await api.addStockReceipt(file, { supplier: $('#nrSup', sh).value.trim(), invoice_no: $('#nrNo', sh).value.trim() });
+        state.lastReceipt = { r, at: Date.now() }; ui.close(); ui.toast('Đã lưu ảnh. Giờ bấm Nhập ở từng mặt hàng'); rerender();
+      } catch (err) { m.textContent = errText(err); m.hidden = false; btn.disabled = false; btn.textContent = 'Lưu ảnh hoá đơn'; }
+    };
+  });
+}
+/* Xem 1 hoá đơn: ảnh to + các mặt hàng đã nhập theo nó */
+async function openReceipt(id) {
+  let r = (state.receipts || []).find(x => x.id === id);
+  if (!r) { const got = await api.stockReceipts({ ids: [id] }); r = got && got[0]; }
+  if (!r) { ui.toast('Không thấy hoá đơn này'); return; }
+  const [urls, moves] = await Promise.all([api.receiptUrls([r.photo_path]).catch(() => ({})), api.stockMoves({ receiptId: id, limit: 200 }).catch(() => [])]);
+  const url = urls[r.photo_path], byId = new Map((state.stockData || []).map(i => [i.id, i]));
+  const total = moves.reduce((t, m) => t + (m.cost || 0), 0);
+  ui.sheet(ui.head(esc(r.supplier || 'Hoá đơn nhập'), esc((r.invoice_no ? 'Số ' + r.invoice_no + ' · ' : '') + ddmm(r.created_at) + ' ' + hhmm(r.created_at) + (r.employee_name ? ' · ' + r.employee_name : ''))) + '<div class="sh-body">' +
+    (url ? '<a class="rc-big" href="' + esc(url) + '" target="_blank" rel="noopener"><img src="' + esc(url) + '" alt="Ảnh hoá đơn"></a><p class="small muted" style="margin:0">Bấm vào ảnh để mở to, phóng xem chữ.</p>' : '<p class="empty">Không tải được ảnh.</p>') +
+    '<h3 class="og-head" style="margin-top:8px">Đã nhập theo hoá đơn này</h3>' + (moves.length ? '<ul class="sk-hist">' + moves.map(m => '<li><b>' + esc((byId.get(m.item_id) || { name: '(đã xoá)' }).name) + '</b><span class="num">+' + nf(m.amount) + ' ' + esc(m.unit) + '</span>' + (isOwner() && m.cost ? '<span class="small muted num">' + vnd(m.cost) + '</span>' : '') + '</li>').join('') + '</ul>' + (isOwner() && total ? '<p class="small">Tổng tiền nhập: <b class="num">' + vnd(total) + '</b></p>' : '') : '<p class="small muted">Chưa có mặt hàng nào gắn vào hoá đơn này.</p>') +
+    (isOwner() ? confirmBox('Xoá ảnh hoá đơn này? Các lần nhập vẫn giữ, chỉ bỏ liên kết ảnh.', 'Xoá', 'rcDelBox') : '') + '</div>' +
+    '<div class="sh-foot">' + (isOwner() ? '<button class="btn btn-danger" type="button" id="rcDel">Xoá ảnh</button>' : '') + '<button class="btn grow" type="button" id="rcUse">Nhập tiếp theo hoá đơn này</button></div>', sh => {
+    $('#rcUse', sh).onclick = () => { state.lastReceipt = { r, at: Date.now() }; ui.close(); ui.toast('Bấm Nhập ở từng mặt hàng, ảnh này tự gắn vào'); rerender(); };
+    wireConfirm(sh, '#rcDel', 'rcDelBox', async () => { await api.deleteStockReceipt(r); if (state.lastReceipt && state.lastReceipt.r.id === r.id) state.lastReceipt = null; ui.close(); ui.toast('Đã xoá ảnh hoá đơn'); rerender(); });
   });
 }
 /* Chi tiết 1 mặt hàng: tồn, lịch sử, các thao tác */
@@ -904,12 +1012,13 @@ async function openStockItem(it) {
     (it.note ? '<p class="small muted">' + esc(it.note) + '</p>' : '') +
     (state.barcodes ? '<h3 class="og-head" style="margin-top:8px">Mã vạch</h3><div class="sc-codes">' + state.barcodes.filter(b => b.item_id === it.id).map(b => '<span class="sc-code"><span class="num">' + esc(b.code) + '</span><span class="small muted">' + esc(codeUnitText(it, b.unit_kind)) + '</span>' + (isOwner() ? '<button class="x" type="button" data-unlink="' + esc(b.code) + '" aria-label="Gỡ mã ' + esc(b.code) + '">×</button>' : '') + '</span>').join('') +
       '<button class="btn btn-sm btn-line sc-btn" type="button" id="skCode">' + ICON_SCAN + 'Gắn mã vạch</button></div>' : '') +
-    '<h3 class="og-head" style="margin-top:8px">Lịch sử</h3>' + (moves.length ? '<ul class="sk-hist">' + moves.map(m => '<li><span class="pill ' + KIND[m.kind][1] + '">' + KIND[m.kind][0] + '</span><span class="num">' + (m.kind === 'kiem' ? 'đếm ' + nf(m.amount) + ' ' + esc(m.unit) + ' (' + (m.delta >= 0 ? '+' : '') + nf(m.delta) + ')' : (m.delta >= 0 ? '+' : '−') + nf(m.amount) + ' ' + esc(m.unit)) + '</span><span class="small muted">' + ddmm(m.created_at) + ' ' + hhmm(m.created_at) + ' · ' + esc(m.employee_name || '') + (isOwner() && m.cost ? ' · ' + vnd(m.cost) : '') + (m.note ? ' · ' + esc(m.note) : '') + '</span></li>').join('') + '</ul>' : '<p class="small muted">Chưa có.</p>') +
+    '<h3 class="og-head" style="margin-top:8px">Lịch sử</h3>' + (moves.length ? '<ul class="sk-hist">' + moves.map(m => '<li><span class="pill ' + KIND[m.kind][1] + '">' + KIND[m.kind][0] + '</span><span class="num">' + (m.kind === 'kiem' ? 'đếm ' + nf(m.amount) + ' ' + esc(m.unit) + ' (' + (m.delta >= 0 ? '+' : '') + nf(m.delta) + ')' : (m.delta >= 0 ? '+' : '−') + nf(m.amount) + ' ' + esc(m.unit)) + '</span><span class="small muted">' + ddmm(m.created_at) + ' ' + hhmm(m.created_at) + ' · ' + esc(m.employee_name || '') + (isOwner() && m.cost ? ' · ' + vnd(m.cost) : '') + (m.note ? ' · ' + esc(m.note) : '') + '</span>' + (m.receipt_id ? '<button class="link small" type="button" data-rcv="' + m.receipt_id + '">' + ICON_BILL + 'Hoá đơn</button>' : '') + '</li>').join('') + '</ul>' : '<p class="small muted">Chưa có.</p>') +
     '</div>' + (isOwner() ? '<div class="sh-foot"><button class="btn btn-line btn-block" type="button" id="skEdit">Sửa mặt hàng</button></div>' : ''), sh => {
     sh.addEventListener('click', async e => {
       const k = e.target.closest('[data-k]'); if (k) { ui.close(); setTimeout(() => openStockMove(it, k.dataset.k), 50); return; }
       const un = e.target.closest('[data-unlink]'); if (un) { un.disabled = true; try { await api.unlinkBarcode(un.dataset.unlink); state.barcodes = state.barcodes.filter(b => b.code !== un.dataset.unlink); un.closest('.sc-code').remove(); ui.toast('Đã gỡ mã'); } catch (err) { ui.toast(errText(err)); un.disabled = false; } return; }
       if (e.target.closest('#skCode')) { ui.close(); setTimeout(() => scanToLink(it), 50); }
+      const rv = e.target.closest('[data-rcv]'); if (rv) { ui.close(); setTimeout(() => openReceipt(Number(rv.dataset.rcv)), 50); }
     });
     const ed = $('#skEdit', sh); if (ed) ed.onclick = () => { ui.close(); setTimeout(() => editStockItem(it), 50); };
   });

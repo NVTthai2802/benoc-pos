@@ -92,6 +92,8 @@ const ERR = {
   PROMO_OPTION: 'Món trong ưu đãi không chọn được tuỳ chọn có phí.',
   DELIVERY_LOCKED: 'Đơn giao hàng không đổi sang ăn tại quán / mang về ở đây.',
   BAD_KIND: 'Thao tác kho không hợp lệ.',
+  RECEIPT_NOT_FOUND: 'Không thấy ảnh hoá đơn này nữa. Chụp lại hoặc bỏ ảnh rồi lưu.',
+  BAD_PATH: 'Ảnh hoá đơn không hợp lệ. Chụp lại giúp mình.',
   BAD_DINE: 'Chọn ăn tại quán hoặc mang về.',
   PROMO_LOCKED: 'Món thuộc ưu đãi không đổi được số lượng. Muốn bớt thì bỏ cả phần ưu đãi rồi thêm lại.'
 };
@@ -377,12 +379,31 @@ function supabaseApi() {
     async stockPacks() { try { const c = await cl(); return await q(c.from('stock_packs').select('*').order('sort_order').order('name')); } catch (e) { return null; } },
     async saveStockPack(pk) { const c = await cl(); const row = packRow(pk); if (pk.id) { await q(c.from('stock_packs').update(row).eq('id', pk.id)); return pk.id; } return (await q(c.from('stock_packs').insert(row).select('id').single())).id; },
     async deleteStockPack(id) { const c = await cl(); await q(c.from('stock_packs').delete().eq('id', id)); },
-    stockMove: (itemId, kind, amount, inBuy, note, cost) => rpc('stock_move', { p_item: itemId, p_kind: kind, p_amount: amount, p_in_buy_unit: !!inBuy, p_note: note || null, p_cost: cost == null || cost === '' ? null : Number(cost) }),
+    stockMove: (itemId, kind, amount, inBuy, note, cost, receiptId) => rpc('stock_move', Object.assign({ p_item: itemId, p_kind: kind, p_amount: amount, p_in_buy_unit: !!inBuy, p_note: note || null, p_cost: cost == null || cost === '' ? null : Number(cost) }, receiptId ? { p_receipt: receiptId } : {})),
+    /* Ảnh hoá đơn nhập kho (cập nhật 35). Chưa cài thì stockReceipts trả về null → ẩn nút ảnh */
+    async stockReceipts(f) {
+      try { const c = await cl(); let b = c.from('stock_receipts').select('*').order('created_at', { ascending: false }).limit((f && f.limit) || 30); if (f && f.ids) b = b.in('id', f.ids); return await q(b); } catch (e) { return null; }
+    },
+    async addStockReceipt(file, info) {
+      const blob = await toJpeg(file, 1600, 0.8); // hoá đơn nhiều chữ nhỏ → giữ ảnh to hơn ảnh chấm công
+      const d = new Date(), path = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '/' + uuid() + '.jpg';
+      await uploadTo('hoa-don-kho', path, blob);
+      info = info || {};
+      const id = await rpc('stock_receipt_add', { p_path: path, p_supplier: info.supplier || null, p_invoice_no: info.invoice_no || null, p_note: info.note || null });
+      return { id, photo_path: path, supplier: info.supplier || null, invoice_no: info.invoice_no || null, created_at: d.toISOString() };
+    },
+    async receiptUrls(paths) {
+      paths = (paths || []).filter(Boolean); if (!paths.length) return {};
+      const c = await cl(); const { data } = await c.storage.from('hoa-don-kho').createSignedUrls(paths, 3600);
+      const out = {}; (data || []).forEach(x => { if (x.signedUrl) out[x.path] = x.signedUrl; }); return out;
+    },
+    async deleteStockReceipt(r) { const c = await cl(); await q(c.from('stock_receipts').delete().eq('id', r.id)); await c.storage.from('hoa-don-kho').remove([r.photo_path]).catch(() => null); },
     async stockMoves(f) {
       const c = await cl(); let b = c.from('stock_moves').select('*').order('created_at', { ascending: false }).limit((f && f.limit) || 100);
       if (f && f.itemId) b = b.eq('item_id', f.itemId);
       if (f && f.from) b = b.gte('created_at', new Date(f.from).toISOString());
       if (f && f.kind) b = b.eq('kind', f.kind);
+      if (f && f.receiptId) b = b.eq('receipt_id', f.receiptId);
       return await q(b);
     },
     /* Mã vạch kho (chưa chạy cập nhật 21 thì trả về null) */
@@ -1227,15 +1248,23 @@ function demoApi() {
     },
     async deleteStockPack(id) { need('owner'); tx(db => { db.stock_packs = db.stock_packs.filter(x => x.id !== id); db.stock_items.forEach(it => { if (it.pack_id === id) it.pack_id = null; }); }); },
     async deleteStockItem(id) { need('owner'); tx(db => { db.stock_items = db.stock_items.filter(x => x.id !== id); db.stock_moves = db.stock_moves.filter(m => m.item_id !== id); db.stock_barcodes = (db.stock_barcodes || []).filter(b => b.item_id !== id); }); },
-    async stockMove(itemId, kind, amount, inBuy, note, cost) {
+    async stockReceipts(f) { need(); return (load().stock_receipts || []).filter(r => !f || !f.ids || f.ids.indexOf(r.id) >= 0).slice().sort((a, b) => b.created_at < a.created_at ? -1 : 1).slice(0, (f && f.limit) || 30).map(x => Object.assign({}, x)); },
+    async addStockReceipt(file, info) {
+      const e = need(); const photo = await blobToDataUrl(await toJpeg(file, 900, 0.7)); info = info || {};
+      return tx(db => { db.stock_receipts = db.stock_receipts || []; db.seq.stock_receipts = db.seq.stock_receipts || 1; const r = { id: db.seq.stock_receipts++, photo_path: photo, supplier: info.supplier || null, invoice_no: info.invoice_no || null, note: info.note || null, employee_id: e.id, employee_name: e.full_name, created_at: iso() }; db.stock_receipts.push(r); return Object.assign({}, r); });
+    },
+    async receiptUrls(paths) { const out = {}; (paths || []).forEach(p => { if (p) out[p] = p; }); return out; },
+    async deleteStockReceipt(r) { need('owner'); tx(db => { db.stock_receipts = (db.stock_receipts || []).filter(x => x.id !== r.id); db.stock_moves.forEach(m => { if (m.receipt_id === r.id) m.receipt_id = null; }); }); },
+    async stockMove(itemId, kind, amount, inBuy, note, cost, receiptId) {
       const e = need();
       return tx(db => {
+        if (receiptId && !(db.stock_receipts || []).some(r => r.id === receiptId)) fail('RECEIPT_NOT_FOUND');
         if (['nhap', 'dung', 'hong', 'kiem'].indexOf(kind) < 0) fail('BAD_KIND');
         amount = Number(amount); if (!(amount >= 0) || (kind !== 'kiem' && amount === 0)) fail('BAD_QTY');
         const it = db.stock_items.find(x => x.id === itemId); if (!it) fail('ITEM_NOT_FOUND');
         const use = amount * (inBuy ? it.per_buy : 1), delta = kind === 'nhap' ? use : kind === 'kiem' ? use - it.qty : -use;
         it.qty = Math.round((it.qty + delta) * 1000) / 1000;
-        db.stock_moves.push({ id: db.seq.stock_moves++, item_id: it.id, kind, delta, qty_after: it.qty, amount, unit: inBuy ? it.buy_unit : it.use_unit, cost: kind === 'nhap' && cost !== '' && cost != null ? Number(cost) : null, note: note ? String(note).trim().slice(0, 200) || null : null, employee_id: e.id, employee_name: e.full_name, created_at: iso() });
+        db.stock_moves.push({ id: db.seq.stock_moves++, item_id: it.id, kind, delta, qty_after: it.qty, amount, unit: inBuy ? it.buy_unit : it.use_unit, cost: kind === 'nhap' && cost !== '' && cost != null ? Number(cost) : null, note: note ? String(note).trim().slice(0, 200) || null : null, employee_id: e.id, employee_name: e.full_name, receipt_id: kind === 'nhap' && receiptId ? receiptId : null, created_at: iso() });
         return { qty: it.qty, delta };
       });
     },
@@ -1281,7 +1310,7 @@ function demoApi() {
     async botUserDel(kenh, chatId) { need('owner'); tx(db => { db.bot_users = (db.bot_users || []).filter(x => !(x.kenh === kenh && x.chat_id === chatId)); }); },
     async botLinkCode() { need('owner'); return { code: String(Math.floor(100000 + Math.random() * 900000)), until: new Date(Date.now() + 600e3).toISOString(), demo: true }; },
     async draftImages() { return []; },
-    async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.kind || m.kind === f.kind) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
+    async stockMoves(f) { need(); return load().stock_moves.filter(m => (!f || !f.itemId || m.item_id === f.itemId) && (!f || !f.kind || m.kind === f.kind) && (!f || !f.receiptId || m.receipt_id === f.receiptId) && (!f || !f.from || new Date(m.created_at) >= new Date(f.from))).sort((a, b) => a.created_at < b.created_at ? 1 : -1).slice(0, (f && f.limit) || 100); },
 
     /* ---------- Nhân viên & chấm công ---------- */
     async employees() { return load().employees.slice().sort((a, b) => (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name, 'vi')); },
