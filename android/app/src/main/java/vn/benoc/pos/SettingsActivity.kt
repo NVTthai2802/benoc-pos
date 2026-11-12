@@ -71,6 +71,14 @@ class SettingsActivity : ComponentActivity() {
         val wait = Switch(this).apply { text = "Đợi bot đọc xong"; isChecked = p.waitResult }
         col.addView(wait)
 
+        if (OcrEngine.available) label("OCR trên máy (chỉ TEST)", "Khi chụp ở TEST, app tự đọc chữ bằng mô hình nhẹ chạy ngay trên điện thoại rồi gửi kèm ảnh. Gemini vẫn lên đơn như cũ; kết quả OCR lưu ở bảng ocr_mau (Supabase Test) để so sánh. PRODUCT không bị ảnh hưởng.")
+        val ocr = Switch(this).apply { text = "Đọc chữ trên máy khi chụp ở TEST"; isChecked = p.ocrTest }
+        if (OcrEngine.available) col.addView(ocr)
+        if (OcrEngine.available && p.lastOcr.isNotBlank()) col.addView(TextView(this).apply {
+            text = "Lần đọc gần nhất: " + p.lastOcr; textSize = 12f; alpha = 0.75f; typeface = Typeface.MONOSPACE
+            setPadding(0, (6 * d).toInt(), 0, 0); setTextIsSelectable(true); maxLines = 40
+        })
+
         label("Địa chỉ bot (nâng cao)", "Để mặc định. Dòng trên: PRODUCT, dòng dưới: TEST.")
         val url = field(p.botUrl, uri)
         val urlTest = field(p.botUrlTest, uri)
@@ -82,7 +90,7 @@ class SettingsActivity : ComponentActivity() {
             }
             p.captureKey = key.text.toString(); p.captureKeyTest = keyTest.text.toString()
             p.botUrl = url.text.toString(); p.botUrlTest = urlTest.text.toString()
-            p.device = dev.text.toString(); p.waitResult = wait.isChecked
+            p.device = dev.text.toString(); p.waitResult = wait.isChecked; p.ocrTest = ocr.isChecked
             dev.setText(p.device)
             return true
         }

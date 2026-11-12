@@ -89,6 +89,7 @@ class BubbleService : Service() {
                 else startForeground(NOTI_ID, notification())
                 if (data == null || code != Activity.RESULT_OK || !startProjection(code, data)) { stopSelf(); return START_NOT_STICKY }
                 if (bubble == null) addBubble()
+                preloadOcr()
             }
         }
         return START_NOT_STICKY
@@ -142,33 +143,54 @@ class BubbleService : Service() {
         latest = null
         main.post { bubble?.alpha = 1f }
         if (img == null) { toast("⚠️ Chưa lấy được hình, chạm lại giúp em"); return }
-        val jpeg = try { toJpeg(img) } catch (e: Exception) { toast("⚠️ Lỗi chụp: ${e.message}"); return } finally { img.close() }
+        val bmp = try { toBitmap(img) } catch (e: Exception) { toast("⚠️ Lỗi chụp: ${e.message}"); return } finally { img.close() }
+        val jpeg = try { toJpeg(bmp) } catch (e: Exception) { bmp.recycle(); toast("⚠️ Lỗi chụp: ${e.message}"); return }
         vibrate()
         val test = shotTest
+        val ocr = test && prefs.ocrTest && OcrEngine.available   // OCR trên máy: chỉ bản "ocr", chỉ ở TEST
+        if (!ocr) bmp.recycle()
         val n = sending.incrementAndGet()
         main.post { setBusy(true) }
         val tag = if (test) BotClient.TEST_TAG else ""
         if (n == 1 || prefs.waitResult) toast(tag + if (prefs.waitResult) "⏳ Đang đọc đơn…" else "⏳ Đang gửi…")
         net.execute {
-            val res = BotClient.sendImage(prefs, jpeg, test)
+            var ocrJson: String? = null; var note = ""
+            if (ocr) {
+                try {
+                    val r = OcrEngine.run(this, bmp)
+                    ocrJson = r.toJson()
+                    note = "\n🔤 OCR trên máy: ${r.detMs + r.recMs}ms (tìm chữ ${r.detMs} + đọc ${r.recMs}), ${r.lines.size} dòng"
+                    prefs.lastOcr = "${r.model}\n${r.w}×${r.h} · tìm chữ ${r.detMs}ms · đọc ${r.recMs}ms · ${r.lines.size} dòng\n\n" +
+                        r.lines.joinToString("\n") { it.text }
+                } catch (e: Throwable) { note = "\n⚠️ OCR lỗi: ${e.message ?: e.javaClass.simpleName}" }
+                finally { bmp.recycle() }
+            }
+            val res = if (ocrJson != null) BotClient.sendImageOcr(prefs, jpeg, ocrJson, test) else BotClient.sendImage(prefs, jpeg, test)
             val left = sending.decrementAndGet()
             main.post { if (left == 0) setBusy(false) }
-            toast(res.text, long = prefs.waitResult || !res.ok)
+            toast(res.text + note, long = prefs.waitResult || !res.ok || note.isNotEmpty())
         }
     }
 
-    private fun toJpeg(img: Image): ByteArray {
+    private fun toBitmap(img: Image): Bitmap {
         val plane = img.planes[0]
         val rowPx = plane.rowStride / plane.pixelStride
         val full = Bitmap.createBitmap(rowPx, img.height, Bitmap.Config.ARGB_8888)
         full.copyPixelsFromBuffer(plane.buffer)
-        val bmp = if (rowPx != img.width) Bitmap.createBitmap(full, 0, 0, img.width, img.height) else full
+        if (rowPx == img.width) return full
+        val bmp = Bitmap.createBitmap(full, 0, 0, img.width, img.height)
+        full.recycle()
+        return bmp
+    }
+
+    private fun toJpeg(bmp: Bitmap): ByteArray {
         val out = ByteArrayOutputStream(400_000)
         bmp.compress(Bitmap.CompressFormat.JPEG, 82, out)
-        if (bmp !== full) bmp.recycle()
-        full.recycle()
         return out.toByteArray()
     }
+
+    /** Nạp sẵn mô hình OCR khi đang ở TEST để lần chụp đầu không phải chờ */
+    private fun preloadOcr() { if (OcrEngine.available && prefs.testEnv && prefs.ocrTest) net.execute { runCatching { OcrEngine.load(this) } } }
 
     // ------------------------------------------------------------------ nút nổi
     @SuppressLint("ClickableViewAccessibility")
@@ -221,6 +243,7 @@ class BubbleService : Service() {
     private var shownTest = false
     /** Đổi môi trường trong app → đổi màu nút (cam = PRODUCT, tím có chữ T = TEST) và thông báo */
     private fun refreshEnv() = main.post {
+        preloadOcr()
         val t = prefs.testEnv
         if (t == shownTest && bubble != null) return@post
         shownTest = t

@@ -536,3 +536,53 @@ Deno.test('Phím tắt chế độ nhanh (mặc định): trả "Đã nhận" ng
   assert(![...f.files.keys()].some(k => k.startsWith('ios-tam/')));   // ảnh tạm đã xoá
   assertEquals(d.anh.length, 1);                                          // ảnh lưu lại theo đơn
 });
+
+// ---------------------------------------------------------------------
+// OCR trên máy (app Android, TEST): lưu song song, không ảnh hưởng lên đơn
+// ---------------------------------------------------------------------
+Deno.test('OCR: đọc dữ liệu app gửi, thứ tự dòng, so với đoạn chat Gemini', () => {
+  const o = bot.parseOcr({ model: 'latin_PP-OCRv5_mobile', w: 720, h: 1600, det_ms: 210, rec_ms: 640, lines: [
+    { b: [400, 300, 700, 340], t: 'Dạ quán nhận', c: 0.9 }, { b: [60, 200, 500, 240], t: '2 cơm gà viên', c: 0.95 },
+    { b: [60, 245, 300, 285], t: '6h qua lấy', c: 0.8 }, { b: [1, 2], t: 'hỏng', c: 1 }, { b: [0, 0, 1, 1], t: '   ', c: 1 }, { b: [0, 0, 5, 5], t: 'x', c: 7 }] })!;
+  assertEquals(o.lines.length, 4); assertEquals(o.lines[3].c, 1);   // bỏ dòng thiếu toạ độ, dòng rỗng; điểm tin cậy kẹp về 0..1
+  assertEquals(bot.ocrText(o.lines.slice(0, 3)), '2 cơm gà viên 6h qua lấy Dạ quán nhận');
+  assertEquals(bot.editInside('cơm gà', 'xx 2 cơm gà viên'), 0);
+  assertEquals(bot.editInside('một', 'mt'), 1);
+  const r = bot.ocrVsConvo(o.lines.slice(0, 3), [{ t: '2 cơm gà viên 6h qua lấy' }, { t: 'Dạ' }]);
+  assertEquals(r, { cer: 0, n: 26 });
+  assertEquals(bot.ocrVsConvo([{ b: [0, 0, 9, 9], t: 'Dang hot dng', c: 1 }], [{ t: 'Đang hoạt động' }]).cer! > 20, true);
+  assertEquals(bot.parseOcr({ lines: 'x' }), null);
+});
+
+Deno.test('OCR: ảnh kèm kết quả OCR (multipart) → đơn lên như cũ, lưu ocr_mau, gắn đơn + CER so với Gemini', async () => {
+  const t: Record<string, any[]> = {};
+  gem(); Deno.env.set('CAPTURE_KEY', 'khoaPhimTat123');
+  t.shop_settings = [{ id: 1, fb_open: '00:00', fb_close: '23:59', fb_train_on: true }];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => String(url).includes('generativelanguage') ? aiOk(ORDER) : new Response('{}')) as typeof fetch;
+  const f = fakeSb(t); const bg: Promise<unknown>[] = [];
+  (globalThis as any).EdgeRuntime = { waitUntil: (p: Promise<unknown>) => bg.push(p) };
+  const fd = new FormData();
+  fd.append('anh', new File([JPG], 'anh.jpg', { type: 'image/jpeg' }));
+  fd.append('ocr', JSON.stringify({ model: 'm1', w: 720, h: 1600, det_ms: 200, rec_ms: 600, lines: [{ b: [60, 200, 500, 240], t: '2 cơm gà vien 6h qua lấy', c: 0.9 }, { b: [400, 300, 700, 340], t: 'Dạ', c: 1 }] }));
+  try {
+    const res = await bot.handleShortcut(f.sb, new Request('https://x/bot-don', { method: 'POST', headers: { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'android-test' }, body: fd }));
+    assertStringIncludes((await res.json()).tom_tat, '📥 Đã nhận ảnh');
+    await Promise.all(bg);
+  } finally { globalThis.fetch = real; delete (globalThis as any).EdgeRuntime; }
+  assertEquals(t.orders.length, 1);                       // đơn vẫn lên bằng Gemini
+  const o = t.ocr_mau[0];
+  assertEquals([o.device, o.model, o.n_dong, o.det_ms, o.chu], ['android-test', 'm1', 2, 200, '2 cơm gà vien 6h qua lấy Dạ']);
+  assertMatch(o.anh, /^ocr-mau\/\d{4}-\d\d-\d\d\/[\w-]+\.jpg$/);
+  assert(f.files.has(o.anh));                             // bản ảnh riêng, không bị xoá cùng ảnh tạm
+  assertEquals(o.draft_id, t.fb_drafts[0].id);
+  assertEquals(o.n_ky_tu, 26); assertEquals(o.cer_gemini, 3.85);   // 1 lỗi (viên → vien) / 26 ký tự
+});
+
+Deno.test('OCR: thiếu bảng ocr_mau (Product) hay OCR hỏng thì vẫn lên đơn bình thường', async () => {
+  const t: Record<string, any[]> = {};
+  const fd = new FormData();
+  fd.append('anh', new File([JPG], 'anh.jpg', { type: 'image/jpeg' })); fd.append('ocr', '{hỏng');
+  const r = await shortcut(t, fd, { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'android-test', 'x-wait': '1' }, ORDER);
+  assertEquals(r.status, 200); assertEquals(t.orders.length, 1); assertEquals((t.ocr_mau || []).length, 0);
+});

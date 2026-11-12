@@ -1,0 +1,1 @@
+PP-OCRv5_mobile_det + latin_PP-OCRv5_mobile_rec (gốc)

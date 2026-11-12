@@ -14,6 +14,17 @@ object BotClient {
     fun sendImage(p: Prefs, jpeg: ByteArray, test: Boolean = p.testEnv): Result =
         post(p, test, jpeg, "image/jpeg", wait = p.waitResult)
 
+    /** Ảnh + kết quả OCR trên máy (multipart: anh, ocr). Bot vẫn đọc ảnh bằng Gemini, OCR chỉ lưu để so sánh. */
+    fun sendImageOcr(p: Prefs, jpeg: ByteArray, ocrJson: String, test: Boolean): Result {
+        val b = "----benoc" + System.nanoTime()
+        val out = java.io.ByteArrayOutputStream(jpeg.size + ocrJson.length * 2 + 512)
+        fun w(s: String) = out.write(s.toByteArray(Charsets.UTF_8))
+        w("--$b\r\ncontent-disposition: form-data; name=\"anh\"; filename=\"anh.jpg\"\r\ncontent-type: image/jpeg\r\n\r\n"); out.write(jpeg)
+        w("\r\n--$b\r\ncontent-disposition: form-data; name=\"ocr\"\r\ncontent-type: application/json; charset=utf-8\r\n\r\n"); w(ocrJson)
+        w("\r\n--$b--\r\n")
+        return post(p, test, out.toByteArray(), "multipart/form-data; boundary=$b", wait = p.waitResult)
+    }
+
     fun sendText(p: Prefs, text: String, test: Boolean = p.testEnv): Result =
         post(p, test, JSONObject().put("text", text).toString().toByteArray(), "application/json", wait = false)
 

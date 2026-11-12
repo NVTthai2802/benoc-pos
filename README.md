@@ -13,3 +13,4 @@ Gọi món qua QR, màn hình bếp nóng, màn hình quầy pha chế và quả
 - `HUONG-DAN.md` — hướng dẫn cài đặt, gồm cách dùng hai môi trường
 - `HUONG-DAN-PHIM-TAT-IPHONE.md` — lên đơn bằng Phím tắt iPhone (gõ lưng máy chụp màn hình chat)
 - `HUONG-DAN-APP-ANDROID.md` — app Android (APK): POS + nút nổi chụp đơn. Tải: https://benoc-pos.pages.dev/app/benoc-pos.apk. Mã nguồn `android/`
+- `tools/ocr/` — OCR trên máy (PP-OCRv5 mobile, chế độ TEST của app Android): pipeline Python tham chiếu, sinh ảnh chat giả lập, đo CER. Kết quả lưu bảng `ocr_mau` (cập nhật 34, chỉ Supabase Test)

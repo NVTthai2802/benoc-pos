@@ -54,6 +54,18 @@ Nút chụp đơn gửi vào **môi trường đang chọn trong app** (⋮ → 
 - Chưa nhập **Mã bí mật TEST** mà ở chế độ TEST thì nút báo *"Chưa nhập mã bí mật TEST"*, **không gửi đi đâu cả** (không lọt sang Product).
 - Phím tắt iPhone vẫn chỉ gửi vào Product.
 
+### OCR trên máy (chỉ TEST)
+
+Chỉ có ở **bản app `ocr`** (bản đăng trên trang quán không có, xem cuối trang). Ở chế độ **TEST**, mỗi lần chạm nút tím app tự **đọc chữ ngay trên điện thoại** (mô hình nhẹ PP-OCRv5 mobile, không cần mạng cho bước này) rồi gửi kèm ảnh. Gemini **vẫn lên đơn như cũ**; kết quả OCR chỉ lưu vào bảng `ocr_mau` của Supabase Test để so sánh (tốc độ, độ đúng).
+
+- Sau khi chạm, câu báo có thêm dòng *🔤 OCR trên máy: …ms (tìm chữ … + đọc …), … dòng*.
+- Xem chữ đọc được lần gần nhất: **⋮ → Cài đặt chụp đơn** → mục **OCR trên máy**.
+- Tắt: bỏ chọn **Đọc chữ trên máy khi chụp ở TEST** trong Cài đặt.
+- Lần chụp đầu sau khi mở app chậm hơn khoảng 1 giây (nạp mô hình).
+- **PRODUCT không chạy OCR**, không gửi gì thêm.
+- Supabase Test phải chạy `sql/cap-nhat-34-ocr-tren-may.sql` và deploy `bot-don` mới. Chưa chạy thì đơn vẫn lên, chỉ không lưu kết quả OCR.
+- Mô hình hiện tại là bản gốc, **chưa đọc được nhiều chữ tiếng Việt có dấu** (ả, ạ, ế, ọ…), nên chữ hiện ra sẽ thiếu dấu, thiếu chữ. Đây là mốc để so sánh trước khi fine-tune. Chi tiết: `tools/ocr/README.md`.
+
 ## Dùng hằng ngày
 
 | Làm gì | Kết quả |
@@ -90,6 +102,8 @@ Mỗi lần chạm là **đơn thật ở bếp**. Chụp nhầm thì giữ nút
 | Ảnh gửi đi bị đen | App kia chặn chụp màn hình (ngân hàng…); Messenger / Zalo không bị |
 | ⚠️ Chưa lấy được hình | Chạm lại nút |
 | Chạm xong mà bếp không có đơn (sau ~30 giây) | Ảnh không có đoạn chat đặt món hoặc AI quá tải: chụp lại. Muốn biết lý do: bật **Đợi kết quả từng ảnh** rồi chụp lại |
+| 🧪 Không thấy dòng *🔤 OCR* | Đang ở PRODUCT, hoặc đã tắt **OCR trên máy** trong Cài đặt |
+| ⚠️ OCR lỗi: … | Ghi lại câu báo gửi người làm app; đơn vẫn gửi bình thường (không kèm OCR) |
 | Không đăng nhập được / trang trắng | **⋮** → **Tải lại trang**; kiểm tra mạng |
 
 ## Bảo mật
@@ -102,14 +116,22 @@ Mỗi lần chạm là **đơn thật ở bếp**. Chụp nhầm thì giữ nút
 <details>
 <summary>Dành cho người phát triển: build lại APK</summary>
 
-Mã nguồn ở `android/` (Kotlin, không dùng thư viện ngoài ngoài AndroidX). Cần JDK 17+, Android SDK 35.
+Mã nguồn ở `android/` (Kotlin, AndroidX; bản `ocr` thêm ONNX Runtime). Cần JDK 17+, Android SDK 35.
+
+Có **2 bản** cùng mã nguồn, cùng `applicationId` và khoá ký (cài đè qua lại được, giữ đăng nhập):
+
+| Bản | Dung lượng | Dùng cho |
+|---|---|---|
+| `lite` | ~140 KB | Bản đăng trên trang quán (`app/benoc-pos.apk`). **Không có OCR** |
+| `ocr` | ~39 MB | Test / đồ án: thêm OCR trên máy (ONNX Runtime + PP-OCRv5 mobile). Không đăng lên trang quán (Cloudflare Pages giới hạn 25 MB / file) |
 
 ```bash
 cd android
 echo "sdk.dir=/đường/dẫn/android-sdk" > local.properties
 # khoá ký: keystore.properties (storeFile, storePassword, keyAlias, keyPassword) — KHÔNG đưa lên git
-./gradlew assembleRelease
-cp app/build/outputs/apk/release/app-release.apk ../app/benoc-pos.apk
+./gradlew assembleLiteRelease assembleOcrRelease
+cp app/build/outputs/apk/lite/release/app-lite-release.apk ../app/benoc-pos.apk
+# bản ocr: app/build/outputs/apk/ocr/release/app-ocr-release.apk → gửi thẳng file cho máy test, không đưa lên git
 ```
 
 Phải ký bằng **cùng khoá** thì điện thoại mới cài đè được; mất khoá thì phải gỡ app cũ rồi cài lại (mất đăng nhập). Tăng `versionCode` / `versionName` trong `android/app/build.gradle.kts` mỗi lần phát hành.
@@ -120,12 +142,17 @@ Phải ký bằng **cùng khoá** thì điện thoại mới cài đè được;
 | `StartCaptureActivity.kt` | Xin quyền hiện trên app khác, thông báo, ghi màn hình (Android 14+: chỉ toàn màn hình) |
 | `BubbleService.kt` | Dịch vụ nền: nút nổi, giữ phiên MediaProjection, chạm → lấy 1 khung hình → JPEG → `bot-don` |
 | `EditOrderActivity.kt` | Ô sửa đơn (gửi chữ cho bot) |
-| `SettingsActivity.kt`, `Prefs.kt`, `BotClient.kt` | Cài đặt, gọi `bot-don` (tiêu đề `x-capture-key`, `x-device`, tuỳ chọn `x-wait`) |
+| `SettingsActivity.kt`, `Prefs.kt`, `BotClient.kt` | Cài đặt, gọi `bot-don` (tiêu đề `x-capture-key`, `x-device`, tuỳ chọn `x-wait`; bản ocr gửi multipart `anh` + `ocr`) |
+| `OcrLine.kt`, `OcrResult.kt` | Kiểu dữ liệu kết quả OCR (dùng chung 2 bản) |
+| `src/ocr/…/OcrCore.kt` | Lõi OCR thuần Kotlin (det DB + rec CTC), giống hệt `tools/ocr/ocr_ref.py`; chạy được cả trên máy tính để đối chiếu |
+| `src/ocr/…/OcrEngine.kt`, `src/ocr/assets/ocr/` | Nạp mô hình từ assets, chạy OCR một ảnh. Thay mô hình: xem `tools/ocr/README.md` |
+| `src/lite/…/OcrEngine.kt` | Bản rỗng (`available = false`) cho bản lite |
 
 App dùng chung kênh `ios` của `bot-don` (cập nhật 33), phân biệt máy bằng `x-device`. Địa chỉ bot: PRODUCT `hixdacnaxfuxuccbajzn…/bot-don`, TEST `bsnpcinocphuruahpzwr…/bot-don`; mỗi project có secret `CAPTURE_KEY` riêng.
 
 | Phiên bản | Thay đổi |
 |---|---|
+| 1.2 | Tách 2 bản `lite` / `ocr`. Bản `ocr`: OCR trên máy ở chế độ TEST, gửi kèm ảnh, lưu bảng `ocr_mau` (cập nhật 34) để so với Gemini |
 | 1.1 | Nút chụp gửi theo môi trường đang chọn (mã / địa chỉ riêng PRODUCT và TEST), nút tím khi TEST |
 | 1.0 | Bản đầu: POS trong WebView + nút nổi chụp đơn (luôn gửi PRODUCT) |
 
