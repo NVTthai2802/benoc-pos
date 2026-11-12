@@ -56,6 +56,7 @@ function ticketCanvas(o, items, extra, set) {
   if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
   text([o.customer_name, o.customer_phone].filter(Boolean).join(' · '), 24, true, 'center');
   text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · in lại' : ''), 20, false, 'center', 2);
+  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 24, true, 'center', 2);
   rule(false);
   let lastGroup = null;
   items.forEach(i => {
@@ -85,7 +86,7 @@ function ticketCanvas(o, items, extra, set) {
   const sum = items.reduce((t, i) => t + (i.amount != null ? i.amount : (i.unit_price || 0) * i.qty), 0);
   const total = o.total != null ? o.total : sum;
   const pair = (l, r, px) => { ops.push({ t: l, font: F(px, true), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, true), y: y + px * k, align: 'right' }); y += px * k * 1.3; };
-  if (total !== sum) { pair('Cộng phiếu này', money(sum), 22); pair('TỔNG ĐƠN', money(total), 30); }
+  if (total !== sum) { pair(extra.full ? 'Cộng tiền món' : 'Cộng phiếu này', money(sum), 22); pair('TỔNG ĐƠN', money(total), 30); }
   else pair('TỔNG', money(total), 30);
   const paid = o.paid_amount || 0;
   text(o.paid_amount == null ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' (CK)' : o.paid_method === 'tien_mat' ? ' (TIỀN MẶT)' : '') : 'ĐÃ TRẢ ' + money(paid) + ' · CÒN THU ' + money(total - paid), 22, true, 'center', 2);
