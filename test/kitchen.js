@@ -254,7 +254,10 @@ function actionsHtml(o, col) {
   // Thu tiền lúc nào cũng được (khách muốn trả trước); đã thu đủ thì thôi
   const payLabel = ps === 'more' ? 'Thu thêm' : ps === 'refund' ? 'Trả lại' : 'Thu tiền';
   const pay = isMinePay(o) && ps !== 'full' ? '<button class="btn' + (col === 'thanh_toan' ? '' : ' btn-line btn-sm') + '" type="button" data-act="pay" data-id="' + id + '">' + (col === 'thanh_toan' && ps === 'none' ? 'Thanh toán' : payLabel) + '</button>' : '';
-  if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + cancel;
+  // Đơn có cả món bếp và pha chế: nút nhận đơn và in luôn phiếu tổng cả đơn (khỏi in 2 lần)
+  const mixed = o.items.some(i => i.station === 'bep') && o.items.some(i => i.station === 'pha_che');
+  const acceptAll = mixed && BN.FEATURES.print && window.BNPrint ? '<button class="btn" type="button" data-act="accept" data-full="1" data-id="' + id + '">Nhận + in tổng đơn</button>' : '';
+  if (col === 'cho_nhan') return edit + pay + '<button class="btn" type="button" data-act="accept" data-id="' + id + '">Nhận đơn</button>' + acceptAll + cancel;
   // Nút In lại luôn hiện (đơn có món của nơi này); máy chưa cài máy in thì bấm sẽ mở phần cài
   const reprint = BN.FEATURES.print && window.BNPrint && o.items.some(i => i.station === STATION) ? '<button class="btn btn-line btn-sm" type="button" data-act="reprint" data-id="' + id + '">In lại ' + (BNPrint.label() || 'phiếu') + '</button>'
     // Đơn có cả món bếp và pha chế: thêm nút in một phiếu gồm toàn bộ đơn
@@ -353,13 +356,14 @@ async function onAction(e) {
       // Bấm là nhận luôn (không hỏi số phút). Thời gian dự kiến lấy theo gợi ý (số đơn đang làm,
       // thời gian làm gần đây) để màn hình vẫn đếm giờ và khách vẫn thấy khoảng bao lâu xong.
       delete state.panels[id];
+      const full = !!b.dataset.full; // Nhận + in tổng đơn
       state.self.add(id); // máy này tự in, không in lại khi tải đơn về
       run(b, async () => {
         let m = IS_BEP ? 15 : 5;
         try { m = await Promise.race([api.suggestWait(id, STATION), new Promise(r => setTimeout(() => r(m), 1500))]) || m; } catch (err) { /* dùng mặc định */ }
         try { await api.acceptOrder(id, m, STATION); } catch (err) { state.self.delete(id); throw err; }
-        printFor(o, { minutes: m });
-      }, 'Đã nhận đơn ' + orderLabel(o) + (BN.FEATURES.print && BNPrint.label() ? ' · đang in ' + BNPrint.label() : ''), 'dang_lam');
+        printFor(o, { minutes: m }, full);
+      }, 'Đã nhận đơn ' + orderLabel(o) + (BN.FEATURES.print && BNPrint.label() ? ' · đang in ' + (full ? 'phiếu tổng đơn' + (BNPrint.get().tmode !== 'off' ? ' + tem' : '') : BNPrint.label()) : ''), 'dang_lam');
       break;
     }
     case 'min': { const p = state.panels[id]; p.minutes = Math.max(5, Math.min(90, (p.minutes || 15) + Number(b.dataset.d))); render(); break; }
@@ -535,7 +539,8 @@ function onCall(e) { const b = e.target.closest('[data-call]'); if (b) run(b, ()
 /* ---------- In phiếu (print.js) ---------- */
 function paintPrintBtn() { const t = BNPrint.label(), b = $('#printBtn'); if (!b) return; b.textContent = t ? 'Máy in: ' + t : 'Cài máy in'; b.className = 'btn btn-sm ' + (t ? 'btn-ok' : 'btn-line'); }
 /* Phiếu của nơi này: chỉ món của bếp (hoặc pha chế), đúng thứ tự trên thẻ */
-function printFor(o, extra) {
+/* full = phiếu in toàn bộ đơn (cả món nơi kia); tem vẫn chỉ in ly của nơi này */
+function printFor(o, extra, full) {
   if (!BN.FEATURES.print || !window.BNPrint) return false;
   // Gộp các dòng giống hệt nhau (combo chia giá thành nhiều dòng) để phiếu gọn: 2 x Cơm heo
   const out = myItems(o), set = BNPrint.get();
@@ -548,7 +553,13 @@ function printFor(o, extra) {
     if (!state.prq.some(x => x.id === o.id)) state.prq.push({ id: o.id, jobs: wait });
     ui.toast(wait.map(k => BNPrint.ble.label(k)).join(', ') + ' chưa kết nối: bấm "Kết nối" rồi bấm in');
   }
-  return BNPrint.printTicket(o, out, Object.assign({ station: STATION }, extra), set, only) || (only.length === 0 && state.prq.some(x => x.id === o.id));
+  const ex = Object.assign({ station: STATION }, extra);
+  let n;
+  if (full) {
+    n = (only.includes('phieu') ? BNPrint.printTicket(o, myItems(o, true), Object.assign({}, ex, { full: true }), set, ['phieu']) : 0)
+      + (only.includes('tem') ? BNPrint.printTicket(o, out, ex, set, ['tem']) : 0);
+  } else n = BNPrint.printTicket(o, out, ex, set, only);
+  return n || (only.length === 0 && state.prq.some(x => x.id === o.id));
 }
 function myItems(o, all) {
   const out = [], by = new Map();
