@@ -59,73 +59,94 @@ function wrap(ctx, text, maxW) {
 /* o: đơn; items: món của nơi này; extra: { minutes, station, reprint } */
 function ticketCanvas(o, items, extra, set) {
   set = set || get(); extra = extra || {};
-  const W = DOTS[set.width] || 384, pad = 8, k = W / 384 * (set.big ? 1.12 : 1);
+  const W = DOTS[set.width] || 384, pad = 8, k = W / 384 * (set.big ? 1.12 : 1), IW = W - pad * 2;
   const F = (px, b) => (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   const ops = []; let y = pad;
-  const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, W - pad * 2).forEach(l => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: align || 'left' }); y += px * k * 1.28; }); y += (gap || 0) * k; };
+  const text = (t, px, bold, align, gap, inv) => { ctx.font = F(px, bold); wrap(ctx, t, IW - (inv ? 16 * k : 0)).forEach(l => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: align || 'left', inv }); y += px * k * 1.28; }); y += (gap || 0) * k; };
   const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
-  // Phiếu gọn để tiết kiệm giấy: loại đơn + số bàn / giờ giao, địa chỉ (ship), khách, giờ đặt, giờ nhận, món, ghi chú
+  const pair = (l, r, px, bold) => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, bold), y: y + px * k, align: 'right' }); y += px * k * 1.32; };
+  // Khối chữ trắng nền đen (số bàn, trạng thái tiền): đứng xa vẫn đọc được
+  const band = (t, px) => { const h = px * k * 1.5; ops.push({ band: true, y, h }); ctx.font = F(px, true); wrap(ctx, t, IW - 16 * k).forEach((l, n) => { if (n) { y += px * k * 1.28; ops.push({ band: true, y: y, h: px * k * 1.3 }); } ops.push({ t: l, font: F(px, true), y: y + px * k * 1.12, align: 'center', inv: true }); }); y += h + 6 * k; };
+  const lineAmt = i => i.amount != null ? i.amount : (i.unit_price || 0) * i.qty;
+
+  /* ===== PHẦN BẾP: nơi ăn, khách, giờ ===== */
+  text('BÉ NỐC', 22, true, 'center', 2);
   const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
-  const where = (o.source === 'fb' ? 'ĐƠN ONLINE · ' : '') + (isDelivery(o) ? 'ĐI SHIP' + at : o.pickup ? 'ĐẾN LẤY' + at : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'Ở ĐÂY · BÀN ' + o.queue_number);
-  text(where, 40, true, 'center', 2);
+  const at2 = o.deliver_at ? ' ' + hhmm(o.deliver_at) : '';
+  const where = isDelivery(o) ? 'GIAO' + (at2 || ' HÀNG') : o.pickup ? 'ĐẾN LẤY' + at2 : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'BÀN ' + o.queue_number;
+  band(where, 40);
+  if (o.source === 'fb') text('ĐƠN ONLINE', 22, true, 'center', 2);
   if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
-  text([o.customer_name, o.customer_phone].filter(Boolean).join(' · '), 24, true, 'center');
-  text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · in lại' : ''), 20, false, 'center', 2);
-  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 24, true, 'center', 2);
+  const who = [o.customer_name, o.customer_phone].filter(Boolean).join(' · ');
+  if (who) text(who, 24, true, 'center');
+  text('Đặt ' + hhmm(o.created_at) + '  ·  Nhận ' + hhmm(Date.now()) + (extra.reprint ? '  ·  IN LẠI' : ''), 20, false, 'center', 2);
+  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 22, true, 'center', 2);
   rule(false);
-  let lastGroup = null;
-  items.forEach(i => {
+
+  /* ===== MÓN: số lượng to bên trái, tên món, tiền bên phải; tuỳ chọn thụt vào ===== */
+  let lastGroup = null, count = 0;
+  items.forEach((i, idx) => {
     if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 20, true, 'left', 2);
-    lastGroup = i.promo_group || null;
+    lastGroup = i.promo_group || null; count += i.qty;
     const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
-    // Tên món bên trái, thành tiền bên phải (dòng đầu)
-    const amt = i.amount != null ? i.amount : (i.unit_price || 0) * i.qty, price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
-    ctx.font = F(24, true); const pw = ctx.measureText(price).width + 10 * k;
+    const amt = lineAmt(i), price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
+    ctx.font = F(30, true); const qw = ctx.measureText('9x ').width;
+    ctx.font = F(22, true); const pw = ctx.measureText(price).width + 8 * k;
     ctx.font = F(30, true);
-    wrap(ctx, i.qty + ' x ' + i.item_name + (sz ? ' - ' + sizeText(sz) : '') + (i.promo_part === 'tang' ? ' (TẶNG)' : ''), W - pad * 2 - pw).forEach((l, n) => {
-      ops.push({ t: l, font: F(30, true), y: y + 30 * k, align: 'left' });
-      if (n === 0) ops.push({ t: price, font: F(24, true), y: y + 30 * k, align: 'right' });
-      y += 30 * k * 1.28;
+    const name = i.item_name + (sz ? ' · ' + sizeText(sz) : '');
+    wrap(ctx, name, IW - qw - pw).forEach((l, n) => {
+      if (n === 0) { ops.push({ t: i.qty + 'x', font: F(30, true), y: y + 30 * k, align: 'left' }); ops.push({ t: price, font: F(22, true), y: y + 30 * k, align: 'right' }); }
+      ops.push({ t: l, font: F(30, true), y: y + 30 * k, align: 'left', x: pad + qw });
+      y += 30 * k * 1.26;
     });
-    y += 2 * k;
-    const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
+    const indent = s => ops.push({ t: s.t, font: F(s.px, s.b), y: y + s.px * k, align: 'left', x: pad + qw }) && (y += s.px * k * 1.28);
     const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
-    if (rest.length) text('   ' + rest.join(', '), 22, false);
-    if (tops.length) text('   ' + tops.join('  '), 24, true);
-    if (i.note) text('   * ' + i.note, 24, true);
-    y += 6 * k;
+    const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
+    ctx.font = F(22, false);
+    if (rest.length) wrap(ctx, rest.join(', '), IW - qw).forEach(t => indent({ t, px: 22 }));
+    ctx.font = F(24, true);
+    if (tops.length) wrap(ctx, tops.join('  '), IW - qw).forEach(t => indent({ t, px: 24, b: true }));
+    if (i.note) wrap(ctx, '* ' + i.note, IW - qw).forEach(t => indent({ t, px: 24, b: true }));
+    if (i.qty > 1 && amt) { ops.push({ t: i.qty + ' x ' + money(amt / i.qty), font: F(18, false), y: y + 18 * k, align: 'right' }); y += 18 * k * 1.28; }
+    y += (idx < items.length - 1 ? 8 : 2) * k;
   });
-  if (o.note) { rule(true); text('Ghi chú: ' + o.note, 24, true, 'left', 2); }
-  // Tiền: cộng các món trên phiếu; đơn có cả món nơi khác thì in thêm tổng cả đơn; trạng thái thanh toán
+  if (o.note) { rule(true); text('GHI CHÚ: ' + o.note, 24, true, 'left', 2); }
+
+  /* ===== PHẦN TIỀN ===== */
   rule(false);
-  const sum = items.reduce((t, i) => t + (i.amount != null ? i.amount : (i.unit_price || 0) * i.qty), 0);
-  const total = o.total != null ? o.total : sum;
-  const pair = (l, r, px) => { ops.push({ t: l, font: F(px, true), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, true), y: y + px * k, align: 'right' }); y += px * k * 1.3; };
-  if (total !== sum) { pair(extra.full ? 'Cộng tiền món' : 'Cộng phiếu này', money(sum), 22); pair('TỔNG ĐƠN', money(total), 30); }
-  else pair('TỔNG', money(total), 30);
-  const paid = o.paid_amount || 0;
-  text(o.paid_amount == null ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' (CK)' : o.paid_method === 'tien_mat' ? ' (TIỀN MẶT)' : '') : 'ĐÃ TRẢ ' + money(paid) + ' · CÒN THU ' + money(total - paid), 22, true, 'center', 2);
-  // Còn phải thu → in mã QR chuyển khoản đúng số tiền còn thu của cả đơn (giống mã trên màn hình Thu tiền)
-  const due = Math.round(total - paid);
+  const sum = items.reduce((t, i) => t + lineAmt(i), 0);
+  const total = o.total != null ? o.total : sum, paid = o.paid_amount || 0, due = Math.round(total - paid);
+  if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 22);
+  pair(total !== sum ? 'TỔNG ĐƠN' : 'TỔNG (' + count + ' món)', money(total), 30, true);
+  if (o.paid_amount != null && paid > 0 && paid < total) { pair('Đã trả', money(paid), 22); }
+  y += 4 * k;
+  band(o.paid_amount == null || paid <= 0 ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' · CK' : o.paid_method === 'tien_mat' ? ' · TIỀN MẶT' : '') : 'CÒN THU ' + money(due), 24);
+
+  /* ===== MÃ QR: chỉ khi còn phải thu, đúng số tiền còn thu của cả đơn ===== */
   const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
   if (qm) {
-    rule(true);
-    text('QUÉT MÃ CHUYỂN KHOẢN', 22, true, 'center', 4);
-    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(W - pad * 2, 260 * k) / n)), size = cell * n;
+    y += 2 * k;
+    text('Quét mã để chuyển khoản ' + money(due), 22, true, 'center', 4);
+    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(IW, 250 * k) / n)), size = cell * n;
     ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
     const B = BN.BANK;
-    text(B.bank + ' · ' + B.account + (B.holder ? ' · ' + B.holder : ''), 18, false, 'center');
+    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 18, true, 'center');
     text('Nội dung: ' + BN.qrInfo(BN.qrNoteFor(o)), 18, false, 'center', 2);
   }
-  y += 12 * k; // chừa chút giấy để xé
+  y += 4 * k;
+  text('Cảm ơn bạn, hẹn gặp lại!', 20, false, 'center');
+  y += 14 * k; // chừa chút giấy để xé
+
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
     if (op.qr) { op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + c * op.cell, op.y + r * op.cell, op.cell, op.cell); })); return; }
+    if (op.band) { ctx.fillStyle = '#000'; ctx.fillRect(pad, op.y, IW, op.h); return; }
     if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [8, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
-    ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(op.t, op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
+    ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = op.inv ? '#fff' : '#000';
+    ctx.fillText(op.t, op.x != null ? op.x : op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
+    ctx.fillStyle = '#000';
   });
   return cv;
 }
