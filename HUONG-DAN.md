@@ -53,9 +53,9 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
 ## 3. Cài đặt lần đầu
 
 1. Mở `quanly.html`. Lần đầu sẽ hiện **Cài đặt lần đầu**: nhập tên, số điện thoại, mật khẩu để tạo tài khoản chủ quán.
-2. Vào **Nhân viên → Thêm nhân viên** cho từng người: họ tên, số điện thoại, lương/giờ, mật khẩu. Đưa số điện thoại + mật khẩu cho nhân viên.
+2. Vào **Nhân viên → Thêm nhân viên** cho từng người: họ tên, số điện thoại, mật khẩu. Đưa số điện thoại + mật khẩu cho nhân viên.
 3. Tạo thêm hai tài khoản dùng chung: vai trò **Máy bếp** cho máy ở bếp, vai trò **Máy pha chế** cho máy ở quầy pha chế. Đăng nhập tài khoản nào thì trang tự mở đúng màn hình.
-4. Vào **Cài đặt**: chọn cách tính lương, số đơn bếp và số đơn quầy pha chế làm cùng lúc (dùng để ước tính thời gian chờ).
+4. Vào **Cài đặt**: chọn số đơn bếp và số đơn quầy pha chế làm cùng lúc (dùng để ước tính thời gian chờ).
 5. Cũng trong **Cài đặt** có **hai mã QR**. Chụp lại hoặc in ra: mã bếp nóng dán ở khu bếp, mã quầy pha chế dán ở quầy pha chế.
 
 ## 4. Dùng hằng ngày
@@ -96,8 +96,8 @@ Trang phải chạy qua `https://` thì điện thoại mới cho chụp ảnh c
   - Chưa rõ hình thức thì đơn tạm là **Mang về**, chưa có tên thì **Khách online**. Đơn ăn tại quán đặt trước hiện ô tím **ĐẶT BÀN hh:mm** (khách đến thì bấm **Sửa đơn** điền số bàn).
   - **Cài đặt → Bot lên đơn (Zalo) → Cài đặt bot**: tài khoản Zalo / Telegram được dùng bot (gỡ được), **Lấy mã kết nối** (mã 6 số, dùng trong 10 phút), giờ nhận đơn, **Kiểm tra bot**, **Cài webhook**, bật / tắt lưu và **Tải dữ liệu huấn luyện (.jsonl)** (hướng dẫn ở `tools/train/README.md`).
 - **Báo cáo Excel tháng** (đang thử ở Test): Doanh thu → **Xuất Excel tháng** → chọn tháng này / tháng trước / tháng bất kỳ → **Tạo file Excel**. File `BaoCao_BeNoc_2026-10.xlsx` gồm các trang:
-  - **Tổng quan**: doanh thu, số hoá đơn, trung bình / hoá đơn và / ngày, tiền mặt, chuyển khoản, so với tháng trước, ngày bán cao nhất, tiền nhập hàng, tiền lương, **còn lại tạm tính** (chưa trừ mặt bằng, điện nước…), hàng sắp hết, món bán chạy nhất; có đường dẫn sang các trang.
-  - **Theo ngày** (cuối tuần tô đỏ), **Theo tuần** (Thứ 2 – Chủ nhật), **Theo giờ** (giờ nào đông khách), **Món bán chạy** (số phần bán / tặng, doanh thu, %), **Ưu đãi**, **Hoá đơn** (toàn bộ, lọc được), **Kho hàng** (tồn, nhập / dùng / hỏng / lệch kiểm kho, tiền nhập trong tháng), **Nhập xuất kho**, **Nhân viên & lương** (số ca, giờ công, tiền lương, đã trả, còn phải trả), **Ca làm**.
+  - **Tổng quan**: doanh thu, số hoá đơn, trung bình / hoá đơn và / ngày, tiền mặt, chuyển khoản, so với tháng trước, ngày bán cao nhất, tiền nhập hàng, **còn lại tạm tính** (chưa trừ mặt bằng, điện nước…), hàng sắp hết, món bán chạy nhất; có đường dẫn sang các trang.
+  - **Theo ngày** (cuối tuần tô đỏ), **Theo tuần** (Thứ 2 – Chủ nhật), **Theo giờ** (giờ nào đông khách), **Món bán chạy** (số phần bán / tặng, doanh thu, %), **Ưu đãi**, **Hoá đơn** (toàn bộ, lọc được), **Kho hàng** (tồn, nhập / dùng / hỏng / lệch kiểm kho, tiền nhập trong tháng), **Nhập xuất kho**, **Giờ làm nhân viên** (số ca, tổng giờ tháng này / tháng trước), **Ca làm** (giờ vào, ra, giờ làm từng ca).
   - Các dòng tổng dùng công thức Excel nên sửa số trong file thì tổng tự tính lại; mỗi trang có nút lọc và in được khổ ngang (trang nào cũng có dòng tiêu đề).
 - **Đơn ĐẾN LẤY**: đơn mang về do chủ quán / nhân viên tạo bằng nút **Qua lấy** hiện ô **ĐẾN LẤY** (khác với **MANG VỀ** khách tự đặt) trên bếp / pha chế và phiếu in.
 - **Hoá đơn trong ngày**: cuối trang Doanh thu hiện **tất cả** hoá đơn của 1 ngày (mặc định hôm nay), mới nhất trên cùng, kèm tổng tiền, tiền mặt, chuyển khoản. Bấm **‹ ›** để lùi/tiến 1 ngày hoặc chọn ngày trên lịch.

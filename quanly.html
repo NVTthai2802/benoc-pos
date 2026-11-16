@@ -219,19 +219,8 @@ const QRS_OLD = [
   { key: 'an', query: '?menu=an', color: 'vang', title: 'Mã QR bếp nóng · menu Ăn vặt', desc: 'Dán ở khu bếp. Khách quét thấy cơm, mì, kimbap, đồ ăn vặt và nước uống của bếp. Đơn về màn hình bếp, bếp thu tiền.', screen: 'bep.html', screenName: 'bếp' },
   { key: 'tra', query: '?menu=tra', color: 'hong', title: 'Mã QR quầy pha chế · menu Trà · Cà phê', desc: 'Dán ở quầy pha chế. Khách quét thấy trà sữa, trà hoa quả, cà phê, matcha. Đơn về màn hình pha chế, quầy pha chế thu tiền.', screen: 'phache.html', screenName: 'pha chế' }
 ];
-const PAY_STEPS = [[1, 'Không làm tròn (giữ số lẻ)'], [100, 'Làm tròn tới 100đ'], [500, 'Làm tròn tới 500đ'], [1000, 'Làm tròn tới 1.000đ']];
-/* Ca/cài đặt có làm tròn giờ công không (round_minutes = 1 hoặc trống nghĩa là tính đúng từng phút) */
-const isExact = r => !r.round_minutes || Number(r.round_minutes) === 1;
-function ruleText(r) {
-  return (isExact(r) ? 'tính đúng từng phút' : 'giờ công ' + MODE[r.round_mode] + ' theo ' + r.round_minutes + ' phút') + ', ' +
-    (Number(r.pay_round) > 1 ? 'tiền làm tròn tới ' + vnd(r.pay_round) : 'tiền giữ số lẻ');
-}
-/* Diễn giải lương một ca đã kết thúc, ví dụ "3 giờ 52 phút × 25.000đ/giờ = 96.667đ → 97.000đ" */
-function payLine(s) {
-  const raw = (s.paid_minutes || 0) * (s.hourly_rate || 0) / 60;
-  const time = isExact(s) ? dur(s.actual_minutes) : dur(s.actual_minutes) + ' → tính ' + dur(s.paid_minutes) + ' (' + MODE[s.round_mode] + ' ' + s.round_minutes + ' phút)';
-  return time + ' × ' + vnd(s.hourly_rate) + '/giờ = ' + (Math.abs(raw - s.pay_amount) >= 0.5 ? vnd(raw) + ' → <b>' + vnd(s.pay_amount) + '</b>' : '<b>' + vnd(s.pay_amount) + '</b>');
-}
+/* Thời gian làm của một ca đã kết thúc (giờ thực tế từ lúc vào tới lúc ra) */
+const shiftMins = s => s.actual_minutes != null ? s.actual_minutes : Math.max(0, Math.round((new Date(s.check_out_at) - new Date(s.check_in_at)) / 60000));
 const PAY = { tien_mat: 'Tiền mặt', chuyen_khoan: 'Chuyển khoản' };
 const PAY_COLOR = { tien_mat: '#E2325C', chuyen_khoan: '#3A7FC2' };
 const ICON_BOWL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1 1-1.5 1-2.5M12 7c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5"/></svg>';
@@ -459,14 +448,14 @@ async function renderInvoices(box) {
   all = list.slice().sort((a, b) => a.paid_at < b.paid_at ? 1 : -1);
   draw();
 }
-/* Xuất báo cáo Excel 1 tháng (doanh thu, món, hoá đơn, kho, nhân viên, lương) */
+/* Xuất báo cáo Excel 1 tháng (doanh thu, món, hoá đơn, kho, giờ làm nhân viên) */
 function openExport() {
   const now = new Date(), ym = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
   let pick = ym(now);
   ui.sheet(ui.head('Xuất báo cáo Excel', 'Báo cáo 1 tháng để tổng hợp cuối tháng') + '<div class="sh-body">' +
     '<div class="chips">' + [[ym(now), 'Tháng này'], [ym(new Date(now.getFullYear(), now.getMonth() - 1, 1)), 'Tháng trước']].map(([v, t]) => '<button class="chipbtn" type="button" data-ym="' + v + '" aria-pressed="' + (v === pick) + '">' + t + ' (' + v.slice(5) + '/' + v.slice(0, 4) + ')</button>').join('') + '</div>' +
     '<label class="field" for="xlsMonth">Hoặc chọn tháng<input id="xlsMonth" type="month" value="' + pick + '" max="' + ym(now) + '"></label>' +
-    '<p class="small muted" style="margin:0">File gồm: Tổng quan (so với tháng trước) · Biểu đồ · Theo ngày · Theo tuần · Theo giờ · Món bán chạy · Ưu đãi · Hoá đơn · Kho hàng · Nhập xuất kho · Nhân viên & lương (tháng này / tháng trước) · Ca làm · Ca làm tháng trước. Mở được bằng Excel, Google Trang tính, WPS trên điện thoại.</p>' +
+    '<p class="small muted" style="margin:0">File gồm: Tổng quan (so với tháng trước) · Biểu đồ · Theo ngày · Theo tuần · Theo giờ · Món bán chạy · Ưu đãi · Hoá đơn · Kho hàng · Nhập xuất kho · Giờ làm nhân viên (tháng này / tháng trước) · Ca làm · Ca làm tháng trước. Mở được bằng Excel, Google Trang tính, WPS trên điện thoại.</p>' +
     '<p class="msg" id="xlsMsg" hidden></p></div><div class="sh-foot"><button class="btn btn-block" type="button" id="xlsGo">Tạo file Excel</button></div>', sh => {
     const setPick = v => { pick = v; $('#xlsMonth', sh).value = v; $$('[data-ym]', sh).forEach(b => b.setAttribute('aria-pressed', b.dataset.ym === v)); };
     sh.addEventListener('click', e => { const b = e.target.closest('[data-ym]'); if (b) setPick(b.dataset.ym); });
@@ -1420,7 +1409,7 @@ function editGroup(g) {
 }
 
 /* =====================================================================
-   NHÂN VIÊN & LƯƠNG (chủ quán)
+   NHÂN VIÊN & GIỜ LÀM (chủ quán)
    ===================================================================== */
 function staffRangeOf(k) {
   const today = startOfDay(new Date());
@@ -1429,18 +1418,16 @@ function staffRangeOf(k) {
   if (k === 'prev') return { from: new Date(today.getFullYear(), today.getMonth() - 1, 1), to: new Date(today.getFullYear(), today.getMonth(), 1), label: 'Tháng trước' };
   return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: addDays(today, 1), label: 'Tháng này' };
 }
-/* Gom lương theo nhân viên cho 1 nhóm ca (chỉ ca đã kết thúc mới có tiền) */
-function payBy(shifts) {
-  const sum = new Map(); let tot = { n: 0, mins: 0, pay: 0, out: 0, unpaid: 0, open: 0 };
+/* Gom giờ làm theo nhân viên cho 1 nhóm ca (ca đang làm dở chưa tính giờ) */
+function hoursBy(shifts) {
+  const sum = new Map(); const tot = { n: 0, mins: 0, open: 0 };
   shifts.forEach(s => {
-    const x = sum.get(s.employee_id) || { id: s.employee_id, name: s.employee_name, n: 0, mins: 0, pay: 0, out: 0, unpaid: 0, unpaidIds: [], open: 0 };
-    if (!s.check_out_at) { x.open++; tot.open++; sum.set(s.employee_id, x); return; }
-    x.n++; x.mins += s.paid_minutes || 0; x.pay += s.pay_amount || 0;
-    if (s.paid_out_at) x.out += s.pay_amount || 0; else { x.unpaid += s.pay_amount || 0; x.unpaidIds.push(s.id); }
+    const x = sum.get(s.employee_id) || { id: s.employee_id, name: s.employee_name, n: 0, mins: 0, open: 0 };
+    if (!s.check_out_at) { x.open++; tot.open++; } else { x.n++; x.mins += shiftMins(s); }
     sum.set(s.employee_id, x);
   });
-  sum.forEach(x => { tot.n += x.n; tot.mins += x.mins; tot.pay += x.pay; tot.out += x.out; tot.unpaid += x.unpaid; });
-  return { list: [...sum.values()].sort((a, b) => b.pay - a.pay || a.name.localeCompare(b.name, 'vi')), tot };
+  sum.forEach(x => { tot.n += x.n; tot.mins += x.mins; });
+  return { list: [...sum.values()].sort((a, b) => b.mins - a.mins || a.name.localeCompare(b.name, 'vi')), tot };
 }
 const mmyyyy = d => String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
 async function renderStaff(main) {
@@ -1449,36 +1436,31 @@ async function renderStaff(main) {
   const from = r.from < m1 ? r.from : m1;
   const [emps, all] = await Promise.all([api.employees(), api.shifts({ from, to: addDays(today, 1) })]);
   const inRange = (s, a, b) => { const t = new Date(s.check_in_at); return t >= a && t < b; };
-  const cur = payBy(all.filter(s => inRange(s, m0, addDays(today, 1)))), prev = payBy(all.filter(s => inRange(s, m1, m0)));
+  const cur = hoursBy(all.filter(s => inRange(s, m0, addDays(today, 1)))), prev = hoursBy(all.filter(s => inRange(s, m1, m0)));
   const shifts = all.filter(s => inRange(s, r.from, r.to));
   const shown = state.shiftEmp ? shifts.filter(s => s.employee_id === state.shiftEmp) : shifts;
-  const prevPay = new Map(prev.list.map(x => [x.id, x.pay]));
-  // So sánh công bằng: tháng này (tới hôm nay) với cùng số ngày đầu tháng trước
-  const sameDay = new Date(m1.getFullYear(), m1.getMonth(), Math.min(today.getDate(), new Date(m0 - 1).getDate()) + 1);
-  const prevSame = payBy(all.filter(s => inRange(s, m1, sameDay))).tot.pay;
-  const diffLine = (a, b) => { if (!b) return a ? 'Cùng kỳ tháng trước: 0đ' : ''; const d = a - b, p = Math.round(d / b * 100); return 'Cùng kỳ tháng trước (01–' + String(sameDay.getDate() - 1).padStart(2, '0') + '/' + String(m1.getMonth() + 1).padStart(2, '0') + '): ' + vnd(b) + ' <b style="color:' + (d >= 0 ? 'var(--ok)' : 'var(--red)') + '">' + (d >= 0 ? '▲ +' : '▼ ') + p + '%</b>'; };
-  const monthBox = (key, title, sub, P, cc, withPrev) => '<section class="box ' + cc + '"><h2 class="box-title"><span>' + title + '</span> <small class="muted" style="font:400 13px/1.3 var(--f-body, inherit)">' + sub + '</small></h2>' +
-    '<div class="paygrid"><div class="stat pay-total"><span>Tổng lương · ' + P.tot.n + ' ca · ' + dur(P.tot.mins) + '</span><b class="num">' + vnd(P.tot.pay) + '</b>' + (withPrev ? '<small>' + diffLine(P.tot.pay, prevSame) + '</small>' : '') + '</div>' +
-    '<div class="stat"><span>Đã trả</span><b class="num" style="color:var(--ok)">' + vnd(P.tot.out) + '</b></div>' +
-    '<div class="stat"><span>Còn phải trả</span><b class="num"' + (P.tot.unpaid ? ' style="color:var(--red)"' : '') + '>' + vnd(P.tot.unpaid) + '</b>' + (P.tot.unpaid || !P.tot.n ? '' : '<small>đã trả đủ</small>') + '</div></div>' +
-    (P.list.length ? '<div class="tbl-wrap"><table class="tbl paytbl"><thead><tr><th>Nhân viên</th><th class="r">Lương</th><th class="r">Còn nợ</th><th></th></tr></thead><tbody>' +
-      P.list.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><span class="small muted num">' + x.n + ' ca · ' + dur(x.mins) + '</span>' + (x.open ? '<br><span class="pill pill-warn">Đang làm</span>' : '') + '</td>' +
-        '<td class="r num"><b>' + vnd(x.pay) + '</b>' + (withPrev ? '<br><span class="small muted">T.trước ' + (prevPay.has(x.id) ? vnd(prevPay.get(x.id)) : '0đ') + '</span>' : '') + '</td>' +
-        '<td class="r num"' + (x.unpaid ? ' style="color:var(--red);font-weight:700"' : '') + '>' + vnd(x.unpaid) + '</td><td class="r">' + (x.unpaidIds.length ? '<button class="btn btn-sm btn-soft" type="button" data-payout="' + key + ':' + esc(x.id) + '">Trả</button>' : x.n ? '<span class="pill pill-ok">Đủ</span>' : '') + '</td></tr>').join('') +
-      '</tbody><tfoot><tr><th>Tổng</th><th class="r num">' + vnd(P.tot.pay) + '</th><th class="r num">' + vnd(P.tot.unpaid) + '</th><th></th></tr></tfoot></table></div>' : '<p class="empty">Chưa có ca nào trong tháng này.</p>') + '</section>';
+  const shownMins = shown.reduce((t, s) => t + (s.check_out_at ? shiftMins(s) : 0), 0), shownDone = shown.filter(s => s.check_out_at).length;
+  const prevMins = new Map(prev.list.map(x => [x.id, x.mins]));
+  const monthBox = (title, sub, P, cc, withPrev) => '<section class="box ' + cc + '"><h2 class="box-title"><span>' + title + '</span> <small class="muted" style="font:400 13px/1.3 var(--f-body, inherit)">' + sub + '</small></h2>' +
+    '<div class="paygrid"><div class="stat"><span>Tổng giờ làm</span><b class="num">' + dur(P.tot.mins) + '</b></div><div class="stat"><span>Số ca</span><b class="num">' + P.tot.n + '</b>' + (P.tot.open ? '<small>+ ' + P.tot.open + ' ca đang làm</small>' : '') + '</div></div>' +
+    (P.list.length ? '<div class="tbl-wrap"><table class="tbl paytbl"><thead><tr><th>Nhân viên</th><th class="r">Số ca</th><th class="r">Tổng giờ</th></tr></thead><tbody>' +
+      P.list.map(x => '<tr><td><b>' + esc(x.name) + '</b>' + (x.open ? '<br><span class="pill pill-warn">Đang làm</span>' : '') + '</td><td class="r num">' + x.n + '</td>' +
+        '<td class="r num"><b>' + dur(x.mins) + '</b>' + (withPrev ? '<br><span class="small muted">T.trước ' + dur(prevMins.get(x.id) || 0) + '</span>' : '') + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><th>Tổng</th><th class="r num">' + P.tot.n + '</th><th class="r num">' + dur(P.tot.mins) + '</th></tr></tfoot></table></div>' : '<p class="empty">Chưa có ca nào trong tháng này.</p>') + '</section>';
   main.innerHTML = '<div class="ptitle"><h1>Nhân viên</h1></div>' +
-    monthBox('cur', 'Lương tháng này · ' + mmyyyy(m0), 'từ 01 tới hôm nay', cur, 'cc-xanhduong', true) +
-    monthBox('prev', 'Lương tháng trước · ' + mmyyyy(m1), 'đã chốt cả tháng', prev, 'cc-tim', false) +
-    '<p class="small muted" style="margin:-4px 2px 14px">Ca thuộc tháng theo ngày vào ca. Ca đang làm dở chưa có tiền, tính khi ra ca. Nút <b>Trả</b> chỉ đánh dấu các ca chưa trả của đúng tháng đó.</p>' +
+    monthBox('Giờ làm tháng này · ' + mmyyyy(m0), 'từ 01 tới hôm nay', cur, 'cc-xanhduong', true) +
+    monthBox('Giờ làm tháng trước · ' + mmyyyy(m1), 'cả tháng', prev, 'cc-tim', false) +
+    '<p class="small muted" style="margin:-4px 2px 14px">Giờ làm tính đúng từ lúc vào ca tới lúc ra ca. Ca thuộc tháng theo ngày vào ca. Ca đang làm dở chưa cộng giờ, cộng khi ra ca.</p>' +
     '<section class="box cc-vang"><div class="ptitle"><h2 class="box-title" style="margin:0"><span>Danh sách nhân viên</span></h2><button class="btn btn-sm" type="button" id="addEmp">+ Thêm nhân viên</button></div><ul class="list">' +
-      emps.map(e => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-emp="' + esc(e.id) + '"><span class="lmain"><span class="lname">' + esc(e.full_name) + (e.is_active ? '' : ' <span class="pill pill-mute">Đã nghỉ</span>') + '</span><span class="lsub num">' + esc(BN.staff.ROLE[e.role]) + (e.phone ? ' · ' + esc(e.phone) : '') + '</span></span><span class="lside num">' + (e.hourly_rate ? vnd(e.hourly_rate) + '/giờ' : '') + '</span></button></li>').join('') + '</ul></section>' +
+      emps.map(e => '<li><button class="lrow" style="grid-template-columns:1fr auto" type="button" data-emp="' + esc(e.id) + '"><span class="lmain"><span class="lname">' + esc(e.full_name) + (e.is_active ? '' : ' <span class="pill pill-mute">Đã nghỉ</span>') + '</span><span class="lsub num">' + esc(BN.staff.ROLE[e.role]) + (e.phone ? ' · ' + esc(e.phone) : '') + '</span></span><span class="lside num"></span></button></li>').join('') + '</ul></section>' +
     '<section class="box cc-cam"><div class="ptitle"><h2 class="box-title" style="margin:0"><span>Các ca làm · ' + esc(r.label.toLowerCase()) + '</span></h2><div class="chips">' + [['week', 'Tuần này'], ['month', 'Tháng này'], ['prev', 'Tháng trước'], ['30d', '30 ngày']].map(([k, t]) => '<button class="chipbtn" type="button" data-srange="' + k + '" aria-pressed="' + (state.staffRange === k) + '">' + t + '</button>').join('') + '</div></div>' +
       '<label class="field" for="shEmp" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:8px">Xem<select id="shEmp" style="width:auto"><option value="">Tất cả</option>' + emps.map(e => '<option value="' + esc(e.id) + '"' + (state.shiftEmp === e.id ? ' selected' : '') + '>' + esc(e.full_name) + '</option>').join('') + '</select></label>' +
-      (shown.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Nhân viên</th><th>Vào – ra</th><th>Ảnh</th><th class="r">Thời gian làm</th><th class="r">Tiền</th><th></th></tr></thead><tbody>' +
+      (shown.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Nhân viên</th><th>Vào – ra</th><th>Ảnh</th><th class="r">Giờ làm</th><th></th></tr></thead><tbody>' +
       shown.map(s => '<tr><td class="num">' + ddmm(s.check_in_at) + '</td><td>' + esc(s.employee_name) + '</td><td class="num">' + hhmm(s.check_in_at) + ' – ' + (s.check_out_at ? hhmm(s.check_out_at) : '<span class="pill pill-warn">Đang làm</span>') + (s.note ? '<br><span class="small muted">' + esc(s.note) + '</span>' : '') + '</td>' +
         '<td><span class="photos">' + [s.check_in_photo, s.check_out_photo].map(ph => ph ? '<span class="ph" data-photo="' + esc(s.id) + '"></span>' : '<span class="ph" title="Không có ảnh"></span>').join('') + '</span></td>' +
-        '<td class="r num">' + (s.check_out_at ? (isExact(s) ? dur(s.actual_minutes) : dur(s.actual_minutes) + ' → <b>' + dur(s.paid_minutes) + '</b>') : '') + '</td><td class="r num">' + (s.check_out_at ? vnd(s.pay_amount) : '') + (s.paid_out_at ? '<br><span class="pill pill-ok">Đã trả</span>' : '') + '</td>' +
-        '<td class="r"><button class="btn btn-sm btn-line" type="button" data-shift="' + esc(s.id) + '">Xem</button></td></tr>').join('') + '</tbody></table></div>' : '<p class="empty">Chưa có ca nào.</p>') + '</section>';
+        '<td class="r num"><b>' + (s.check_out_at ? dur(shiftMins(s)) : '') + '</b></td>' +
+        '<td class="r"><button class="btn btn-sm btn-line" type="button" data-shift="' + esc(s.id) + '">Xem</button></td></tr>').join('') + '</tbody>' +
+        '<tfoot><tr><th colspan="4">Tổng ' + shownDone + ' ca' + (state.shiftEmp ? '' : ' · tất cả nhân viên') + '</th><th class="r num">' + dur(shownMins) + '</th><th></th></tr></tfoot></table></div>' : '<p class="empty">Chưa có ca nào.</p>') + '</section>';
   // Ảnh chấm công: tải đường dẫn xem ảnh (bản thật là đường dẫn có hạn 1 giờ)
   $$('.photos', main).forEach(async (box, i) => {
     const s = shown[i]; if (!s) return;
@@ -1488,103 +1470,44 @@ async function renderStaff(main) {
   $$('[data-srange]', main).forEach(b => b.onclick = () => { state.staffRange = b.dataset.srange; rerender(); });
   $('#shEmp', main).onchange = e => { state.shiftEmp = e.target.value; rerender(); };
   main.onclick = e => {
-    const em = e.target.closest('[data-emp]'), sh = e.target.closest('[data-shift]'), po = e.target.closest('[data-payout]');
+    const em = e.target.closest('[data-emp]'), sh = e.target.closest('[data-shift]');
     if (em) editEmployee(emps.find(x => x.id === em.dataset.emp));
     else if (e.target.closest('#addEmp')) editEmployee(null);
     else if (sh) editShift(all.find(x => x.id === sh.dataset.shift));
-    else if (po) { const [k, id] = po.dataset.payout.split(':'); const x = (k === 'prev' ? prev : cur).list.find(v => v.id === id); payout(x, k === 'prev' ? 'tháng ' + mmyyyy(m1) : 'tháng ' + mmyyyy(m0)); }
   };
 }
-function payout(x, monthLabel) {
-  ui.sheet(ui.head('Trả lương cho ' + esc(x.name), monthLabel ? 'Lương ' + monthLabel : '') + '<div class="sh-body"><p>Đánh dấu <b>' + x.unpaidIds.length + ' ca</b> chưa trả' + (monthLabel ? ' của ' + monthLabel : '') + ' là đã trả, tổng <b class="num">' + vnd(x.unpaid) + '</b>.</p><p class="small muted">Ca đang làm dở không được tính. Bạn trả tiền cho nhân viên trước rồi bấm xác nhận.</p></div>' +
-    '<div class="sh-foot"><button class="btn btn-line" type="button" data-close>Thôi</button><button class="btn grow" type="button" id="poOk">Xác nhận đã trả ' + vnd(x.unpaid) + '</button></div>', sh => {
-    $('#poOk', sh).onclick = async () => { try { await api.markShiftsPaid(x.unpaidIds); ui.close(); ui.toast('Đã ghi nhận trả lương'); rerender(); } catch (err) { ui.toast(errText(err)); } };
-  });
-}
 function editEmployee(e) {
-  const isNew = !e; e = e || { full_name: '', phone: '', role: 'staff', hourly_rate: 25000, is_active: true };
+  const isNew = !e; e = e || { full_name: '', phone: '', role: 'staff', hourly_rate: 0, is_active: true };
   ui.sheet(ui.head(isNew ? 'Thêm nhân viên' : 'Sửa nhân viên') + '<div class="sh-body">' +
     '<label class="field" for="eName">Họ tên <span class="req">*</span><input id="eName" maxlength="60" value="' + esc(e.full_name) + '"></label>' +
     '<div class="grid2"><label class="field" for="ePhone">Số điện thoại (để đăng nhập)<input id="ePhone" inputmode="tel" value="' + esc(e.phone || '') + '"' + (!isNew && !DEMO ? ' disabled' : '') + '></label>' +
     '<label class="field" for="eRole">Vai trò<select id="eRole"><option value="staff"' + (e.role === 'staff' ? ' selected' : '') + '>Nhân viên</option><option value="kitchen"' + (e.role === 'kitchen' ? ' selected' : '') + '>Máy bếp (tài khoản dùng chung ở bếp)</option><option value="bar"' + (e.role === 'bar' ? ' selected' : '') + '>Máy pha chế (tài khoản dùng chung ở quầy pha chế)</option><option value="owner"' + (e.role === 'owner' ? ' selected' : '') + '>Chủ quán</option></select></label></div>' +
-    '<label class="field" for="eRate">Lương mỗi giờ (VNĐ)<input id="eRate" class="num" type="number" min="0" step="1000" value="' + (e.hourly_rate || 0) + '"></label>' +
     (isNew && !DEMO ? '<label class="field" for="ePass">Mật khẩu đăng nhập (ít nhất 6 ký tự)<input id="ePass" type="text" autocomplete="new-password"></label><p class="small muted" style="margin:0">Đưa số điện thoại và mật khẩu này cho nhân viên. Đổi mật khẩu sau này làm trong Supabase (Authentication > Users).</p>' : '') +
     (isNew ? '' : '<label class="switch"><input type="checkbox" id="eActive"' + (e.is_active ? ' checked' : '') + '><span class="track"></span>Đang làm việc (tắt khi nhân viên nghỉ hẳn)</label>') +
-    (isNew ? '' : '<div class="reprice"><label class="switch"><input type="checkbox" id="eRe"><span class="track"></span>Tính lại các ca cũ theo mức lương này</label>' +
-      '<p class="small muted" style="margin:4px 0 0" id="eReOff">Tắt: lương mới chỉ áp dụng cho ca từ nay về sau, ca cũ giữ nguyên. Bật khi bạn quên đổi lương vài buổi.</p>' +
-      '<div id="eReBox" hidden><label class="field" for="eFrom" style="margin-top:8px">Tính lại các ca từ ngày<input id="eFrom" type="date" value="' + isoDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) + '" max="' + isoDay(new Date()) + '"></label><div id="ePrev" class="small"></div></div></div>') +
     '<p class="msg" id="eMsg" hidden></p></div>' +
     '<div class="sh-foot"><button class="btn grow" type="button" id="eSave">' + (isNew ? 'Thêm nhân viên' : 'Lưu') + '</button></div>', sh => {
     $('#eSave', sh).onclick = async () => {
       const msg = $('#eMsg', sh), name = $('#eName', sh).value.trim(); msg.hidden = true;
       if (!name) { msg.textContent = 'Nhập họ tên.'; msg.hidden = false; return; }
       const btn = $('#eSave', sh); btn.disabled = true;
-      const rate = Number($('#eRate', sh).value) || 0, re = $('#eRe', sh) && $('#eRe', sh).checked;
-      let changed = 0;
-      try {
-        if (re) { const pv = await sh._reprice.plan(rate); changed = await api.setShiftRate(pv.ids, rate); }
-      } catch (err) { msg.textContent = errText(err); msg.hidden = false; btn.disabled = false; return; }
-      try { if (re) ui.toast('Đã tính lại ' + changed + ' ca theo lương mới'); await api.saveEmployee(Object.assign({}, e, { full_name: name, phone: $('#ePhone', sh).value.replace(/\D/g, ''), role: $('#eRole', sh).value, hourly_rate: Number($('#eRate', sh).value) || 0, is_active: $('#eActive', sh) ? $('#eActive', sh).checked : true, password: $('#ePass', sh) ? $('#ePass', sh).value : undefined })); ui.close(); ui.toast('Đã lưu'); rerender(); }
+      try { await api.saveEmployee(Object.assign({}, e, { full_name: name, phone: $('#ePhone', sh).value.replace(/\D/g, ''), role: $('#eRole', sh).value, hourly_rate: e.hourly_rate || 0, is_active: $('#eActive', sh) ? $('#eActive', sh).checked : true, password: $('#ePass', sh) ? $('#ePass', sh).value : undefined })); ui.close(); ui.toast('Đã lưu'); rerender(); }
       catch (err) { msg.textContent = errText(err); msg.hidden = false; btn.disabled = false; }
     };
-    if (isNew) return;
-    const reprice = repricer(e, sh);
-    const draw = () => { const on = $('#eRe', sh).checked; $('#eReBox', sh).hidden = !on; $('#eReOff', sh).hidden = on; $('#eSave', sh).textContent = on ? 'Lưu và tính lại lương' : 'Lưu'; if (on) reprice.show(Number($('#eRate', sh).value) || 0); };
-    $('#eRe', sh).onchange = draw; $('#eFrom', sh).onchange = draw; $('#eRate', sh).oninput = () => { if ($('#eRe', sh).checked) draw(); };
-    // Thêm biến dùng trong nút Lưu
-    Object.assign(sh, { _reprice: reprice });
   });
-}
-const isoDay = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-/* Tính trước: những ca nào sẽ đổi khi áp lương mới từ 1 ngày (chỉ ca chưa trả; ca đã trả giữ nguyên) */
-function repricer(e, sh) {
-  let cacheKey = '', cacheList = null;
-  const load = async () => {
-    const v = $('#eFrom', sh).value; if (!v) return [];
-    const [y, m, d] = v.split('-').map(Number); const from = new Date(y, m - 1, d);
-    if (cacheKey !== v) { cacheList = await api.shifts({ employeeId: e.id, from }); cacheKey = v; }
-    return cacheList;
-  };
-  const payAt = (s, rate) => s.paid_minutes == null ? null : Math.round(s.paid_minutes * rate / 60 / Math.max(1, s.pay_round || 1000)) * Math.max(1, s.pay_round || 1000);
-  const plan = async rate => {
-    const list = await load(), todo = list.filter(s => !s.paid_out_at && s.hourly_rate !== rate), paid = list.filter(s => s.paid_out_at && s.hourly_rate !== rate);
-    const done = todo.filter(s => s.check_out_at), old = done.reduce((t, s) => t + (s.pay_amount || 0), 0), neu = done.reduce((t, s) => t + (payAt(s, rate) || 0), 0);
-    const pDiff = paid.filter(s => s.check_out_at).reduce((t, s) => t + (payAt(s, rate) || 0) - (s.pay_amount || 0), 0);
-    return { ids: todo.map(s => s.id), done: done.length, open: todo.length - done.length, old, neu, paid: paid.length, pDiff, total: list.length };
-  };
-  const show = async rate => {
-    const box = $('#ePrev', sh); box.innerHTML = '<span class="muted">Đang tính…</span>';
-    try {
-      const p = await plan(rate), d = p.neu - p.old;
-      box.innerHTML = !p.ids.length && !p.paid ? '<p class="msg" style="margin:6px 0 0">Từ ngày này không có ca nào khác mức ' + vnd(rate) + '/giờ. Không cần tính lại.</p>' :
-        '<div class="msg msg-ok" style="margin:6px 0 0">' + (p.done ? '<b>' + p.done + ' ca chưa trả</b> sẽ tính lại: ' + vnd(p.old) + ' → <b>' + vnd(p.neu) + '</b> (' + (d >= 0 ? '+' : '−') + vnd(Math.abs(d)) + ')' : 'Không có ca chưa trả nào cần tính lại.') +
-        (p.open ? '<br>' + p.open + ' ca đang làm sẽ tính theo mức mới khi ra ca.' : '') + '</div>' +
-        (p.paid ? '<p class="msg" style="margin:6px 0 0;background:#FFF3C4;color:#7A5A00">' + p.paid + ' ca <b>đã đánh dấu trả</b> giữ nguyên. Nếu tính theo mức mới thì ' + (p.pDiff >= 0 ? 'còn thiếu nhân viên' : 'đã trả dư') + ' <b>' + vnd(Math.abs(p.pDiff)) + '</b>. Phần này bạn tự trả bù bên ngoài.</p>' : '');
-    } catch (err) { box.innerHTML = '<p class="msg">' + esc(errText(err)) + '</p>'; }
-  };
-  return { plan, show };
 }
 async function editShift(s) {
   const urls = await Promise.all([s.check_in_photo, s.check_out_photo].map(p => p ? api.photoUrl(p).catch(() => null) : null));
   ui.sheet(ui.head('Ca của ' + esc(s.employee_name), ddmmyyyy(s.check_in_at)) + '<div class="sh-body">' +
     '<div class="pbig">' + ['Ảnh vào ca', 'Ảnh ra ca'].map((t, i) => '<figure>' + (urls[i] ? '<img src="' + esc(urls[i]) + '" alt="' + t + '">' : '<div class="ph">Không có ảnh</div>') + '<figcaption>' + t + ' · ' + (i ? (s.check_out_at ? hhmm(s.check_out_at) : 'chưa ra ca') : hhmm(s.check_in_at)) + '</figcaption></figure>').join('') + '</div>' +
-    (s.check_out_at ? '<p class="msg msg-ok">' + payLine(s) + '<br><span class="small">Quy tắc của ca này: ' + ruleText(s) + '</span></p>' : '') +
+    (s.check_out_at ? '<p class="msg msg-ok">' + hhmm(s.check_in_at) + ' – ' + hhmm(s.check_out_at) + ' · làm <b>' + dur(shiftMins(s)) + '</b></p>' : '') +
     (isOwner() ? '<h3 class="box-title" style="margin:0">Sửa giờ (khi nhân viên quên chấm)</h3><div class="grid2"><label class="field" for="sIn">Giờ vào<input id="sIn" type="datetime-local" value="' + toLocalInput(s.check_in_at) + '"></label><label class="field" for="sOut">Giờ ra<input id="sOut" type="datetime-local" value="' + (s.check_out_at ? toLocalInput(s.check_out_at) : '') + '"></label></div>' +
-      '<label class="field" for="sRate">Lương mỗi giờ của ca này (VNĐ)<input id="sRate" class="num" type="number" min="0" step="1000" value="' + (s.hourly_rate || 0) + '"' + (s.paid_out_at ? ' disabled' : '') + '></label>' +
-      '<p class="small muted" style="margin:-4px 0 0">' + (s.paid_out_at ? 'Ca đã đánh dấu trả nên không đổi lương được. Thiếu thì trả bù bên ngoài.' : 'Sửa khi quên đổi lương cho ca này. Chỉ đổi ca này, không đổi lương của nhân viên.') + '</p>' +
       '<label class="field" for="sNote">Ghi chú<input id="sNote" maxlength="200" value="' + esc(s.note || '') + '"></label><p class="msg" id="sMsg" hidden></p>' : '') + '</div>' +
-    (isOwner() ? '<div class="sh-foot"><button class="btn grow" type="button" id="sSave">Lưu và tính lại lương</button></div>' : ''), sh => {
+    (isOwner() ? '<div class="sh-foot"><button class="btn grow" type="button" id="sSave">Lưu</button></div>' : ''), sh => {
     if (!$('#sSave', sh)) return;
     $('#sSave', sh).onclick = async () => {
       const msg = $('#sMsg', sh), a = $('#sIn', sh).value, b = $('#sOut', sh).value; msg.hidden = true;
       if (!a) { msg.textContent = 'Nhập giờ vào.'; msg.hidden = false; return; }
-      const rate = Number($('#sRate', sh).value);
-      if (!s.paid_out_at && !(rate >= 0)) { msg.textContent = errText({ code: 'BAD_RATE' }); msg.hidden = false; return; }
-      try {
-        await api.updateShift(s.id, new Date(a), b ? new Date(b) : null, $('#sNote', sh).value);
-        if (!s.paid_out_at && rate !== s.hourly_rate) await api.setShiftRate([s.id], rate);
-        ui.close(); ui.toast('Đã lưu, lương đã tính lại'); rerender();
-      }
+      try { await api.updateShift(s.id, new Date(a), b ? new Date(b) : null, $('#sNote', sh).value); ui.close(); ui.toast('Đã lưu giờ ca'); rerender(); }
       catch (err) { msg.textContent = errText(err); msg.hidden = false; }
     };
   }, { wide: true });
@@ -1594,17 +1517,13 @@ async function editShift(s) {
    CHẤM CÔNG (mọi nhân viên)
    ===================================================================== */
 async function renderClock(main) {
-  const [open, mine, cfg] = await Promise.all([api.myOpenShift(), api.myShifts(30), api.settings()]);
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const month = mine.filter(s => new Date(s.check_in_at) >= monthStart && s.check_out_at);
+  const open = await api.myOpenShift();
   const mins = Math.floor(open ? (Date.now() - new Date(open.check_in_at)) / 60000 : 0);
   main.innerHTML = '<div class="ptitle"><h1>Chấm công</h1></div>' +
     '<section class="box cc-cam clock-card" id="clockCard">' + (open
       ? '<span class="state">Bạn đang trong ca</span><span>Vào lúc <b class="num">' + hhmm(open.check_in_at) + '</b> · đã làm <b class="num">' + dur(mins) + '</b></span><label class="btn filebtn" for="shot">Chụp ảnh ra ca<input type="file" accept="image/*" capture="user" id="shot"></label>'
       : '<span class="state">Bạn chưa vào ca</span><span class="muted">Chụp một ảnh mặt bạn tại quán để bắt đầu ca. Giờ được lấy theo máy chủ, không theo điện thoại.</span><label class="btn filebtn" for="shot">Chụp ảnh vào ca<input type="file" accept="image/*" capture="user" id="shot"></label>') +
-    '<span class="small muted">Cách tính lương: ' + ruleText(cfg) + ' · ' + vnd(state.session.employee.hourly_rate || 0) + '/giờ</span><div id="shotArea"></div></section>' +
-    '<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><span>Ca tháng này</span><b class="num">' + month.length + '</b></div><div class="stat"><span>Giờ làm tháng này</span><b class="num">' + dur(month.reduce((s, x) => s + (x.paid_minutes || 0), 0)) + '</b></div><div class="stat"><span>Lương tháng này</span><b class="num">' + vnd(month.reduce((s, x) => s + (x.pay_amount || 0), 0)) + '</b></div></div>' +
-    '<section class="box cc-vang"><h2 class="box-title"><span>Ca gần đây</span></h2>' + (mine.length ? '<ul class="list">' + mine.map(s => '<li><div class="lrow" style="grid-template-columns:1fr auto"><span class="lmain"><span class="lname num">' + ddmm(s.check_in_at) + ' · ' + hhmm(s.check_in_at) + ' – ' + (s.check_out_at ? hhmm(s.check_out_at) : 'đang làm') + '</span><span class="lsub">' + (s.check_out_at ? (isExact(s) ? 'Làm ' + dur(s.actual_minutes) : 'Thực tế ' + dur(s.actual_minutes) + ', tính ' + dur(s.paid_minutes)) : '') + (s.note ? ' · ' + esc(s.note) : '') + '</span></span><span class="lside"><b class="num">' + (s.check_out_at ? vnd(s.pay_amount) : '') + '</b>' + (s.paid_out_at ? '<span class="pill pill-ok">Đã nhận</span>' : s.check_out_at ? '<span class="pill pill-mute">Chưa nhận</span>' : '') + '</span></div></li>').join('') + '</ul>' : '<p class="empty">Chưa có ca nào.</p>') + '</section>';
+    '<div id="shotArea"></div></section>';
   $('#shot', main).onchange = e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     const area = $('#shotArea', main);
@@ -1617,7 +1536,7 @@ async function renderClock(main) {
       try {
         if (open) {
           const s = await api.checkOut(f);
-          main.innerHTML = '<div class="ptitle"><h1>Chấm công</h1></div><section class="box cc-xanhla clock-card"><span class="state">Đã ra ca. Cảm ơn bạn!</span><span>Ca hôm nay: <b class="num">' + hhmm(s.check_in_at) + ' – ' + hhmm(s.check_out_at) + '</b>.</span><span>' + payLine(s) + '</span><span>Lương ca này: <b class="num" style="color:var(--red);font-size:22px">' + vnd(s.pay_amount) + '</b></span><button class="btn btn-line" type="button" id="back">Xong</button></section>';
+          main.innerHTML = '<div class="ptitle"><h1>Chấm công</h1></div><section class="box cc-xanhla clock-card"><span class="state">Đã ra ca. Cảm ơn bạn!</span><span>Ca hôm nay: <b class="num">' + hhmm(s.check_in_at) + ' – ' + hhmm(s.check_out_at) + '</b> · làm <b class="num">' + dur(shiftMins(s)) + '</b>.</span><button class="btn btn-line" type="button" id="back">Xong</button></section>';
           $('#back', main).onclick = rerender;
         } else { await api.checkIn(f); ui.toast('Đã vào ca lúc ' + hhmm(Date.now())); rerender(); }
       } catch (err) { const m = $('#shotMsg', main); m.textContent = errText(err); m.hidden = false; ev.target.disabled = false; ev.target.textContent = open ? 'Xác nhận ra ca' : 'Xác nhận vào ca'; }
@@ -1692,17 +1611,9 @@ async function renderSettings(main) {
   main.innerHTML = '<div class="ptitle"><h1>Cài đặt</h1></div>' +
     '<section class="box cc-nau"><h2 class="box-title"><span>Quán</span></h2><div class="sh-body" style="padding:0">' +
     '<label class="field" for="sName">Tên quán<input id="sName" maxlength="40" value="' + esc(cfg.shop_name) + '"></label>' +
-    '<h3 class="box-title" style="margin:6px 0 0">Tính lương</h3>' +
-    '<p class="small muted" style="margin:0">Mặc định tính đúng từng phút làm việc. Chỉ bật làm tròn giờ công nếu quán muốn.</p>' +
-    '<label class="switch"><input type="checkbox" id="sRoundOn"' + (isExact(cfg) ? '' : ' checked') + '><span class="track"></span>Làm tròn giờ công</label>' +
-    '<div class="grid2" id="sRoundOpts"' + (isExact(cfg) ? ' hidden' : '') + '><label class="field" for="sStep">Làm tròn theo<select id="sStep">' + [5, 10, 15, 30, 60].map(v => '<option value="' + v + '"' + ((isExact(cfg) ? 15 : cfg.round_minutes) === v ? ' selected' : '') + '>' + v + ' phút</option>').join('') + '</select></label>' +
-    '<label class="field" for="sMode">Cách làm tròn<select id="sMode">' + Object.keys(MODE).map(k => '<option value="' + k + '"' + (cfg.round_mode === k ? ' selected' : '') + '>' + MODE[k].replace(/^./, c => c.toUpperCase()) + '</option>').join('') + '</select></label></div>' +
-    '<label class="field" for="sPay">Tiền lương mỗi ca bị lẻ<select id="sPay">' + PAY_STEPS.map(([v, t]) => '<option value="' + v + '"' + (Number(cfg.pay_round || 1000) === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>' +
-    '<p class="msg msg-ok" id="sEx"></p>' +
     '<div class="grid2"><label class="field" for="sCap">Số đơn bếp làm cùng lúc<input id="sCap" type="number" min="1" max="10" value="' + cfg.kitchen_capacity + '"></label>' +
     '<label class="field" for="sBar">Số đơn quầy pha chế làm cùng lúc<input id="sBar" type="number" min="1" max="10" value="' + (cfg.bar_capacity || 2) + '"></label></div>' +
     '<p class="small muted" style="margin:0">Hai số này dùng để ước tính thời gian chờ báo cho khách.</p>' +
-    '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo · iPhone)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán (hoặc gõ lưng iPhone bằng Phím tắt) → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
     (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
@@ -1717,17 +1628,10 @@ async function renderSettings(main) {
       '<div class="qr-grid" id="qrGrid"></div>' +
       (DEMO ? '<p class="small muted" style="margin:0">Bản xem thử: khi đưa trang lên mạng, mã sẽ tự trỏ tới địa chỉ thật.</p>' : '') + '</section>' +
     (DEMO ? '<section class="box"><h2 class="box-title">Dữ liệu xem thử</h2><p class="muted" style="margin-top:0">Đưa mọi thứ về như lúc đầu: menu, đơn, ca làm.</p><button class="btn btn-danger" type="button" id="reset">Xoá dữ liệu xem thử</button>' + confirmBox('Xoá toàn bộ thay đổi trong bản xem thử?', 'Xoá và tải lại', 'resetBox') + '</section>' : '');
-  const readRule = () => ({ round_minutes: $('#sRoundOn', main).checked ? Number($('#sStep', main).value) : 1, round_mode: $('#sMode', main).value, pay_round: Number($('#sPay', main).value) });
-  const ex = () => {
-    const r = readRule(); $('#sRoundOpts', main).hidden = !$('#sRoundOn', main).checked;
-    const shift = m => { const pm = applyRounding(m, r.round_minutes, r.round_mode); return Object.assign({ actual_minutes: m, paid_minutes: pm, hourly_rate: 25000, pay_amount: BN.roundMoney(pm * 25000 / 60, r.pay_round) }, r); };
-    $('#sEx', main).innerHTML = 'Ví dụ với lương 25.000đ/giờ:<br>• ' + payLine(shift(232)) + '<br>• ' + payLine(shift(248));
-  };
-  ex(); ['#sRoundOn', '#sStep', '#sMode', '#sPay'].forEach(id => { $(id, main).onchange = ex; });
   $('#sBot', main).onclick = () => openFbSettings(cfg);
   $('#sSave', main).onclick = async e => {
     e.target.disabled = true;
-    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1), bar_capacity: Math.max(1, Number($('#sBar', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
+    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: cfg.round_minutes, round_mode: cfg.round_mode, pay_round: cfg.pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1), bar_capacity: Math.max(1, Number($('#sBar', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
     catch (err) { ui.toast(errText(err)); }
     e.target.disabled = false;
   };
