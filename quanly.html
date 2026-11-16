@@ -1649,15 +1649,67 @@ function bankBoxHtml(cfg) {
     '<div class="bank-prev"><div id="bkQr" class="bank-qr"><p class="loading">Đang tạo mã…</p></div><p class="small muted" style="margin:6px 0 0">Mã thử 10.000đ cho đơn bàn 15. Mở app ngân hàng quét thử để chắc đúng tên chủ tài khoản (không cần chuyển).</p></div></div>' +
     '<p class="small muted" style="margin:10px 0 0">Màn hình quầy (Thu tiền → QR chuyển khoản) và điện thoại khách dùng tài khoản này.' + (BN.FEATURES.vietqr ? '' : ' <b>Mã QR đang tắt ở quán thật</b>, lưu trước để khi bật là dùng được.') + '</p></section>';
 }
+/* ---------- SePay: tự biết khách đã chuyển khoản ---------- */
+const SEPAY_URL = location.origin + '/api/sepay' + (window.BENOC_ENV === 'test' ? '-test' : '');
+const TXN_ST = { da_khop: ['Đã khớp đơn', 'pill-ok'], thieu_tien: ['Thiếu tiền', 'pill-warn'], chua_khop: ['Chưa khớp', 'pill-red'], don_da_thu: ['Đơn đã thu trước', 'pill-warn'] };
+function sepayBoxHtml() {
+  const copyRow = (id, label, val, extra) => '<label class="field" for="' + id + '">' + label + '<div class="row" style="gap:6px;flex-wrap:nowrap"><input id="' + id + '" class="num" readonly value="' + esc(val) + '" style="flex:1;min-width:0"><button class="btn btn-sm btn-line" type="button" data-copy="' + id + '">Chép</button>' + (extra || '') + '</div></label>';
+  return '<section class="box cc-xanhla" id="sepayBox"><h2 class="box-title"><span>Tự xác nhận chuyển khoản (SePay)</span></h2>' +
+    '<p class="small muted" style="margin:0 0 8px">Khách quét mã QR của đơn và chuyển khoản → SePay báo về → đơn tự chuyển sang <b>Đã thu · Chuyển khoản</b>, màn hình bếp / pha chế báo "Đã nhận tiền". Nút <b>Đã nhận chuyển khoản</b> vẫn dùng được khi cần.</p>' +
+    copyRow('spUrl', 'Đường dẫn gọi đến (WebHooks URL)', SEPAY_URL) +
+    copyRow('spKey', 'Khoá API', '••••••••', '<button class="btn btn-sm btn-line" type="button" id="spShow">Hiện</button>') +
+    '<p class="msg" id="spMsg" hidden></p>' +
+    '<details class="small" style="margin:6px 0 10px"><summary><b>Cách cài trên SePay</b> (chủ quán làm một lần)</summary><ol style="margin:6px 0 0;padding-left:18px;line-height:1.6">' +
+    '<li>Chủ quán đăng ký tài khoản tại <b>my.sepay.vn</b> và liên kết tài khoản ngân hàng nhận tiền của quán.</li>' +
+    '<li>Vào <b>Tích hợp WebHooks → Thêm WebHooks</b>: Sự kiện <b>Có tiền vào</b>; Gọi đến URL: dán <b>đường dẫn</b> ở trên; Kiểu chứng thực: <b>API Key</b>, dán <b>khoá API</b> ở trên; Request content type: <b>application/json</b>; Bỏ qua nếu không có code thanh toán: <b>Không</b>.</li>' +
+    '<li>Lưu, rồi chuyển thử một khoản nhỏ bằng mã QR của một đơn thật. Giao dịch hiện ở bảng dưới, đơn tự chuyển sang Đã thu.</li></ol>' +
+    '<p style="margin:6px 0 0">Đổi khoá API thì phải dán khoá mới vào SePay. Mã thanh toán của đơn là <b>BN</b> + 6 ký tự, luôn đứng đầu nội dung chuyển khoản. Khách xoá mã khi chuyển thì đơn không tự khớp, nhân viên bấm tay như cũ.</p></details>' +
+    '<div class="row" style="justify-content:space-between;align-items:center"><b>Tiền vào gần đây</b><button class="btn btn-sm btn-line" type="button" id="spReload">Tải lại</button></div>' +
+    '<div id="spTxns" class="small"><p class="loading">Đang tải…</p></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn btn-sm btn-line" type="button" id="spReset">Đổi khoá API</button></div>' +
+    confirmBox('Đổi khoá API? Phải dán khoá mới vào SePay, nếu không máy sẽ không tự nhận tiền nữa.', 'Đổi khoá', 'spResetBox') + '</section>';
+}
+function wireSepayBox(main) {
+  const box = $('#sepayBox', main); if (!box) return;
+  let key = '';
+  const msg = (t, bad) => { const m = $('#spMsg', box); m.textContent = t; m.hidden = !t; m.className = 'msg' + (bad ? ' bad' : ''); };
+  const need36 = e => /bank_txns|get_sepay_key|sepay|does not exist|schema cache|PGRST/i.test(String(e && (e.message || e.code || e)));
+  const loadKey = async () => {
+    try { key = await api.getSepayKey(); $('#spKey', box).value = '••••••••••••'; }
+    catch (e) { $('#spKey', box).value = ''; msg(need36(e) ? 'Cơ sở dữ liệu chưa chạy cập nhật SQL số 36 (SePay). Chạy file sql/cap-nhat-36-sepay-tu-xac-nhan-chuyen-khoan.sql trên Supabase rồi tải lại trang.' : 'Không lấy được khoá: ' + errText(e), true); }
+  };
+  const loadTxns = async () => {
+    const el = $('#spTxns', box);
+    try {
+      const rows = await api.bankTxns(20) || [];
+      el.innerHTML = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th class="r">Số tiền</th><th>Nội dung</th><th>Kết quả</th></tr></thead><tbody>' + rows.map(r => {
+        const st = TXN_ST[r.status] || [r.status, 'pill-mute'];
+        return '<tr><td class="num">' + BN.hhmm(r.txn_at || r.created_at) + ' ' + new Date(r.txn_at || r.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) + '</td><td class="r num">' + Number(r.amount).toLocaleString('vi-VN') + 'đ</td><td>' + esc(r.content || '') + '</td><td><span class="pill ' + st[1] + '">' + esc(st[0]) + '</span>' + (r.note ? '<br><span class="muted">' + esc(r.note) + '</span>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">Chưa có giao dịch nào SePay báo về.</p>';
+    } catch (e) { el.innerHTML = '<p class="muted">' + (need36(e) ? 'Chưa chạy cập nhật SQL số 36.' : 'Không tải được: ' + esc(errText(e))) + '</p>'; }
+  };
+  box.addEventListener('click', async e => {
+    const c = e.target.closest('[data-copy]');
+    if (c) { const inp = $('#' + c.dataset.copy, box), v = c.dataset.copy === 'spKey' ? key : inp.value; if (!v) return;
+      try { await navigator.clipboard.writeText(v); ui.toast('Đã chép'); } catch (err) { inp.value = v; inp.select(); ui.toast('Bấm giữ để chép'); } return; }
+    if (e.target.id === 'spShow') { const inp = $('#spKey', box), on = e.target.textContent === 'Hiện'; inp.value = on ? key : '••••••••••••'; e.target.textContent = on ? 'Ẩn' : 'Hiện'; return; }
+    if (e.target.id === 'spReload') { loadTxns(); return; }
+  });
+  wireConfirm(box, '#spReset', 'spResetBox', async () => {
+    key = await api.resetSepayKey(); $('#spKey', box).value = key; $('#spShow', box).textContent = 'Ẩn'; $('#spResetBox', box).hidden = true;
+    msg('Đã đổi khoá. Dán khoá mới vào WebHooks trên SePay.');
+  });
+  loadKey(); loadTxns();
+}
 function wireBankBox(main, cfg) {
   const read = () => { const sel = $('#bkBank', main).value, other = sel === 'other', bk = BN.BANKS.find(x => x[0] === sel);
     return { bin: other ? $('#bkBin', main).value.replace(/\D/g, '') : sel, bank: other ? $('#bkName', main).value.trim() : bk[1], account: $('#bkAcc', main).value.replace(/[^0-9A-Za-z]/g, ''), holder: BN.qrInfo($('#bkHolder', main).value).slice(0, 50), note: $('#bkNote', main).value.trim() || BN.NOTE_DEFAULT }; };
   /* Ví dụ nội dung thật cho 3 kiểu đơn; ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự */
   const EX = [['Ăn tại quán', { dine_type: 'tai_quan', queue_number: 15, customer_name: 'Minh', id: 'a1b2c3d4' }], ['Mang về', { dine_type: 'mang_ve', customer_name: 'Thảo Vy', id: '9f3e77aa' }], ['Giao hàng', { dine_type: 'giao_hang', customer_name: 'Lan', id: '5c0d1e2f' }]];
   const paintEx = () => { const tpl = $('#bkNote', main).value.trim() || BN.NOTE_DEFAULT, raw = t => BN.fold(t).toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-    $('#bkEx', main).innerHTML = EX.map(([k, o]) => { const full = raw(tpl.replace(/\{ban\}/gi, o.dine_type === 'giao_hang' ? 'GIAO' : o.dine_type === 'mang_ve' ? 'MV' : 'SO ' + o.queue_number).replace(/\{ten\}/gi, o.customer_name).replace(/\{ma\}/gi, o.id.slice(0, 4))), cut = full.length > 25;
+    $('#bkEx', main).innerHTML = EX.map(([k, o]) => { const full = BN.payCode(o.id) + ' ' + raw(tpl.replace(/\{ban\}/gi, o.dine_type === 'giao_hang' ? 'GIAO' : o.dine_type === 'mang_ve' ? 'MV' : 'SO ' + o.queue_number).replace(/\{ten\}/gi, o.customer_name).replace(/\{ma\}/gi, o.id.slice(0, 4))), cut = full.length > 25;
       return '<div><span class="small muted">' + k + ':</span> <b class="num">' + esc(BN.qrNoteFor(o, tpl)) + '</b>' + (cut ? ' <span class="pill pill-red">dài quá, bị cắt ' + (full.length - 25) + ' ký tự</span>' : '') + '</div>'; }).join('') +
-      '<p class="small muted" style="margin:2px 0 0">App ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự. Tên khách giúp đối chiếu đúng đơn trong sao kê.</p>'; };
+      '<p class="small muted" style="margin:2px 0 0">App ngân hàng chỉ nhận chữ không dấu, tối đa 25 ký tự. <b>BN…</b> ở đầu là mã thanh toán của đơn (máy dùng để tự nhận tiền), luôn có sẵn. Tên khách giúp đối chiếu trong sao kê.</p>'; };
   let t = null;
   const draw = () => { clearTimeout(t); t = setTimeout(async () => {
     const b = read(), box = $('#bkQr', main); if (!box) return;
@@ -1708,7 +1760,7 @@ async function renderSettings(main) {
     '<p class="small muted" style="margin:0">Cách tính lương mới áp dụng cho các ca kết thúc từ lúc lưu. Ca cũ giữ nguyên cách tính lúc đó.</p>' +
     '<div class="row"><button class="btn" type="button" id="sSave">Lưu cài đặt</button></div></div></section>' +
     '<section class="box cc-xanhduong"><h2 class="box-title"><span>Bot lên đơn (Zalo · iPhone)</span></h2><p style="margin:0 0 10px">Chụp màn hình đoạn chat đặt món với khách, gửi cho bot Zalo của quán (hoặc gõ lưng iPhone bằng Phím tắt) → đơn vào thẳng bếp / pha chế với nhãn <b>ĐƠN ONLINE</b>.</p><div class="row"><button class="btn btn-line" type="button" id="sBot">Cài đặt bot</button></div></section>' +
-    (BN.FEATURES.vietqr ? bankBoxHtml(cfg) : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
+    (BN.FEATURES.vietqr ? bankBoxHtml(cfg) + sepayBoxHtml() : '') + // QR đang tắt ở quán thật thì ẩn luôn phần cài tài khoản
     '<section class="box cc-vang"><h2 class="box-title"><span>Mã QR chung (khách tự điền số)</span></h2>' +
       '<p style="margin:0 0 10px">Một mã dùng cho mọi chỗ ngồi. Khách quét, tự nhập số thẻ ở bàn (hoặc chọn mang về) rồi gọi cả đồ ăn và đồ uống. Mã này vẫn dùng được song song với mã theo bàn.</p>' +
       '<p class="small muted" style="margin:0 0 10px">Mỗi lần quét, khách có ' + (BN.CONFIG.ORDER_SESSION_MINUTES || 30) + ' phút để gửi đơn; hết giờ phải quét lại (chống gọi món khi đã về nhà). Mã đã in vẫn dùng được, không cần in lại.</p>' +
@@ -1734,7 +1786,7 @@ async function renderSettings(main) {
     catch (err) { ui.toast(errText(err)); }
     e.target.disabled = false;
   };
-  if (BN.FEATURES.vietqr) wireBankBox(main, cfg);
+  if (BN.FEATURES.vietqr) { wireBankBox(main, cfg); wireSepayBox(main); }
   if ($('#reset', main)) {
     const box = $('#resetBox', main);
     $('#reset', main).onclick = () => { box.hidden = false; };
