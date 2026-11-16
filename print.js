@@ -59,94 +59,95 @@ function wrap(ctx, text, maxW) {
 /* o: đơn; items: món của nơi này; extra: { minutes, station, reprint } */
 function ticketCanvas(o, items, extra, set) {
   set = set || get(); extra = extra || {};
-  const W = DOTS[set.width] || 384, pad = 8, k = W / 384 * (set.big ? 1.12 : 1), IW = W - pad * 2;
+  // Lề hai bên rộng hơn (giấy cuộn nhỏ, đầu in hay mờ ở mép), chữ nhỏ lại, dòng thưa hơn cho dễ đọc
+  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1), IW = W - pad * 2, LH = 1.42;
   const F = (px, b) => (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   const ops = []; let y = pad;
-  const text = (t, px, bold, align, gap, inv) => { ctx.font = F(px, bold); wrap(ctx, t, IW - (inv ? 16 * k : 0)).forEach(l => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: align || 'left', inv }); y += px * k * 1.28; }); y += (gap || 0) * k; };
-  const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
-  const pair = (l, r, px, bold) => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, bold), y: y + px * k, align: 'right' }); y += px * k * 1.32; };
-  // Khối chữ trắng nền đen (số bàn, trạng thái tiền): đứng xa vẫn đọc được
-  const band = (t, px) => { const h = px * k * 1.5; ops.push({ band: true, y, h }); ctx.font = F(px, true); [].concat(t).flatMap(x => wrap(ctx, x, IW - 16 * k)).forEach((l, n) => { if (n) { y += px * k * 1.28; ops.push({ band: true, y: y, h: px * k * 1.3 }); } ops.push({ t: l, font: F(px, true), y: y + px * k * 1.12, align: 'center', inv: true }); }); y += h + 6 * k; };
+  const put = (t, px, bold, align, x) => ops.push({ t, font: F(px, bold), y: y + px * k, align: align || 'left', x });
+  const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, IW).forEach(l => { put(l, px, bold, align); y += px * k * LH; }); y += (gap || 0) * k; };
+  const rule = (dash) => { y += 4 * k; ops.push({ rule: true, y: Math.round(y), dash }); y += 10 * k; };
+  const gap = n => { y += n * k; };
+  // Hai cột trái / phải; không đủ chỗ thì số tiền xuống dòng dưới (không đè chữ)
+  const pair = (l, r, px, bold) => {
+    ctx.font = F(px, bold); const fit = ctx.measureText(l).width + ctx.measureText(r).width + 12 * k <= IW;
+    put(l, px, bold, 'left'); if (!fit) { y += px * k * LH; } put(r, px, bold, 'right'); y += px * k * LH;
+  };
   const lineAmt = i => i.amount != null ? i.amount : (i.unit_price || 0) * i.qty;
 
   /* ===== PHẦN BẾP: nơi ăn, khách, giờ ===== */
-  text('BÉ NỐC', 22, true, 'center', 2);
+  text('BÉ NỐC', 18, true, 'center', 2);
   const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
   const at2 = o.deliver_at ? ' ' + hhmm(o.deliver_at) : '';
   const where = isDelivery(o) ? 'GIAO' + (at2 || ' HÀNG') : o.pickup ? 'ĐẾN LẤY' + at2 : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'BÀN ' + o.queue_number;
-  band(where, 40);
-  if (o.source === 'fb') text('ĐƠN ONLINE', 22, true, 'center', 2);
-  if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
-  const who = [o.customer_name, o.customer_phone].filter(Boolean).join(' · ');
-  if (who) text(who, 28, true, 'center');
-  text('Đặt ' + hhmm(o.created_at) + '  ·  Nhận ' + hhmm(Date.now()) + (extra.reprint ? '  ·  IN LẠI' : ''), 20, false, 'center', 2);
-  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 22, true, 'center', 2);
+  text(where, 36, true, 'center', 2);
+  if (o.source === 'fb') text('ĐƠN ONLINE', 20, true, 'center');
+  if (isDelivery(o) && o.address) text(o.address, 20, true, 'center');
+  if (o.customer_name) text(o.customer_name, 26, true, 'center');
+  if (o.customer_phone) text(o.customer_phone, 20, true, 'center');
+  text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · IN LẠI' : ''), 18, false, 'center');
+  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 20, true, 'center');
   rule(false);
 
-  /* ===== MÓN: số lượng to bên trái, tên món, tiền bên phải; tuỳ chọn thụt vào ===== */
+  /* ===== MÓN: số lượng bên trái, tên món, tiền bên phải; tuỳ chọn thụt vào ===== */
   let lastGroup = null, count = 0;
   items.forEach((i, idx) => {
-    if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 20, true, 'left', 2);
+    if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 18, true, 'left', 2);
     lastGroup = i.promo_group || null; count += i.qty;
     const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
     const amt = lineAmt(i), price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
-    ctx.font = F(30, true); const qw = ctx.measureText('9x ').width;
-    ctx.font = F(22, true); const pw = ctx.measureText(price).width + 8 * k;
-    ctx.font = F(30, true);
-    const name = i.item_name + (sz ? ' · ' + sizeText(sz) : '');
-    wrap(ctx, name, IW - qw - pw).forEach((l, n) => {
-      if (n === 0) { ops.push({ t: i.qty + 'x', font: F(30, true), y: y + 30 * k, align: 'left' }); ops.push({ t: price, font: F(22, true), y: y + 30 * k, align: 'right' }); }
-      ops.push({ t: l, font: F(30, true), y: y + 30 * k, align: 'left', x: pad + qw });
-      y += 30 * k * 1.26;
+    ctx.font = F(26, true); const qw = ctx.measureText('9x ').width;
+    ctx.font = F(20, true); const pw = ctx.measureText(price).width + 10 * k;
+    ctx.font = F(26, true);
+    wrap(ctx, i.item_name + (sz ? ' · ' + sizeText(sz) : ''), IW - qw - pw).forEach((l, n) => {
+      if (n === 0) { put(i.qty + 'x', 26, true, 'left'); ops.push({ t: price, font: F(20, true), y: y + 26 * k, align: 'right' }); }
+      put(l, 26, true, 'left', pad + qw); y += 26 * k * 1.32;
     });
-    const indent = s => ops.push({ t: s.t, font: F(s.px, s.b), y: y + s.px * k, align: 'left', x: pad + qw }) && (y += s.px * k * 1.28);
+    const sub = (t, px, b) => { ctx.font = F(px, b); wrap(ctx, t, IW - qw).forEach(l => { put(l, px, b, 'left', pad + qw); y += px * k * LH; }); };
     const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
     const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
-    ctx.font = F(22, false);
-    if (rest.length) wrap(ctx, rest.join(', '), IW - qw).forEach(t => indent({ t, px: 22 }));
-    ctx.font = F(24, true);
-    if (tops.length) wrap(ctx, tops.join('  '), IW - qw).forEach(t => indent({ t, px: 24, b: true }));
-    if (i.note) wrap(ctx, '* ' + i.note, IW - qw).forEach(t => indent({ t, px: 24, b: true }));
-    if (i.qty > 1 && amt) { ops.push({ t: i.qty + ' x ' + money(amt / i.qty), font: F(18, false), y: y + 18 * k, align: 'right' }); y += 18 * k * 1.28; }
-    y += (idx < items.length - 1 ? 8 : 2) * k;
+    if (rest.length) sub(rest.join(', '), 20, false);
+    if (tops.length) sub(tops.join('  '), 20, true);
+    if (i.note) sub('* ' + i.note, 20, true);
+    if (i.qty > 1 && amt) { put(i.qty + ' x ' + money(amt / i.qty), 17, false, 'right'); y += 17 * k * LH; }
+    gap(idx < items.length - 1 ? 10 : 2);
   });
-  if (o.note) { rule(true); text('GHI CHÚ: ' + o.note, 24, true, 'left', 2); }
+  if (o.note) { rule(true); text('GHI CHÚ: ' + o.note, 20, true, 'left'); }
 
   /* ===== PHẦN TIỀN ===== */
   rule(false);
   const sum = items.reduce((t, i) => t + lineAmt(i), 0);
   const total = o.total != null ? o.total : sum, paid = o.paid_amount || 0, due = Math.round(total - paid);
-  if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 22);
-  pair(total !== sum ? 'TỔNG ĐƠN' : 'TỔNG (' + count + ' món)', money(total), 30, true);
-  if (o.paid_amount != null && paid > 0 && paid < total) { pair('Đã trả', money(paid), 22); }
-  y += 4 * k;
+  if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 20);
+  pair(total !== sum ? 'TỔNG ĐƠN' : 'TỔNG (' + count + ' món)', money(total), 26, true);
+  if (o.paid_amount != null && paid > 0 && paid < total) pair('Đã trả', money(paid), 20);
+  gap(4);
   const how = o.paid_method === 'chuyen_khoan' ? 'Chuyển khoản' : o.paid_method === 'tien_mat' ? 'Tiền mặt' : '';
-  band(o.paid_amount == null || paid <= 0 ? 'CHƯA THANH TOÁN' : paid >= total ? ['ĐÃ THANH TOÁN'].concat(how ? [how] : []) : 'CÒN THU ' + money(due), 24);
+  if (o.paid_amount == null || paid <= 0) text('CHƯA THANH TOÁN', 24, true, 'center');
+  else if (paid >= total) { text('ĐÃ THANH TOÁN', 24, true, 'center'); if (how) text(how, 20, true, 'center'); }
+  else text('CÒN THU ' + money(due), 24, true, 'center');
 
   /* ===== MÃ QR: chỉ khi còn phải thu, đúng số tiền còn thu của cả đơn ===== */
   const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
   if (qm) {
-    y += 2 * k;
-    text('Quét mã để chuyển khoản ' + money(due), 22, true, 'center', 4);
-    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(IW, 250 * k) / n)), size = cell * n;
-    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
+    rule(true);
+    text('Quét mã chuyển khoản ' + money(due), 20, true, 'center', 6);
+    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)), size = cell * n;
+    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 10 * k;
     const B = BN.BANK;
-    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 18, true, 'center', 2);
+    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 17, true, 'center');
   }
-  y += 4 * k;
-  text('Cảm ơn bạn, hẹn gặp lại!', 20, false, 'center');
-  y += 14 * k; // chừa chút giấy để xé
+  gap(6);
+  text('Cảm ơn bạn, hẹn gặp lại!', 18, false, 'center');
+  y += 6 * k;
 
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
     if (op.qr) { op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + c * op.cell, op.y + r * op.cell, op.cell, op.cell); })); return; }
-    if (op.band) { ctx.fillStyle = '#000'; ctx.fillRect(pad, op.y, IW, op.h); return; }
-    if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [8, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
-    ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = op.inv ? '#fff' : '#000';
+    if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [6, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
+    ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
     ctx.fillText(op.t, op.x != null ? op.x : op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
-    ctx.fillStyle = '#000';
   });
   return cv;
 }
@@ -178,7 +179,7 @@ function escpos(cv, copies) {
   const out = [0x1B, 0x40]; // ESC @ khởi động
   for (let c = 0; c < (copies || 1); c++) {
     for (let i = 0; i < body.length; i++) out.push(body[i]);
-    out.push(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x42, 0x00); // đẩy giấy 3 dòng + cắt (máy không có dao cắt thì bỏ qua)
+    out.push(0x1B, 0x64, 0x04); // đẩy giấy 4 dòng để xé (không gửi lệnh cắt: máy không có dao in ra chữ rác)
   }
   return new Uint8Array(out);
 }
@@ -403,6 +404,11 @@ function bleSend(k, u8) {
     const slow = b.ch.writeValueWithResponse ? x => b.ch.writeValueWithResponse(x) : x => b.ch.writeValue(x); // Bluefy: writeValue
     // Gửi nhanh: liền nhiều gói không chờ xác nhận, cứ 8 gói chờ 1 lần để máy in kịp nhận (không tràn bộ nhớ)
     const fast = b.ch.properties.writeWithoutResponse && b.ch.writeValueWithoutResponse && store.get('bleFast', true) ? x => b.ch.writeValueWithoutResponse(x) : null;
+    if (k === 'phieu') {
+      // Phiếu: gói nhỏ, chờ xác nhận từng gói, nghỉ chút cho máy in kịp đốt giấy (phiếu dài / mã QR hay bị rơi chữ cuối phiếu)
+      for (let i = 0; i < u8.length; i += 120) { await slow(u8.slice(i, i + 120)); await sleep(18); }
+      return;
+    }
     for (let i = 0, n = 0; i < u8.length; i += 180, n++) {
       const part = u8.slice(i, i + 180);
       if (fast && n % 8 !== 7 && i + 180 < u8.length) await fast(part); else await slow(part);
