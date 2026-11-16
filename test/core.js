@@ -1496,7 +1496,7 @@ function testGuide() {
     '<li>Mỗi nơi bấm Ra món, rồi ở tab <b>Chờ thanh toán</b> của chính nơi đó bấm Thanh toán: bếp thu đơn cơm, quầy pha chế thu đơn Bạc xỉu.</li>' +
     '<li><b>Khách:</b> đơn chuyển sang Đã thanh toán.</li>' +
     '<li><b>Chủ quán:</b> Doanh thu, chọn Hôm nay để thấy đơn vừa thu. Vào Menu, gạt một món sang Hết món hoặc đổi ảnh món, rồi sang vai Khách kiểm tra.</li>' +
-    '<li><b>Nhân viên:</b> Chấm công, chụp ảnh vào ca, lát sau chụp ảnh ra ca để xem lương được tính.</li>' +
+    '<li><b>Nhân viên:</b> Chấm công, chụp ảnh vào ca, lát sau chụp ảnh ra ca. Chủ quán xem giờ làm ở tab Nhân viên.</li>' +
     '</ol><p class="small muted" style="margin:0">Trên một máy sẽ không nghe chuông báo đơn mới vì lúc đó bạn đang ở trang khác. Khi dùng thật, màn hình bếp chạy riêng trên máy bếp nên sẽ kêu.</p>' +
     '<div class="inline-test-reset"><button class="btn btn-danger btn-sm" type="button" id="tgReset">Xoá dữ liệu test, làm lại từ đầu</button>' +
     '<div class="msg" id="tgConfirm" hidden><p style="margin:0 0 8px">Xoá mọi đơn, ca làm và thay đổi menu đã thử?</p><div class="row"><button class="btn btn-sm btn-danger" type="button" id="tgYes">Xoá</button><button class="btn btn-sm btn-line" type="button" id="tgNo">Thôi</button></div></div></div></div>',
