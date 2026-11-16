@@ -161,7 +161,9 @@ const BAND = 24;
 function escpos(cv, copies) {
   const b = bits(cv), bw = b.bw, H = b.H;
   const right = r => { for (let c = bw - 1; c >= 0; c--) if (b.data[r * bw + c]) return c + 1; return 0; }; // số byte tới chấm đen cuối hàng
-  const feed = (out, n) => { while (n > 0) { const s = Math.min(255, n); out.push(0x1B, 0x4A, s); n -= s; } }; // ESC J n: đẩy giấy n chấm
+  // Khoảng trắng: gửi ảnh trắng rộng 1 byte (1 byte / hàng) thay cho ESC J — máy MPT-II đẩy giấy bằng ESC J bị hụt
+  // nên các dòng chữ dính vào nhau. In ảnh thì máy đi giấy đúng từng chấm.
+  const feed = (out, n) => { while (n > 0) { const h = Math.min(BAND * 4, n); out.push(0x1D, 0x76, 0x30, 0x00, 1, 0, h & 255, h >> 8); for (let i = 0; i < h; i++) out.push(0); n -= h; } };
   const body = [];
   let blank = 0;
   for (let y = 0; y < H;) {
