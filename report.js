@@ -1,7 +1,7 @@
 /* =====================================================================
    BÁO CÁO EXCEL THÁNG — tạo ngay trên trình duyệt (thư viện ExcelJS)
    Các trang: Tổng quan · Biểu đồ · Theo ngày · Theo tuần · Theo giờ · Món bán chạy · Ưu đãi ·
-              Hoá đơn · Kho hàng · Nhập xuất kho · Nhân viên & lương · Ca làm · Ca làm tháng trước
+              Hoá đơn · Kho hàng · Nhập xuất kho · Giờ làm nhân viên · Ca làm · Ca làm tháng trước
    Số tổng dùng công thức Excel (SUM, SUMIFS…) nên sửa số liệu trong file thì tổng tự tính lại.
    ===================================================================== */
 (function () {
@@ -296,41 +296,39 @@ async function build(month, onStep) {
   totalRow(wm, 'Tổng', mFirst, Math.max(mFirst, wm._next - 1));
   wm.autoFilter = { from: 'A4', to: 'J' + Math.max(mFirst, wm._next - 2) };
 
-  /* ===== Nhân viên & lương: tách rõ tháng này / tháng trước ===== */
-  const empSum = list => { const by = new Map(); list.filter(s => s.check_out_at).forEach(s => { const v = by.get(s.employee_id) || { n: 0, act: 0, paid: 0, pay: 0, out: 0, name: s.employee_name }; v.n++; v.act += s.actual_minutes || 0; v.paid += s.paid_minutes || 0; v.pay += s.pay_amount || 0; if (s.paid_out_at) v.out += s.pay_amount || 0; by.set(s.employee_id, v); }); return by; };
-  const done = data.shifts.filter(s => s.check_out_at), byEmp = empSum(data.shifts), pByEmp = empSum(pShifts);
-  const LW = 'Nhân viên & lương';
-  const eCols = [{ key: 'name', h: 'Nhân viên', w: 20 }, { key: 'rate', h: 'Lương / giờ', w: 12, num: true, fmt: MONEY },
-    { key: 'n', h: 'Số ca', w: 7, num: true, fmt: INT, sum: true }, { key: 'paid', h: 'Giờ tính lương', w: 10, num: true, fmt: DEC, sum: true }, { key: 'pay', h: 'Tiền lương', w: 14, num: true, fmt: MONEY, sum: true },
-    { key: 'out', h: 'Đã trả', w: 13, num: true, fmt: MONEY, sum: true }, { key: 'due', h: 'Còn phải trả', w: 13, num: true, fmt: MONEY, sum: true, color: v => (v.due && v.due.result > 0) ? C.bad : null },
-    { key: 'pn', h: 'Số ca', w: 7, num: true, fmt: INT, sum: true }, { key: 'ppay', h: 'Tiền lương', w: 14, num: true, fmt: MONEY, sum: true }, { key: 'pdue', h: 'Còn nợ', w: 12, num: true, fmt: MONEY, sum: true, color: v => v.pdue > 0 ? C.bad : null },
-    { key: 'diff', h: 'Lương tăng / giảm', w: 14, num: true, fmt: '+#,##0" đ";-#,##0" đ";"-"' }];
-  const we2 = sheetOf(wb, LW, 'TIỀN LƯƠNG NHÂN VIÊN · THÁNG ' + label + ' SO VỚI THÁNG ' + pLabel, sub, eCols, 'FF3A7FC2'); const eFirst = we2._next;
-  // dòng nhóm cột phía trên tiêu đề: tháng này | tháng trước
+  /* ===== Giờ làm nhân viên: tháng này / tháng trước (không tính tiền) ===== */
+  const H = m => Math.round((m || 0) / 6) / 10; // phút → giờ, 1 số lẻ
+  const minsOf = s => s.actual_minutes != null ? s.actual_minutes : Math.max(0, Math.round((new Date(s.check_out_at) - new Date(s.check_in_at)) / 60000));
+  const empSum = list => { const by = new Map(); list.filter(s => s.check_out_at).forEach(s => { const v = by.get(s.employee_id) || { n: 0, act: 0, name: s.employee_name }; v.n++; v.act += minsOf(s); by.set(s.employee_id, v); }); return by; };
+  const byEmp = empSum(data.shifts), pByEmp = empSum(pShifts);
+  const LW = 'Giờ làm nhân viên';
+  const eCols = [{ key: 'name', h: 'Nhân viên', w: 20 },
+    { key: 'n', h: 'Số ca', w: 8, num: true, fmt: INT, sum: true }, { key: 'act', h: 'Tổng giờ', w: 11, num: true, fmt: DEC, sum: true },
+    { key: 'pn', h: 'Số ca', w: 8, num: true, fmt: INT, sum: true }, { key: 'pact', h: 'Tổng giờ', w: 11, num: true, fmt: DEC, sum: true },
+    { key: 'diff', h: 'Giờ tăng / giảm', w: 13, num: true, fmt: '+#,##0.0;-#,##0.0;"-"' }];
+  const we2 = sheetOf(wb, LW, 'GIỜ LÀM NHÂN VIÊN · THÁNG ' + label + ' SO VỚI THÁNG ' + pLabel, sub, eCols, 'FF3A7FC2'); const eFirst = we2._next;
   const grp = (c1, c2, text, color) => { we2.mergeCells(3, c1, 3, c2); const cell = we2.getCell(3, c1); cell.value = text; cell.font = { name: FONT, bold: true, size: 10, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } }; cell.alignment = { horizontal: 'center', vertical: 'middle' }; };
-  grp(3, 7, 'THÁNG ' + label + (to > now ? ' (tới hôm nay)' : ''), 'FFE2325C'); grp(8, 10, 'THÁNG TRƯỚC · ' + pLabel, 'FF8A7B6E'); we2.getRow(3).height = 20;
+  grp(2, 3, 'THÁNG ' + label + (to > now ? ' (tới hôm nay)' : ''), 'FFE2325C'); grp(4, 5, 'THÁNG TRƯỚC · ' + pLabel, 'FF8A7B6E'); we2.getRow(3).height = 20;
   const emps = data.employees.filter(e => byEmp.has(e.id) || pByEmp.has(e.id) || (e.is_active && e.role === 'staff'));
-  new Map([...byEmp, ...pByEmp]).forEach((v, id) => { if (!emps.some(e => e.id === id)) emps.push({ id, full_name: v.name, role: 'staff', hourly_rate: null }); });
-  const z = { n: 0, act: 0, paid: 0, pay: 0, out: 0 };
+  new Map([...byEmp, ...pByEmp]).forEach((v, id) => { if (!emps.some(e => e.id === id)) emps.push({ id, full_name: v.name, role: 'staff' }); });
+  const z = { n: 0, act: 0 };
   emps.forEach(e => { const v = byEmp.get(e.id) || z, p = pByEmp.get(e.id) || z, r = we2._next;
-    addRow(we2, { name: e.full_name, rate: e.hourly_rate, n: v.n, paid: Math.round(v.paid / 6) / 10, pay: v.pay, out: v.out, due: fx('E' + r + '-F' + r, v.pay - v.out),
-      pn: p.n, ppay: p.pay, pdue: p.pay - p.out, diff: fx('E' + r + '-I' + r, v.pay - p.pay) }); });
-  const eLast = we2._next - 1, eTot = we2._next; totalRow(we2, 'Tổng', eFirst, eLast, { diff: fx('E' + eTot + '-I' + eTot) });
+    addRow(we2, { name: e.full_name, n: v.n, act: H(v.act), pn: p.n, pact: H(p.act), diff: fx('C' + r + '-E' + r, H(v.act) - H(p.act)) }); });
+  const eLast = we2._next - 1, eTot = we2._next; totalRow(we2, 'Tổng', eFirst, eLast, { diff: fx('C' + eTot + '-E' + eTot) });
   const open = data.shifts.filter(s => !s.check_out_at).length;
-  note(we2, 'Ca tính vào tháng theo ngày vào ca. Chỉ tính ca đã kết thúc.' + (open ? ' Tháng này còn ' + open + ' ca chưa ra ca nên chưa có tiền.' : '') + ' "Còn nợ" của tháng trước là số chưa trả tính tới lúc xuất file. Chi tiết từng ca: trang Ca làm (tháng này) và Ca làm tháng trước.');
+  note(we2, 'Giờ làm tính đúng từ lúc vào ca tới lúc ra ca. Ca tính vào tháng theo ngày vào ca, chỉ tính ca đã kết thúc.' + (open ? ' Tháng này còn ' + open + ' ca chưa ra ca.' : '') + ' Chi tiết từng ca: trang Ca làm (tháng này) và Ca làm tháng trước.');
 
   /* ===== Ca làm (tháng này) + Ca làm tháng trước ===== */
-  const sCols = [{ key: 'name', h: 'Nhân viên', w: 18 }, { key: 'd', h: 'Ngày', w: 11, fmt: DATE }, { key: 'in', h: 'Vào ca', w: 8, fmt: TIME }, { key: 'out', h: 'Ra ca', w: 8, fmt: TIME }, { key: 'act', h: 'Giờ thực tế', w: 10, num: true, fmt: DEC, sum: true },
-    { key: 'paid', h: 'Giờ tính lương', w: 11, num: true, fmt: DEC, sum: true }, { key: 'rate', h: 'Lương / giờ', w: 12, num: true, fmt: MONEY }, { key: 'pay', h: 'Tiền ca', w: 13, num: true, fmt: MONEY, sum: true },
-    { key: 'st', h: 'Trạng thái', w: 12, color: v => v.st === 'Chưa trả' ? C.bad : v.st === 'Đã trả' ? C.ok : C.note }, { key: 'note', h: 'Ghi chú', w: 26, wrap: true }];
+  const sCols = [{ key: 'name', h: 'Nhân viên', w: 18 }, { key: 'd', h: 'Ngày', w: 11, fmt: DATE }, { key: 'in', h: 'Vào ca', w: 8, fmt: TIME }, { key: 'out', h: 'Ra ca', w: 8, fmt: TIME }, { key: 'act', h: 'Giờ làm', w: 10, num: true, fmt: DEC, sum: true },
+    { key: 'st', h: 'Trạng thái', w: 12, color: v => v.st === 'Đang làm' ? C.bad : C.note }, { key: 'note', h: 'Ghi chú', w: 26, wrap: true }];
   const shiftSheet = (name, title, list, tab) => {
     const w = sheetOf(wb, name, title, sub, sCols, tab); const f0 = w._next;
     list.slice().sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'vi') || (a.check_in_at < b.check_in_at ? -1 : 1)).forEach(s => addRow(w, {
-      name: s.employee_name, d: xd(new Date(new Date(s.check_in_at).setHours(0, 0, 0, 0))), in: xd(s.check_in_at), out: s.check_out_at ? xd(s.check_out_at) : null, act: s.actual_minutes != null ? Math.round(s.actual_minutes / 6) / 10 : null,
-      paid: s.paid_minutes != null ? Math.round(s.paid_minutes / 6) / 10 : null, rate: s.hourly_rate, pay: s.pay_amount, st: !s.check_out_at ? 'Đang làm' : s.paid_out_at ? 'Đã trả' : 'Chưa trả', note: s.note || '' }));
+      name: s.employee_name, d: xd(new Date(new Date(s.check_in_at).setHours(0, 0, 0, 0))), in: xd(s.check_in_at), out: s.check_out_at ? xd(s.check_out_at) : null, act: s.check_out_at ? H(minsOf(s)) : null,
+      st: !s.check_out_at ? 'Đang làm' : 'Đã ra ca', note: s.note || '' }));
     totalRow(w, list.length ? 'Tổng' : 'Không có ca nào', f0, Math.max(f0, w._next - 1));
-    w.autoFilter = { from: 'A4', to: 'J' + Math.max(f0, w._next - 2) };
-    note(w, 'Lọc cột Nhân viên để xem riêng từng người; lọc Trạng thái = Chưa trả để biết còn nợ ca nào. Dòng Tổng tự tính theo các dòng đang hiện.');
+    w.autoFilter = { from: 'A4', to: 'G' + Math.max(f0, w._next - 2) };
+    note(w, 'Lọc cột Nhân viên để xem riêng từng người. Dòng Tổng tự tính theo các dòng đang hiện.');
   };
   shiftSheet('Ca làm', 'CHI TIẾT CA LÀM · THÁNG ' + label, data.shifts, 'FF3A7FC2');
   shiftSheet('Ca làm tháng trước', 'CHI TIẾT CA LÀM · THÁNG TRƯỚC ' + pLabel, pShifts, 'FF8A7B6E');
@@ -338,8 +336,6 @@ async function build(month, onStep) {
   /* ===== Điền trang Tổng quan: tháng này so với tháng trước ===== */
   const rev = sumOf(sales, s => s.total), prevRev = sumOf(prev, s => s.total);
   const cost = sumOf(data.stockMoves.filter(x => x.kind === 'nhap'), x => x.cost || 0), pCost = sumOf(pMoves.filter(x => x.kind === 'nhap'), x => x.cost || 0);
-  const wage = sumOf(done, s => s.pay_amount || 0), pWage = sumOf(pShifts.filter(s => s.check_out_at), s => s.pay_amount || 0);
-  const wOut = sumOf(done.filter(s => s.paid_out_at), s => s.pay_amount || 0), pOut = sumOf(pShifts.filter(s => s.check_out_at && s.paid_out_at), s => s.pay_amount || 0);
   const best = days.map(d => [d, sumOf(byDay.get(dayKey(d)), s => s.total)]).sort((a, b) => b[1] - a[1])[0];
   const lowN = data.stockItems.filter(it => it.is_active !== false && Number(it.qty) <= Number(it.min_qty || 0)).length;
   const pBy = (f) => sumOf(prev.filter(f), s => s.total);
@@ -359,29 +355,26 @@ async function build(month, onStep) {
   put('gh', 'Giao hàng', fx("'Theo ngày'!I" + dTot), pBy(s => s.dine_type === 'giao_hang'), '');
   ov._next++; sec('CHI PHÍ GHI TRONG HỆ THỐNG');
   put('cost', 'Tiền nhập hàng', fx("'Kho hàng'!M" + kTot, cost), pCost, 'Các lần Nhập hàng có ghi tiền ở trang Kho.');
-  put('wage', 'Tiền lương nhân viên', fx("'" + LW + "'!E" + eTot, wage), fx("'" + LW + "'!I" + eTot, pWage), 'Ca đã kết thúc trong tháng. Chi tiết ở trang ' + LW + '.');
-  put('left', 'Còn lại tạm tính', fx('B' + R.rev + '-B' + R.cost + '-B' + R.wage, rev - cost - wage), fx('C' + R.rev + '-C' + R.cost + '-C' + R.wage, prevRev - pCost - pWage), 'Doanh thu trừ nhập hàng và lương. CHƯA trừ mặt bằng, điện nước, gas, chi phí ngoài hệ thống.', { bold: true });
-  ov._next++; sec('TRẢ LƯƠNG');
-  put('wout', 'Lương đã trả', wOut, pOut, '');
-  put('wdue', 'Lương còn phải trả', fx('B' + R.wage + '-B' + R.wout, wage - wOut), fx('C' + R.wage + '-C' + R.wout, pWage - pOut), 'Tính tới lúc xuất file. Tháng trước còn nợ thì trả trước.', { bold: true });
+  put('left', 'Còn lại tạm tính', fx('B' + R.rev + '-B' + R.cost, rev - cost), fx('C' + R.rev + '-C' + R.cost, prevRev - pCost), 'Doanh thu trừ nhập hàng. CHƯA trừ nhân công, mặt bằng, điện nước, gas, chi phí ngoài hệ thống.', { bold: true });
+  ov._next++; sec('NHÂN VIÊN');
+  put('hrs', 'Tổng giờ làm', fx("'" + LW + "'!C" + eTot, H(sumOf([...byEmp.values()], v => v.act))), fx("'" + LW + "'!E" + eTot, H(sumOf([...pByEmp.values()], v => v.act))), 'Ca đã kết thúc trong tháng. Chi tiết ở trang ' + LW + '.');
   ov._next++; sec('KHÁC');
   put('best', 'Ngày bán cao nhất', best && best[1] ? pad(best[0].getDate()) + '/' + pad(m + 1) + ' (' + DOW[best[0].getDay()] + ')' : '-', null, best && best[1] ? Math.round(best[1]).toLocaleString('vi-VN') + ' đ' : '');
   put('top', 'Món bán chạy nhất', iList[0] ? iList[0].name : '-', null, iList[0] ? iList[0].qty + ' phần' : '');
   put('emp', 'Số nhân viên có ca', byEmp.size, pByEmp.size, '');
   put('low', 'Mặt hàng sắp hết (lúc xuất file)', lowN, null, lowN ? 'Xem trang Kho hàng (tô đỏ).' : '');
-  ['rev', 'avg', 'pd', 'cash', 'bank', 'tq', 'mv', 'gh', 'cost', 'wage', 'left', 'wout', 'wdue'].forEach(k => ['B', 'C', 'D'].forEach(c => { ov.getCell(c + R[k]).numFmt = MONEY; }));
+  ['rev', 'avg', 'pd', 'cash', 'bank', 'tq', 'mv', 'gh', 'cost', 'left'].forEach(k => ['B', 'C', 'D'].forEach(c => { ov.getCell(c + R[k]).numFmt = MONEY; }));
+  ['hrs'].forEach(k => ['B', 'C', 'D'].forEach(c => { ov.getCell(c + R[k]).numFmt = DEC; }));
   ['n', 'emp', 'low'].forEach(k => ['B', 'C', 'D'].forEach(c => { ov.getCell(c + R[k]).numFmt = INT; }));
   ['best', 'top'].forEach(k => { ov.getCell('B' + R[k]).alignment = { horizontal: 'right', vertical: 'top' }; });
   // tô màu chênh lệch: xanh = tốt hơn tháng trước, đỏ = kém hơn (với chi phí thì ngược lại)
-  Object.keys(R).forEach(k => { if (['best', 'top', 'low', 'emp'].includes(k)) return; const r = R[k]; const good = UP_GOOD.has(k);
+  Object.keys(R).forEach(k => { if (['best', 'top', 'low', 'emp', 'hrs'].includes(k)) return; const r = R[k]; const good = UP_GOOD.has(k);
     ov.addConditionalFormatting({ ref: 'D' + r + ':E' + r, rules: [{ type: 'expression', priority: 1, formulae: ['AND(ISNUMBER($D' + r + '),$D' + r + (good ? '>0)' : '<0)')], style: { font: { color: { argb: C.ok }, bold: true } } }, { type: 'expression', priority: 2, formulae: ['AND(ISNUMBER($D' + r + '),$D' + r + (good ? '<0)' : '>0)')], style: { font: { color: { argb: C.bad }, bold: true } } }] }); });
-  ov.getCell('B' + R.left).font = { name: FONT, size: 11, bold: true, color: { argb: rev - cost - wage >= 0 ? C.ok : C.bad } };
-  ov.getCell('B' + R.wdue).font = { name: FONT, size: 10, bold: true, color: { argb: wage - wOut > 0 ? C.bad : C.ok } };
-  ov.getCell('C' + R.wdue).font = { name: FONT, size: 10, bold: true, color: { argb: pWage - pOut > 0 ? C.bad : C.ok } };
+  ov.getCell('B' + R.left).font = { name: FONT, size: 11, bold: true, color: { argb: rev - cost >= 0 ? C.ok : C.bad } };
   ov._next++;
   const r0 = ov.getRow(ov._next++); r0.getCell(1).value = 'Các trang trong file (bấm để mở):'; r0.getCell(1).font = { name: FONT, bold: true, size: 10 };
-  [[CH, 'biểu đồ doanh thu, giờ đông khách, món bán chạy, lương — so với tháng trước'], ['Theo ngày', 'doanh thu từng ngày, tiền mặt / chuyển khoản, ăn tại quán / mang về / giao'], ['Theo tuần', 'cộng theo tuần (Thứ 2 – Chủ nhật)'], ['Theo giờ', 'giờ nào đông khách'], ['Món bán chạy', 'số phần, doanh thu từng món'],
-   ['Hoá đơn', 'toàn bộ hoá đơn, lọc được'], ['Kho hàng', 'tồn kho, nhập / dùng trong tháng'], ['Nhập xuất kho', 'từng lần nhập, lấy dùng, kiểm kho'], [LW, 'lương tháng này và tháng trước đặt cạnh nhau, đã trả / còn nợ'], ['Ca làm', 'từng ca tháng này'], ['Ca làm tháng trước', 'từng ca tháng trước']]
+  [[CH, 'biểu đồ doanh thu, giờ đông khách, món bán chạy, giờ làm nhân viên — so với tháng trước'], ['Theo ngày', 'doanh thu từng ngày, tiền mặt / chuyển khoản, ăn tại quán / mang về / giao'], ['Theo tuần', 'cộng theo tuần (Thứ 2 – Chủ nhật)'], ['Theo giờ', 'giờ nào đông khách'], ['Món bán chạy', 'số phần, doanh thu từng món'],
+   ['Hoá đơn', 'toàn bộ hoá đơn, lọc được'], ['Kho hàng', 'tồn kho, nhập / dùng trong tháng'], ['Nhập xuất kho', 'từng lần nhập, lấy dùng, kiểm kho'], [LW, 'số ca, tổng giờ từng nhân viên tháng này và tháng trước'], ['Ca làm', 'từng ca tháng này'], ['Ca làm tháng trước', 'từng ca tháng trước']]
     .forEach(([n, d]) => { const r = ov.getRow(ov._next++); r.getCell(1).value = { text: '› ' + n, hyperlink: "#'" + n + "'!A1" }; r.getCell(1).font = { name: FONT, size: 10, color: { argb: C.red }, underline: true }; ov.mergeCells(r.number, 2, r.number, 6); r.getCell(2).value = d; r.getCell(2).font = { name: FONT, size: 10, color: { argb: C.note } }; });
   ov.views = [{ state: 'frozen', ySplit: 4, showGridLines: false }];
 
@@ -408,10 +401,10 @@ async function build(month, onStep) {
 
   // 1. So với tháng trước
   dt('So với tháng trước'); { const r = wc.getRow(dRow - 1); r.getCell(13).value = 'Tháng ' + label; r.getCell(14).value = 'Tháng ' + pLabel; [13, 14].forEach(c => { r.getCell(c).font = { name: FONT, size: 10, bold: true, color: { argb: C.headInk } }; r.getCell(c).alignment = { horizontal: 'right' }; }); }
-  const cmpKeys = [['Doanh thu', 'rev'], ['Nhập hàng', 'cost'], ['Lương', 'wage'], ['Còn lại tạm tính', 'left']];
-  const cmpVals = { rev: [rev, prevRev], cost: [cost, pCost], wage: [wage, pWage], left: [rev - cost - wage, prevRev - pCost - pWage] };
+  const cmpKeys = [['Doanh thu', 'rev'], ['Nhập hàng', 'cost'], ['Còn lại tạm tính', 'left']];
+  const cmpVals = { rev: [rev, prevRev], cost: [cost, pCost], left: [rev - cost, prevRev - pCost] };
   const c1 = dRow; cmpKeys.forEach(([t, k]) => drow(t, fx("'Tổng quan'!B" + R[k], cmpVals[k][0]), fx("'Tổng quan'!C" + R[k], cmpVals[k][1]))); const c2 = dRow - 1;
-  block('1. Tháng này so với tháng trước', 'Cột đỏ là tháng ' + label + ', cột xám là tháng ' + pLabel + '. "Còn lại" = doanh thu − nhập hàng − lương (chưa trừ chi phí ngoài hệ thống).' + (to > now ? ' Tháng này chưa hết nên số còn tăng.' : ''), 16,
+  block('1. Tháng này so với tháng trước', 'Cột đỏ là tháng ' + label + ', cột xám là tháng ' + pLabel + '. "Còn lại" = doanh thu − nhập hàng (chưa trừ nhân công và chi phí ngoài hệ thống).' + (to > now ? ' Tháng này chưa hết nên số còn tăng.' : ''), 16,
     { type: 'col', title: 'Doanh thu, chi phí: tháng ' + label + ' và ' + pLabel, cat: { f: ref(CH, 'L', c1, c2), vals: cmpKeys.map(x => x[0]) }, labels: true, valFmt: '#,##0,"k"', axisFmt: '#,##0.0,,"tr"',
       series: [{ name: 'Tháng ' + label, f: ref(CH, 'M', c1, c2), vals: cmpKeys.map(x => cmpVals[x[1]][0]), color: PAL.main }, { name: 'Tháng ' + pLabel, f: ref(CH, 'N', c1, c2), vals: cmpKeys.map(x => cmpVals[x[1]][1]), color: PAL.prev }] });
 
@@ -443,10 +436,10 @@ async function build(month, onStep) {
     block('', '', 13, { type: 'doughnut', title: 'Loại đơn', cat: { f: ref(CH, 'L', t1, t1 + 2), vals: ['Ăn tại quán', 'Mang về', 'Giao hàng'] }, series: [{ name: 'Tiền thu', f: ref(CH, 'M', t1, t1 + 2), vals: ['tai_quan', 'mang_ve', 'giao_hang'].map(dineBy), colors: i => cat3[i] }] }, 'r');
   }
 
-  // 7. Lương từng nhân viên: tháng này vs tháng trước
-  if (eLast >= eFirst) block('6. Lương từng nhân viên', 'Cột đỏ là tháng ' + label + ', cột xám là tháng ' + pLabel + '. Đã trả / còn nợ xem ở trang ' + LW + '.', Math.max(12, emps.length * 2 + 4),
-    { type: 'bar', title: 'Tiền lương: tháng ' + label + ' và ' + pLabel, cat: { f: ref(LW, 'A', eFirst, eLast), vals: emps.map(e => e.full_name) }, labels: true, valFmt: '#,##0,"k"', hideValAxis: true,
-      series: [{ name: 'Tháng ' + label, f: ref(LW, 'E', eFirst, eLast), vals: emps.map(e => (byEmp.get(e.id) || z).pay), color: PAL.main }, { name: 'Tháng ' + pLabel, f: ref(LW, 'I', eFirst, eLast), vals: emps.map(e => (pByEmp.get(e.id) || z).pay), color: PAL.prev }] });
+  // 6. Giờ làm từng nhân viên: tháng này vs tháng trước
+  if (eLast >= eFirst) block('6. Giờ làm từng nhân viên', 'Cột đỏ là tháng ' + label + ', cột xám là tháng ' + pLabel + '. Chi tiết ở trang ' + LW + '.', Math.max(12, emps.length * 2 + 4),
+    { type: 'bar', title: 'Tổng giờ làm: tháng ' + label + ' và ' + pLabel, cat: { f: ref(LW, 'A', eFirst, eLast), vals: emps.map(e => e.full_name) }, labels: true, valFmt: '#,##0.0', hideValAxis: true,
+      series: [{ name: 'Tháng ' + label, f: ref(LW, 'C', eFirst, eLast), vals: emps.map(e => H((byEmp.get(e.id) || z).act)), color: PAL.main }, { name: 'Tháng ' + pLabel, f: ref(LW, 'E', eFirst, eLast), vals: emps.map(e => H((pByEmp.get(e.id) || z).act)), color: PAL.prev }] });
 
   onStep('Đang vẽ biểu đồ…');
   let buf = await wb.xlsx.writeBuffer();
