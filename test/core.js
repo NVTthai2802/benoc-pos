@@ -15,7 +15,7 @@ const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa p
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 /* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
 const ON_TEST = DEMO || window.BENOC_ENV === 'test';
-const FEATURES = Object.assign({ print: true, vietqr: ON_TEST, report: true }, CONFIG.FEATURES || {});
+const FEATURES = Object.assign({ print: true, vietqr: true, report: true }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
 /* =====================================================================
@@ -550,6 +550,18 @@ function supabaseApi() {
       return { sales, shifts, employees, stockItems: stockItems || [], stockMoves: stockMoves || [], packs: packs || [] };
     },
     async settings() { const c = await cl(); return await q(c.from('shop_settings').select('*').eq('id', 1).single()); },
+    /* SePay (cập nhật 36): khoá cho webhook, giao dịch tiền vào */
+    getSepayKey: () => rpc('get_sepay_key'),
+    resetSepayKey: () => rpc('reset_sepay_key'),
+    async bankTxns(n) { const c = await cl(); return await q(c.from('bank_txns').select('*').order('created_at', { ascending: false }).limit(n || 30)); },
+    onBankTxn(cb) {
+      let ch = null, stopped = false;
+      cl().then(c => {
+        if (stopped) return;
+        ch = c.channel('tien-ve').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bank_txns' }, e => cb(e.new)).subscribe();
+      });
+      return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
+    },
     async saveBank(b) { const c = await cl(); await q(c.from('shop_settings').update({ bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT, updated_at: new Date().toISOString() }).eq('id', 1)); },
     async saveSettings(s) {
       const c = await cl();
@@ -1381,6 +1393,10 @@ function demoApi() {
     },
     async sales(f) { const a = new Date(f.from), b = new Date(f.to); return load().sales.filter(s => { const t = new Date(s.paid_at); return t >= a && t < b; }).sort((x, y) => x.paid_at < y.paid_at ? -1 : 1); },
     async settings() { return Object.assign({}, load().shop_settings); },
+    async getSepayKey() { need('owner'); return 'khoa-xem-thu-0123456789abcdef'; },
+    async resetSepayKey() { need('owner'); return 'khoa-moi-' + Math.random().toString(16).slice(2, 14); },
+    async bankTxns() { return (load().bank_txns || []).slice().reverse(); },
+    onBankTxn() { return () => {}; },
     async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT })); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {
@@ -1402,13 +1418,15 @@ const api = DEMO ? demoApi() : supabaseApi();
    VIETQR ĐỘNG — mã chuyển khoản theo chuẩn NAPAS (EMVCo), có sẵn số tiền và nội dung.
    Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
    ===================================================================== */
-const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '', note: 'BENOC {ban} {ten}' }, CONFIG.BANK || {});
+const BANK = Object.assign({ bin: '970407', bank: 'Techcombank', account: 'MS00P00000000282267', holder: 'NGUYEN SY THUONG', note: 'BENOC {ban} {ten}' }, CONFIG.BANK || {});
 const NOTE_DEFAULT = 'BENOC {ban} {ten}';
 /* Nội dung chuyển khoản của 1 đơn theo mẫu chủ quán đặt: {ban} = SO 15 / MV / GIAO, {ten} = tên khách ({ma} cũ vẫn đọc được) */
+/* Mã thanh toán của đơn: BN + 6 ký tự đầu mã đơn. Đứng đầu nội dung chuyển khoản để SePay / máy tự khớp đơn. */
+const payCode = id => id ? 'BN' + String(id).replace(/-/g, '').slice(0, 6).toUpperCase() : '';
 function qrNoteFor(o, tpl) {
   const dine = o.dine_type || 'tai_quan', ban = dine === 'giao_hang' ? 'GIAO' : dine === 'mang_ve' ? 'MV' : o.queue_number != null ? 'SO ' + o.queue_number : 'DAT BAN';
   const t = String(tpl || BANK.note || NOTE_DEFAULT);
-  return qrInfo(t.replace(/\{ban\}/gi, ban).replace(/\{ten\}/gi, o.customer_name || '').replace(/\{ma\}/gi, String(o.id || '').replace(/-/g, '').slice(0, 4)));
+  return qrInfo((payCode(o.id) ? payCode(o.id) + ' ' : '') + t.replace(/\{ban\}/gi, ban).replace(/\{ten\}/gi, o.customer_name || '').replace(/\{ma\}/gi, String(o.id || '').replace(/-/g, '').slice(0, 4)));
 }
 /* Ngân hàng hỗ trợ VietQR: [mã BIN, tên ngắn, tên đầy đủ] (theo api.vietqr.io) */
 const BANKS = [['970422', 'MB Bank', 'Quân đội'], ['970436', 'Vietcombank', 'Ngoại thương'], ['970415', 'VietinBank', 'Công thương'], ['970418', 'BIDV', 'Đầu tư và Phát triển'], ['970405', 'Agribank', 'Nông nghiệp'],
@@ -1466,7 +1484,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, qrNoteFor, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, qrNoteFor, payCode, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, isBooked, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS

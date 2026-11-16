@@ -19,7 +19,7 @@ const money = n => Math.round(Number(n) || 0).toLocaleString('vi-VN') + 'đ';
 const STATION = window.BENOC_STATION || 'bep';
 const KEY = 'printer.' + STATION;
 /* mode = cách in phiếu món, tmode = cách in tem dán ly ('off' | 'rawbt' | 'ble' | 'browser') */
-const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, offy: 0, auto: true };
+const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, offy: 0, auto: true, qr: true };
 function get() {
   const raw = store.get(KEY, {}), s = Object.assign({}, DEF, raw);
   if (raw.job) { if (raw.job === 'tem') { s.tmode = raw.mode || 'off'; s.mode = 'off'; } delete s.job; } // cài đặt bản trước (1 việc / máy)
@@ -33,6 +33,22 @@ const LABELS = { '40x30': { w: 40, h: 30, gap: 2 }, '50x30': { w: 50, h: 30, gap
 const labelOf = set => LABELS[set.label] || LABELS['40x30'];
 const jobs = set => [set.mode !== 'off' && 'phieu', set.tmode !== 'off' && 'tem'].filter(Boolean);
 
+/* ---------- Mã QR chuyển khoản in cuối phiếu ----------
+   Phiếu vẽ đồng bộ nên tải sẵn thư viện QR khi mở trang; chưa tải xong thì phiếu in không có mã. */
+const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+if (BN.FEATURES.vietqr && BN.loadScript) { BN.loadScript(QR_LIB).catch(() => {}); if (BN.loadBank) BN.loadBank(); }
+/* Ma trận ô đen/trắng của mã QR (null nếu chưa có thư viện) */
+function qrMatrix(text) {
+  if (!window.QRCode) return null;
+  const box = document.createElement('div');
+  try {
+    const q = new window.QRCode(box, { text, width: 64, height: 64, correctLevel: window.QRCode.CorrectLevel.M })._oQRCode;
+    const n = q.getModuleCount(), m = [];
+    for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(q.isDark(r, c)); m.push(row); }
+    return m;
+  } catch (e) { return null; }
+}
+
 /* ---------- Vẽ phiếu ---------- */
 function wrap(ctx, text, maxW) {
   const words = String(text).split(/\s+/), lines = []; let cur = '';
@@ -43,60 +59,95 @@ function wrap(ctx, text, maxW) {
 /* o: đơn; items: món của nơi này; extra: { minutes, station, reprint } */
 function ticketCanvas(o, items, extra, set) {
   set = set || get(); extra = extra || {};
-  const W = DOTS[set.width] || 384, pad = 8, k = W / 384 * (set.big ? 1.12 : 1);
+  // Lề hai bên rộng hơn (giấy cuộn nhỏ, đầu in hay mờ ở mép), chữ nhỏ lại, dòng thưa hơn cho dễ đọc
+  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1), IW = W - pad * 2, LH = 1.42;
   const F = (px, b) => (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   const ops = []; let y = pad;
-  const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, W - pad * 2).forEach(l => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: align || 'left' }); y += px * k * 1.28; }); y += (gap || 0) * k; };
-  const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
-  // Phiếu gọn để tiết kiệm giấy: loại đơn + số bàn / giờ giao, địa chỉ (ship), khách, giờ đặt, giờ nhận, món, ghi chú
+  const put = (t, px, bold, align, x) => ops.push({ t, font: F(px, bold), y: y + px * k, align: align || 'left', x });
+  const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, IW).forEach(l => { put(l, px, bold, align); y += px * k * LH; }); y += (gap || 0) * k; };
+  const rule = (dash) => { y += 4 * k; ops.push({ rule: true, y: Math.round(y), dash }); y += 10 * k; };
+  const gap = n => { y += n * k; };
+  // Hai cột trái / phải; không đủ chỗ thì số tiền xuống dòng dưới (không đè chữ)
+  const pair = (l, r, px, bold) => {
+    ctx.font = F(px, bold); const fit = ctx.measureText(l).width + ctx.measureText(r).width + 12 * k <= IW;
+    put(l, px, bold, 'left'); if (!fit) { y += px * k * LH; } put(r, px, bold, 'right'); y += px * k * LH;
+  };
+  const lineAmt = i => i.amount != null ? i.amount : (i.unit_price || 0) * i.qty;
+
+  /* ===== PHẦN BẾP: nơi ăn, khách, giờ ===== */
+  text('BÉ NỐC', 18, true, 'center', 2);
   const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
-  const where = (o.source === 'fb' ? 'ĐƠN ONLINE · ' : '') + (isDelivery(o) ? 'ĐI SHIP' + at : o.pickup ? 'ĐẾN LẤY' + at : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'Ở ĐÂY · BÀN ' + o.queue_number);
-  text(where, 40, true, 'center', 2);
-  if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
-  text([o.customer_name, o.customer_phone].filter(Boolean).join(' · '), 24, true, 'center');
-  text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · in lại' : ''), 20, false, 'center', 2);
-  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 24, true, 'center', 2);
+  const at2 = o.deliver_at ? ' ' + hhmm(o.deliver_at) : '';
+  const where = isDelivery(o) ? 'GIAO' + (at2 || ' HÀNG') : o.pickup ? 'ĐẾN LẤY' + at2 : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'BÀN ' + o.queue_number;
+  text(where, 36, true, 'center', 2);
+  if (o.source === 'fb') text('ĐƠN ONLINE', 20, true, 'center');
+  if (isDelivery(o) && o.address) text(o.address, 20, true, 'center');
+  if (o.customer_name) text(o.customer_name, 26, true, 'center');
+  if (o.customer_phone) text(o.customer_phone, 20, true, 'center');
+  text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · IN LẠI' : ''), 18, false, 'center');
+  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 20, true, 'center');
   rule(false);
-  let lastGroup = null;
-  items.forEach(i => {
-    if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 20, true, 'left', 2);
-    lastGroup = i.promo_group || null;
+
+  /* ===== MÓN: số lượng bên trái, tên món, tiền bên phải; tuỳ chọn thụt vào ===== */
+  let lastGroup = null, count = 0;
+  items.forEach((i, idx) => {
+    if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 18, true, 'left', 2);
+    lastGroup = i.promo_group || null; count += i.qty;
     const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
-    // Tên món bên trái, thành tiền bên phải (dòng đầu)
-    const amt = i.amount != null ? i.amount : (i.unit_price || 0) * i.qty, price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
-    ctx.font = F(24, true); const pw = ctx.measureText(price).width + 10 * k;
-    ctx.font = F(30, true);
-    wrap(ctx, i.qty + ' x ' + i.item_name + (sz ? ' - ' + sizeText(sz) : '') + (i.promo_part === 'tang' ? ' (TẶNG)' : ''), W - pad * 2 - pw).forEach((l, n) => {
-      ops.push({ t: l, font: F(30, true), y: y + 30 * k, align: 'left' });
-      if (n === 0) ops.push({ t: price, font: F(24, true), y: y + 30 * k, align: 'right' });
-      y += 30 * k * 1.28;
+    const amt = lineAmt(i), price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
+    ctx.font = F(26, true); const qw = ctx.measureText('9x ').width;
+    ctx.font = F(20, true); const pw = ctx.measureText(price).width + 10 * k;
+    ctx.font = F(26, true);
+    wrap(ctx, i.item_name + (sz ? ' · ' + sizeText(sz) : ''), IW - qw - pw).forEach((l, n) => {
+      if (n === 0) { put(i.qty + 'x', 26, true, 'left'); ops.push({ t: price, font: F(20, true), y: y + 26 * k, align: 'right' }); }
+      put(l, 26, true, 'left', pad + qw); y += 26 * k * 1.32;
     });
-    y += 2 * k;
-    const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
+    const sub = (t, px, b) => { ctx.font = F(px, b); wrap(ctx, t, IW - qw).forEach(l => { put(l, px, b, 'left', pad + qw); y += px * k * LH; }); };
     const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
-    if (rest.length) text('   ' + rest.join(', '), 22, false);
-    if (tops.length) text('   ' + tops.join('  '), 24, true);
-    if (i.note) text('   * ' + i.note, 24, true);
-    y += 6 * k;
+    const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
+    if (rest.length) sub(rest.join(', '), 20, false);
+    if (tops.length) sub(tops.join('  '), 20, true);
+    if (i.note) sub('* ' + i.note, 20, true);
+    if (i.qty > 1 && amt) { put(i.qty + ' x ' + money(amt / i.qty), 17, false, 'right'); y += 17 * k * LH; }
+    gap(idx < items.length - 1 ? 10 : 2);
   });
-  if (o.note) { rule(true); text('Ghi chú: ' + o.note, 24, true, 'left', 2); }
-  // Tiền: cộng các món trên phiếu; đơn có cả món nơi khác thì in thêm tổng cả đơn; trạng thái thanh toán
+  if (o.note) { rule(true); text('GHI CHÚ: ' + o.note, 20, true, 'left'); }
+
+  /* ===== PHẦN TIỀN ===== */
   rule(false);
-  const sum = items.reduce((t, i) => t + (i.amount != null ? i.amount : (i.unit_price || 0) * i.qty), 0);
-  const total = o.total != null ? o.total : sum;
-  const pair = (l, r, px) => { ops.push({ t: l, font: F(px, true), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, true), y: y + px * k, align: 'right' }); y += px * k * 1.3; };
-  if (total !== sum) { pair(extra.full ? 'Cộng tiền món' : 'Cộng phiếu này', money(sum), 22); pair('TỔNG ĐƠN', money(total), 30); }
-  else pair('TỔNG', money(total), 30);
-  const paid = o.paid_amount || 0;
-  text(o.paid_amount == null ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' (CK)' : o.paid_method === 'tien_mat' ? ' (TIỀN MẶT)' : '') : 'ĐÃ TRẢ ' + money(paid) + ' · CÒN THU ' + money(total - paid), 22, true, 'center', 2);
-  y += 12 * k; // chừa chút giấy để xé
+  const sum = items.reduce((t, i) => t + lineAmt(i), 0);
+  const total = o.total != null ? o.total : sum, paid = o.paid_amount || 0, due = Math.round(total - paid);
+  if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 20);
+  pair(total !== sum ? 'TỔNG ĐƠN' : 'TỔNG (' + count + ' món)', money(total), 26, true);
+  if (o.paid_amount != null && paid > 0 && paid < total) pair('Đã trả', money(paid), 20);
+  gap(4);
+  const how = o.paid_method === 'chuyen_khoan' ? 'Chuyển khoản' : o.paid_method === 'tien_mat' ? 'Tiền mặt' : '';
+  if (o.paid_amount == null || paid <= 0) text('CHƯA THANH TOÁN', 24, true, 'center');
+  else if (paid >= total) { text('ĐÃ THANH TOÁN', 24, true, 'center'); if (how) text(how, 20, true, 'center'); }
+  else text('CÒN THU ' + money(due), 24, true, 'center');
+
+  /* ===== MÃ QR: chỉ khi còn phải thu, đúng số tiền còn thu của cả đơn ===== */
+  const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
+  if (qm) {
+    rule(true);
+    text('Quét mã chuyển khoản ' + money(due), 20, true, 'center', 6);
+    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)), size = cell * n;
+    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 10 * k;
+    const B = BN.BANK;
+    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 17, true, 'center');
+  }
+  gap(6);
+  text('Cảm ơn bạn, hẹn gặp lại!', 18, false, 'center');
+  y += 6 * k;
+
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
-    if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [8, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
+    if (op.qr) { op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + c * op.cell, op.y + r * op.cell, op.cell, op.cell); })); return; }
+    if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [6, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
     ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(op.t, op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
+    ctx.fillText(op.t, op.x != null ? op.x : op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
   });
   return cv;
 }
@@ -110,7 +161,9 @@ const BAND = 24;
 function escpos(cv, copies) {
   const b = bits(cv), bw = b.bw, H = b.H;
   const right = r => { for (let c = bw - 1; c >= 0; c--) if (b.data[r * bw + c]) return c + 1; return 0; }; // số byte tới chấm đen cuối hàng
-  const feed = (out, n) => { while (n > 0) { const s = Math.min(255, n); out.push(0x1B, 0x4A, s); n -= s; } }; // ESC J n: đẩy giấy n chấm
+  // Khoảng trắng: gửi ảnh trắng rộng 1 byte (1 byte / hàng) thay cho ESC J — máy MPT-II đẩy giấy bằng ESC J bị hụt
+  // nên các dòng chữ dính vào nhau. In ảnh thì máy đi giấy đúng từng chấm.
+  const feed = (out, n) => { while (n > 0) { const h = Math.min(BAND * 4, n); out.push(0x1D, 0x76, 0x30, 0x00, 1, 0, h & 255, h >> 8); for (let i = 0; i < h; i++) out.push(0); n -= h; } };
   const body = [];
   let blank = 0;
   for (let y = 0; y < H;) {
@@ -128,7 +181,7 @@ function escpos(cv, copies) {
   const out = [0x1B, 0x40]; // ESC @ khởi động
   for (let c = 0; c < (copies || 1); c++) {
     for (let i = 0; i < body.length; i++) out.push(body[i]);
-    out.push(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x42, 0x00); // đẩy giấy 3 dòng + cắt (máy không có dao cắt thì bỏ qua)
+    out.push(0x1B, 0x64, 0x04); // đẩy giấy 4 dòng để xé (không gửi lệnh cắt: máy không có dao in ra chữ rác)
   }
   return new Uint8Array(out);
 }
@@ -353,6 +406,11 @@ function bleSend(k, u8) {
     const slow = b.ch.writeValueWithResponse ? x => b.ch.writeValueWithResponse(x) : x => b.ch.writeValue(x); // Bluefy: writeValue
     // Gửi nhanh: liền nhiều gói không chờ xác nhận, cứ 8 gói chờ 1 lần để máy in kịp nhận (không tràn bộ nhớ)
     const fast = b.ch.properties.writeWithoutResponse && b.ch.writeValueWithoutResponse && store.get('bleFast', true) ? x => b.ch.writeValueWithoutResponse(x) : null;
+    if (k === 'phieu') {
+      // Phiếu: gói nhỏ, chờ xác nhận từng gói, nghỉ chút cho máy in kịp đốt giấy (phiếu dài / mã QR hay bị rơi chữ cuối phiếu)
+      for (let i = 0; i < u8.length; i += 120) { await slow(u8.slice(i, i + 120)); await sleep(18); }
+      return;
+    }
     for (let i = 0, n = 0; i < u8.length; i += 180, n++) {
       const part = u8.slice(i, i + 180);
       if (fast && n % 8 !== 7 && i + 180 < u8.length) await fast(part); else await slow(part);
@@ -433,7 +491,8 @@ function openSettings(onChange) {
     (s.mode === 'ble' ? bleBox('phieu') : '') +
     (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
       '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
-      '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' + prevT() +
+      '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' +
+      (BN.FEATURES.vietqr ? '<label class="check"><input type="checkbox" id="prQr"' + (s.qr !== false ? ' checked' : '') + '><span><b>In mã QR chuyển khoản cuối phiếu</b><small>Chỉ in khi đơn còn phải thu tiền, đúng số tiền còn thu.</small></span></label>' : '') + prevT() +
       '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="phieu">In thử phiếu</button></div>' : '') + '</section>' +
     '<section class="pr-sec"><h3>Tem dán ly</h3><p class="small muted" style="margin:0 0 6px">Mỗi ly một tem: bàn / mang về, tên khách, món, size, đường, đá, topping, ghi chú.</p>' +
     radios('prt', s.tmode, [['ble', 'Bluetooth trực tiếp (khuyên dùng cho máy tem)', 'Trang nối thẳng máy in tem (CLABEL CT221B…). Dùng được cùng lúc với máy in phiếu.'], IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Chỉ khi điện thoại này không dùng RawBT để in phiếu.'], ['off', 'Không in tem', 'Máy này không in tem.']].filter(Boolean)) +
@@ -451,7 +510,7 @@ function openSettings(onChange) {
   ui.sheet(ui.head('Máy in ' + PLACE, 'Cài riêng trên điện thoại này') + '<div class="sh-body pr-set" id="prBody">' + body() + '</div>' +
     '<div class="sh-foot"><button class="btn btn-block" type="button" id="prSave">Lưu</button></div>', sh => {
     const q = id => sh.querySelector(id);
-    const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; const f = sh.querySelector('.prFast'); if (f) store.set('bleFast', f.checked); };
+    const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prQr')) s.qr = q('#prQr').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; const f = sh.querySelector('.prFast'); if (f) store.set('bleFast', f.checked); };
     const redraw = () => { read(); const top = q('#prBody').scrollTop; q('#prBody').innerHTML = body(); q('#prBody').scrollTop = top; };
     const unsub = () => { const i = bleSubs.indexOf(onBle); if (i >= 0) bleSubs.splice(i, 1); };
     const onBle = () => { if (!document.body.contains(sh)) { unsub(); return; } redraw(); };
