@@ -15,7 +15,7 @@ const SP = CONFIG.STORE_PREFIX; // tiền tố localStorage, khác nhau giữa p
 const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 /* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
 const ON_TEST = DEMO || window.BENOC_ENV === 'test';
-const FEATURES = Object.assign({ print: true, vietqr: ON_TEST, report: true }, CONFIG.FEATURES || {});
+const FEATURES = Object.assign({ print: true, vietqr: true, report: true }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
 /* =====================================================================
@@ -1402,7 +1402,7 @@ const api = DEMO ? demoApi() : supabaseApi();
    VIETQR ĐỘNG — mã chuyển khoản theo chuẩn NAPAS (EMVCo), có sẵn số tiền và nội dung.
    Đổi tài khoản: thêm BANK: { bin, bank, account, holder } vào config.js
    ===================================================================== */
-const BANK = Object.assign({ bin: '970422', bank: 'MB Bank', account: '0393247469', holder: '', note: 'BENOC {ban} {ten}' }, CONFIG.BANK || {});
+const BANK = Object.assign({ bin: '970407', bank: 'Techcombank', account: 'MS00P00000000282267', holder: 'NGUYEN SY THUONG', note: 'BENOC {ban} {ten}' }, CONFIG.BANK || {});
 const NOTE_DEFAULT = 'BENOC {ban} {ten}';
 /* Nội dung chuyển khoản của 1 đơn theo mẫu chủ quán đặt: {ban} = SO 15 / MV / GIAO, {ten} = tên khách ({ma} cũ vẫn đọc được) */
 function qrNoteFor(o, tpl) {
