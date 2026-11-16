@@ -67,7 +67,7 @@ function ticketCanvas(o, items, extra, set) {
   const rule = (dash) => { ops.push({ rule: true, y: y + 4, dash }); y += 12 * k; };
   const pair = (l, r, px, bold) => { ops.push({ t: l, font: F(px, bold), y: y + px * k, align: 'left' }); ops.push({ t: r, font: F(px, bold), y: y + px * k, align: 'right' }); y += px * k * 1.32; };
   // Khối chữ trắng nền đen (số bàn, trạng thái tiền): đứng xa vẫn đọc được
-  const band = (t, px) => { const h = px * k * 1.5; ops.push({ band: true, y, h }); ctx.font = F(px, true); wrap(ctx, t, IW - 16 * k).forEach((l, n) => { if (n) { y += px * k * 1.28; ops.push({ band: true, y: y, h: px * k * 1.3 }); } ops.push({ t: l, font: F(px, true), y: y + px * k * 1.12, align: 'center', inv: true }); }); y += h + 6 * k; };
+  const band = (t, px) => { const h = px * k * 1.5; ops.push({ band: true, y, h }); ctx.font = F(px, true); [].concat(t).flatMap(x => wrap(ctx, x, IW - 16 * k)).forEach((l, n) => { if (n) { y += px * k * 1.28; ops.push({ band: true, y: y, h: px * k * 1.3 }); } ops.push({ t: l, font: F(px, true), y: y + px * k * 1.12, align: 'center', inv: true }); }); y += h + 6 * k; };
   const lineAmt = i => i.amount != null ? i.amount : (i.unit_price || 0) * i.qty;
 
   /* ===== PHẦN BẾP: nơi ăn, khách, giờ ===== */
@@ -79,7 +79,7 @@ function ticketCanvas(o, items, extra, set) {
   if (o.source === 'fb') text('ĐƠN ONLINE', 22, true, 'center', 2);
   if (isDelivery(o) && o.address) text(o.address, 22, true, 'center', 2);
   const who = [o.customer_name, o.customer_phone].filter(Boolean).join(' · ');
-  if (who) text(who, 24, true, 'center');
+  if (who) text(who, 28, true, 'center');
   text('Đặt ' + hhmm(o.created_at) + '  ·  Nhận ' + hhmm(Date.now()) + (extra.reprint ? '  ·  IN LẠI' : ''), 20, false, 'center', 2);
   if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 22, true, 'center', 2);
   rule(false);
@@ -121,7 +121,8 @@ function ticketCanvas(o, items, extra, set) {
   pair(total !== sum ? 'TỔNG ĐƠN' : 'TỔNG (' + count + ' món)', money(total), 30, true);
   if (o.paid_amount != null && paid > 0 && paid < total) { pair('Đã trả', money(paid), 22); }
   y += 4 * k;
-  band(o.paid_amount == null || paid <= 0 ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' · CK' : o.paid_method === 'tien_mat' ? ' · TIỀN MẶT' : '') : 'CÒN THU ' + money(due), 24);
+  const how = o.paid_method === 'chuyen_khoan' ? 'Chuyển khoản' : o.paid_method === 'tien_mat' ? 'Tiền mặt' : '';
+  band(o.paid_amount == null || paid <= 0 ? 'CHƯA THANH TOÁN' : paid >= total ? ['ĐÃ THANH TOÁN'].concat(how ? [how] : []) : 'CÒN THU ' + money(due), 24);
 
   /* ===== MÃ QR: chỉ khi còn phải thu, đúng số tiền còn thu của cả đơn ===== */
   const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
@@ -131,8 +132,7 @@ function ticketCanvas(o, items, extra, set) {
     const n = qm.length, cell = Math.max(3, Math.floor(Math.min(IW, 250 * k) / n)), size = cell * n;
     ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
     const B = BN.BANK;
-    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 18, true, 'center');
-    text('Nội dung: ' + BN.qrInfo(BN.qrNoteFor(o)), 18, false, 'center', 2);
+    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 18, true, 'center', 2);
   }
   y += 4 * k;
   text('Cảm ơn bạn, hẹn gặp lại!', 20, false, 'center');
