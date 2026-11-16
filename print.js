@@ -19,7 +19,7 @@ const money = n => Math.round(Number(n) || 0).toLocaleString('vi-VN') + 'đ';
 const STATION = window.BENOC_STATION || 'bep';
 const KEY = 'printer.' + STATION;
 /* mode = cách in phiếu món, tmode = cách in tem dán ly ('off' | 'rawbt' | 'ble' | 'browser') */
-const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, offy: 0, auto: true };
+const DEF = { mode: 'off', width: 58, copies: 1, big: true, tmode: 'off', label: '40x30', lang: 'tspl', inv: false, offx: 0, offy: 0, auto: true, qr: true };
 function get() {
   const raw = store.get(KEY, {}), s = Object.assign({}, DEF, raw);
   if (raw.job) { if (raw.job === 'tem') { s.tmode = raw.mode || 'off'; s.mode = 'off'; } delete s.job; } // cài đặt bản trước (1 việc / máy)
@@ -32,6 +32,22 @@ const HEAD = 384;                    // bề rộng đầu in máy tem 2 inch (4
 const LABELS = { '40x30': { w: 40, h: 30, gap: 2 }, '50x30': { w: 50, h: 30, gap: 2 }, '50x40': { w: 50, h: 40, gap: 2 }, '58': { w: 48, h: 30, gap: 0, roll: true } };
 const labelOf = set => LABELS[set.label] || LABELS['40x30'];
 const jobs = set => [set.mode !== 'off' && 'phieu', set.tmode !== 'off' && 'tem'].filter(Boolean);
+
+/* ---------- Mã QR chuyển khoản in cuối phiếu ----------
+   Phiếu vẽ đồng bộ nên tải sẵn thư viện QR khi mở trang; chưa tải xong thì phiếu in không có mã. */
+const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+if (BN.FEATURES.vietqr && BN.loadScript) { BN.loadScript(QR_LIB).catch(() => {}); if (BN.loadBank) BN.loadBank(); }
+/* Ma trận ô đen/trắng của mã QR (null nếu chưa có thư viện) */
+function qrMatrix(text) {
+  if (!window.QRCode) return null;
+  const box = document.createElement('div');
+  try {
+    const q = new window.QRCode(box, { text, width: 64, height: 64, correctLevel: window.QRCode.CorrectLevel.M })._oQRCode;
+    const n = q.getModuleCount(), m = [];
+    for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(q.isDark(r, c)); m.push(row); }
+    return m;
+  } catch (e) { return null; }
+}
 
 /* ---------- Vẽ phiếu ---------- */
 function wrap(ctx, text, maxW) {
@@ -90,10 +106,23 @@ function ticketCanvas(o, items, extra, set) {
   else pair('TỔNG', money(total), 30);
   const paid = o.paid_amount || 0;
   text(o.paid_amount == null ? 'CHƯA THANH TOÁN' : paid >= total ? 'ĐÃ THANH TOÁN' + (o.paid_method === 'chuyen_khoan' ? ' (CK)' : o.paid_method === 'tien_mat' ? ' (TIỀN MẶT)' : '') : 'ĐÃ TRẢ ' + money(paid) + ' · CÒN THU ' + money(total - paid), 22, true, 'center', 2);
+  // Còn phải thu → in mã QR chuyển khoản đúng số tiền còn thu của cả đơn (giống mã trên màn hình Thu tiền)
+  const due = Math.round(total - paid);
+  const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
+  if (qm) {
+    rule(true);
+    text('QUÉT MÃ CHUYỂN KHOẢN', 22, true, 'center', 4);
+    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(W - pad * 2, 260 * k) / n)), size = cell * n;
+    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
+    const B = BN.BANK;
+    text(B.bank + ' · ' + B.account + (B.holder ? ' · ' + B.holder : ''), 18, false, 'center');
+    text('Nội dung: ' + BN.qrInfo(BN.qrNoteFor(o)), 18, false, 'center', 2);
+  }
   y += 12 * k; // chừa chút giấy để xé
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
+    if (op.qr) { op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + c * op.cell, op.y + r * op.cell, op.cell, op.cell); })); return; }
     if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [8, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
     ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
     ctx.fillText(op.t, op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
@@ -433,7 +462,8 @@ function openSettings(onChange) {
     (s.mode === 'ble' ? bleBox('phieu') : '') +
     (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
       '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
-      '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' + prevT() +
+      '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' +
+      (BN.FEATURES.vietqr ? '<label class="check"><input type="checkbox" id="prQr"' + (s.qr !== false ? ' checked' : '') + '><span><b>In mã QR chuyển khoản cuối phiếu</b><small>Chỉ in khi đơn còn phải thu tiền, đúng số tiền còn thu.</small></span></label>' : '') + prevT() +
       '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="phieu">In thử phiếu</button></div>' : '') + '</section>' +
     '<section class="pr-sec"><h3>Tem dán ly</h3><p class="small muted" style="margin:0 0 6px">Mỗi ly một tem: bàn / mang về, tên khách, món, size, đường, đá, topping, ghi chú.</p>' +
     radios('prt', s.tmode, [['ble', 'Bluetooth trực tiếp (khuyên dùng cho máy tem)', 'Trang nối thẳng máy in tem (CLABEL CT221B…). Dùng được cùng lúc với máy in phiếu.'], IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Chỉ khi điện thoại này không dùng RawBT để in phiếu.'], ['off', 'Không in tem', 'Máy này không in tem.']].filter(Boolean)) +
@@ -451,7 +481,7 @@ function openSettings(onChange) {
   ui.sheet(ui.head('Máy in ' + PLACE, 'Cài riêng trên điện thoại này') + '<div class="sh-body pr-set" id="prBody">' + body() + '</div>' +
     '<div class="sh-foot"><button class="btn btn-block" type="button" id="prSave">Lưu</button></div>', sh => {
     const q = id => sh.querySelector(id);
-    const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; const f = sh.querySelector('.prFast'); if (f) store.set('bleFast', f.checked); };
+    const read = () => { if (q('#prCopies')) s.copies = Math.max(1, Math.min(3, Number(q('#prCopies').value) || 1)); if (q('#prBig')) s.big = q('#prBig').checked; if (q('#prQr')) s.qr = q('#prQr').checked; if (q('#prInv')) s.inv = q('#prInv').checked; s.auto = q('#prAuto').checked; const f = sh.querySelector('.prFast'); if (f) store.set('bleFast', f.checked); };
     const redraw = () => { read(); const top = q('#prBody').scrollTop; q('#prBody').innerHTML = body(); q('#prBody').scrollTop = top; };
     const unsub = () => { const i = bleSubs.indexOf(onBle); if (i >= 0) bleSubs.splice(i, 1); };
     const onBle = () => { if (!document.body.contains(sh)) { unsub(); return; } redraw(); };
