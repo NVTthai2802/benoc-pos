@@ -74,6 +74,7 @@ button { cursor: pointer; }
 .pill-red { background: var(--red-soft); color: var(--red); }
 .pill-mute { background: var(--line); color: var(--ink-2); }
 .tag { display: inline-block; vertical-align: 2px; margin-left: 4px; padding: 1px 8px; border-radius: 999px; background: #FFD966; color: #5B3D00; font: 600 11px/1.6 var(--f-body); white-space: nowrap; }
+.tag-best { background: #E8590C; color: #fff; font-weight: 700; }
 
 /* Công tắc bật/tắt */
 .switch { position: relative; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }

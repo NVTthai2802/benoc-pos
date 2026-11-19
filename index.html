@@ -552,7 +552,7 @@ function renderMenu() {
       return '<li class="item" data-item="' + esc(it.id) + '" data-n="' + esc(BN.fold(it.name + ' ' + (it.description || '') + ' ' + c.name)) + '">' +
         '<button class="thumb-btn" type="button" data-open="' + esc(it.id) + '" aria-label="Xem ' + esc(it.name) + '">' + thumbHtml(it) + '</button>' +
         '<button class="item-main" type="button" data-open="' + esc(it.id) + '">' +
-        '<span class="item-name">' + esc(it.name) + (it.tag ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
+        '<span class="item-name">' + esc(it.name) + (it.best ? ' <span class="tag tag-best">🔥 Best seller</span>' : '') + (it.tag && !(it.best && /^best\s*seller$/i.test(it.tag)) ? ' <span class="tag">' + esc(it.tag) + '</span>' : '') + '</span>' +
         (it.description ? '<span class="item-desc">' + esc(it.description) + '</span>' : '') +
         (hint ? '<span class="item-opts">' + optionHintHtml(it) + '</span>' : '') + '</button>' +
         '<div class="item-side">' + (it.sale ? '<span class="item-sale">' + esc(saleTag(it)) + '</span>' : '') + (priceL(it) ? '<span class="item-price item-price--ml num"><span><small>M</small> ' + K(it.price) + '</span><span><small>L</small> ' + K(priceL(it)) + '</span></span>' : '<span class="item-price num">' + (it.sale ? '<s>' + K(it.orig) + '</s> ' : '') + K(it.price) + '</span>') + addBtnHtml(it) + '</div></li>';
@@ -1193,6 +1193,8 @@ async function loadMenu() {
     state.menu = await api.getMenu() || []; lastMenuAt = Date.now();
     state.items = new Map(); state.itemCat = new Map();
     state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
+    // Best seller tự động: món bán chạy nhất 7 ngày của mỗi quầy. Có số liệu thì bỏ nhãn "Best seller" gõ tay ở món khác.
+    try { const best = await api.bestSellers(); if (best.length) { const ids = new Set(best.map(b => b.menu_item_id)); state.items.forEach(it => { if (ids.has(it.id)) it.best = true; else if (/^best\s*seller$/i.test(it.tag || '')) it.tag = null; }); } } catch (e) { /* bỏ qua */ }
     try { state.promos = (await api.getPromotions()) || []; } catch (e) { state.promos = []; }
     // Ưu đãi giảm giá / đồng giá: giá món hiện theo giá đã giảm (máy chủ cũng tính đúng như vậy)
     state.items.forEach(it => { it.orig = it.price; const sl = saleOf(state.promos, it.id, it.price); if (sl) { it.price = sl.price; it.sale = sl; } });

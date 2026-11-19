@@ -201,6 +201,9 @@ function supabaseApi() {
   const api = {
     /* ---------- Khách ---------- */
     getMenu: () => rpc('get_menu'),
+    /* Món bán chạy nhất 7 ngày mỗi quầy (cập nhật 39). Lỗi (chưa chạy SQL) → [] */
+    async bestSellers() { try { return (await rpc('best_sellers')) || []; } catch (e) { return []; } },
+    unlinkSale: id => rpc('unlink_sale', { p_id: id }),
     placeOrder: o => rpc('place_order', {
       p_queue_number: o.dine === 'mang_ve' ? null : o.queue, p_customer_name: o.name, p_items: o.items,
       p_customer_phone: o.phone || null, p_confirm_duplicate: !!o.confirm, p_note: o.note || null,
@@ -1040,6 +1043,8 @@ function demoApi() {
   const api = {
     /* ---------- Khách ---------- */
     async getMenu() { await wait(120); return buildPublicMenu(load()); },
+    async bestSellers() { const n = new Map(); load().sales.filter(s => Date.now() - new Date(s.paid_at) < 7 * 864e5).forEach(s => (s.items || []).forEach(i => { if (!i.menu_item_id || i.promo_part === 'tang') return; const k = i.menu_item_id; const v = n.get(k) || { menu_item_id: k, station: i.station || 'bep', qty: 0 }; v.qty += i.qty; n.set(k, v); })); const best = {}; n.forEach(v => { if (!best[v.station] || v.qty > best[v.station].qty) best[v.station] = v; }); return Object.values(best); },
+    async unlinkSale(id) { need('owner'); tx(d => { d.sales = d.sales.filter(s => !(s.id === id && s.source === 'khong_ma')); }); },
     async getPromotions() { await wait(60); return buildPublicPromos(load()); },
     async paymentInfo() { const st = load().shop_settings; return st.bank_account ? { bin: st.bank_bin, bank: st.bank_name, account: st.bank_account, holder: st.bank_holder || '', note: st.bank_note || NOTE_DEFAULT } : null; },
     async placeOrder({ queue, name, phone, items, confirm, note, dine, address, deliverAt }) {
