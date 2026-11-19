@@ -1655,15 +1655,15 @@ const TXN_ST = { da_khop: ['Đã khớp đơn', 'pill-ok'], thieu_tien: ['Thiế
 function sepayBoxHtml() {
   const copyRow = (id, label, val, extra) => '<label class="field" for="' + id + '">' + label + '<div class="row" style="gap:6px;flex-wrap:nowrap"><input id="' + id + '" class="num" readonly value="' + esc(val) + '" style="flex:1;min-width:0"><button class="btn btn-sm btn-line" type="button" data-copy="' + id + '">Chép</button>' + (extra || '') + '</div></label>';
   return '<section class="box cc-xanhla" id="sepayBox"><h2 class="box-title"><span>Tự xác nhận chuyển khoản</span></h2>' +
-    '<p class="small muted" style="margin:0 0 8px">Khách quét mã QR của đơn và chuyển khoản → máy Android có app <b>Bé Nốc POS</b> đọc thông báo của app <b>Techcombank Share Noti</b> → đơn tự chuyển sang <b>Đã thu · Chuyển khoản</b>, màn hình bếp / pha chế báo "Đã nhận chuyển khoản". Nút <b>Đã nhận chuyển khoản</b> vẫn dùng được khi cần.</p>' +
+    '<p class="small muted" style="margin:0 0 8px">Khách quét mã QR của đơn và chuyển khoản → máy Android có app <b>Bé Nốc POS</b> đọc thông báo của app <b>Techcombank Store Noti</b> → đơn tự chuyển sang <b>Đã thu · Chuyển khoản</b>, màn hình bếp / pha chế báo "Đã nhận chuyển khoản". Nút <b>Đã nhận chuyển khoản</b> vẫn dùng được khi cần.</p>' +
     copyRow('spKey', 'Khoá (dán vào app Android)', '••••••••', '<button class="btn btn-sm btn-line" type="button" id="spShow">Hiện</button>') +
     '<p class="msg" id="spMsg" hidden></p>' +
     '<details class="small" style="margin:6px 0 10px" open><summary><b>Cài trên máy Android</b> (làm một lần)</summary><ol style="margin:6px 0 0;padding-left:18px;line-height:1.6">' +
-    '<li>Chủ quán thêm số điện thoại của máy làm <b>nhân viên nhận thông báo</b> của cửa hàng trên Techcombank. Máy đó cài app <b>Share Noti</b>, đăng nhập bằng số đã thêm.</li>' +
+    '<li>Chủ quán thêm số điện thoại của máy làm <b>nhân viên nhận thông báo</b> của cửa hàng trên Techcombank. Máy đó cài app <b>Store Noti</b>, đăng nhập bằng số đã thêm.</li>' +
     '<li>Cài app <b>Bé Nốc POS 1.3</b> (<a href="app/benoc-pos-thong-bao.apk">tải APK</a>) <b>bằng máy tính qua cáp USB</b> (adb install). Mở file trực tiếp trên điện thoại sẽ bị Google Play Protect chặn vì app xin quyền đọc thông báo. Mở app → <b>⋮ → Đọc thông báo chuyển khoản</b>.</li>' +
     '<li>Bước 1: cho phép đọc thông báo và chạy nền không hạn chế. Bước 2: dán <b>khoá</b> ở trên → <b>Lưu khoá và kiểm tra kết nối</b>. Bước 4: bật <b>Đọc thông báo chuyển khoản</b>, để <b>Ghi thử</b>.</li>' +
     '<li>Chuyển thử 1–2 khoản nhỏ bằng mã QR của một đơn. Bảng dưới hiện dòng <b>Ghi thử</b>: kiểm tra đọc đúng số tiền và mã BN… Đúng rồi thì trong app <b>tắt Ghi thử</b>.</li>' +
-    '<li>Thông báo của Share Noti để <b>Im lặng</b> nếu không muốn bị làm phiền (đừng chặn hẳn).</li></ol>' +
+    '<li>Thông báo của Store Noti để <b>Im lặng</b> nếu không muốn bị làm phiền (đừng chặn hẳn).</li></ol>' +
     '<p style="margin:6px 0 0">Mã thanh toán của đơn là <b>BN</b> + 6 ký tự, đứng đầu nội dung chuyển khoản trong mã QR. Thông báo không có mã thì máy chỉ khớp khi có <b>đúng 1 đơn chưa thu cùng số tiền</b>; còn lại nhân viên bấm tay. Máy Android tắt / mất mạng thì tiền vẫn vào tài khoản bình thường, chỉ không tự đánh dấu.</p></details>' +
     '<div class="row" style="justify-content:space-between;align-items:center"><b>Tiền vào gần đây</b><button class="btn btn-sm btn-line" type="button" id="spReload">Tải lại</button></div>' +
     '<div id="spTxns" class="small"><p class="loading">Đang tải…</p></div>' +

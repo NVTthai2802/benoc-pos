@@ -82,22 +82,22 @@ Mỗi lần chạm là **đơn thật ở bếp**. Chụp nhầm thì giữ nút
 
 ## Đọc thông báo chuyển khoản (bản 1.3)
 
-Máy Android này đọc thông báo tiền vào của app **Techcombank Share Noti** → đơn tự chuyển sang **Đã thu · Chuyển khoản**, màn hình bếp / pha chế báo *"Đã nhận chuyển khoản 75.000đ · Bàn 12"*. Không mất phí.
+Máy Android này đọc thông báo tiền vào của app **Techcombank Store Noti** → đơn tự chuyển sang **Đã thu · Chuyển khoản**, màn hình bếp / pha chế báo *"Đã nhận chuyển khoản 75.000đ · Bàn 12"*. Không mất phí.
 
 Cần (làm một lần):
-1. Chủ quán thêm số điện thoại của máy này làm **nhân viên nhận thông báo** của cửa hàng trên Techcombank. Cài **Share Noti**, đăng nhập bằng số đó.
+1. Chủ quán thêm số điện thoại của máy này làm **nhân viên nhận thông báo** của cửa hàng trên Techcombank. Cài **Store Noti**, đăng nhập bằng số đó.
 2. Supabase Product đã chạy **cập nhật SQL 37** (`sql/cap-nhat-37-doc-thong-bao-ngan-hang.sql`).
 3. Trong app Bé Nốc POS: **⋮ → Đọc thông báo chuyển khoản**:
    - **Bước 1**: *Mở trang cho phép* → bật **Bé Nốc POS**; *Cho chạy nền không hạn chế* → **Cho phép**. Xiaomi / Oppo / Vivo: bật thêm **Tự khởi động**.
    - **Bước 2**: dán **khoá** (trang Quản lý → Cài đặt → *Tự xác nhận chuyển khoản* → Hiện → Chép) → **Lưu khoá và kiểm tra kết nối** → phải hiện **✅ Kết nối được, khoá đúng**.
-   - **Bước 3**: để trống, app tự nhận Share Noti ở thông báo đầu tiên (hoặc *Chọn app khác*).
+   - **Bước 3**: để trống, app tự nhận Store Noti ở thông báo đầu tiên (hoặc *Chọn app khác*).
    - **Bước 4**: bật **Đọc thông báo chuyển khoản**, giữ **Ghi thử** lúc đầu.
 4. Chuyển thử 1–2 khoản nhỏ bằng mã QR của một đơn. Mục **5. Gần đây** (và bảng *Tiền vào gần đây* trong Quản lý) hiện **🧪 Ghi thử: đọc được 2.000đ, mã BNxxxxxx**. Đọc đúng thì **tắt Ghi thử**.
-5. Muốn không bị làm phiền: Cài đặt Android → Thông báo → Share Noti → **Im lặng**. **Đừng chặn hẳn** (chặn thì không đọc được). Bật *Tự xoá thông báo sau khi đọc* để thanh thông báo gọn.
+5. Muốn không bị làm phiền: Cài đặt Android → Thông báo → Store Noti → **Im lặng**. **Đừng chặn hẳn** (chặn thì không đọc được). Bật *Tự xoá thông báo sau khi đọc* để thanh thông báo gọn.
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| Không thấy dòng nào ở *Gần đây* khi có tiền vào | Bước 1 chưa bật quyền; hoặc đang chặn thông báo Share Noti; hoặc chưa bật *Đọc thông báo chuyển khoản* |
+| Không thấy dòng nào ở *Gần đây* khi có tiền vào | Bước 1 chưa bật quyền; hoặc đang chặn thông báo Store Noti; hoặc chưa bật *Đọc thông báo chuyển khoản* |
 | ⛔ Sai khoá | Chủ quán vừa *Đổi khoá*: chép khoá mới vào bước 2 |
 | ⛔ Chưa chạy cập nhật SQL 37 | Chạy file SQL 37 trên Supabase Product |
 | ⚠️ Không đọc được số tiền | Gửi dòng đó cho người làm app để chỉnh phần đọc |
