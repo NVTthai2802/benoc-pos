@@ -21,7 +21,7 @@ import java.util.concurrent.Executors
 
 /**
  * Cài đặt "Đọc thông báo chuyển khoản": quyền đọc thông báo, pin, khoá, app nguồn, ghi thử, nhật ký.
- * Dùng cho máy Android nhận thông báo Techcombank Share Noti của quán.
+ * Dùng cho máy Android nhận thông báo Techcombank Store Noti của quán.
  */
 class BankNotiActivity : ComponentActivity() {
     private val io = Executors.newSingleThreadExecutor()
@@ -55,7 +55,7 @@ class BankNotiActivity : ComponentActivity() {
         val battery = pm.isIgnoringBatteryOptimizations(packageName)
 
         t("Đọc thông báo chuyển khoản", 22f, true)
-        t("Có tiền vào, app ngân hàng (vd Techcombank Share Noti) hiện thông báo → Bé Nốc POS đọc số tiền và mã BN… → đơn tự chuyển sang Đã thu. " +
+        t("Có tiền vào, app ngân hàng (vd Techcombank Store Noti) hiện thông báo → Bé Nốc POS đọc số tiền và mã BN… → đơn tự chuyển sang Đã thu. " +
             "Chỉ đọc thông báo của app đã chọn, xoá số dư trước khi gửi.", 14f, top = 6, alpha = 0.8f)
 
         // ---- 1. Quyền
@@ -83,7 +83,7 @@ class BankNotiActivity : ComponentActivity() {
 
         // ---- 3. App nguồn
         t("3. App ngân hàng", 17f, true, 20)
-        t(if (p.notiPkg.isBlank()) "Chưa chọn: tự nhận app có tên Techcombank / Share Noti ở thông báo đầu tiên."
+        t(if (p.notiPkg.isBlank()) "Chưa chọn: tự nhận app có tên Techcombank / Store Noti ở thông báo đầu tiên."
           else "Đang đọc: " + BankNoti.appLabel(this, p.notiPkg) + "  (" + p.notiPkg + ")", 15f, top = 4)
         btn("Chọn app khác") { pickApp(p) }
 

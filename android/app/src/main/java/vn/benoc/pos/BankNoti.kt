@@ -18,7 +18,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Đọc thông báo tiền vào của app ngân hàng (vd Techcombank Share Noti) → gửi /api/bank-noti
+ * Đọc thông báo tiền vào của app ngân hàng (vd Techcombank Store Noti) → gửi /api/bank-noti
  * để phần mềm tự đánh dấu đơn "Đã thu · Chuyển khoản".
  *
  * - Chỉ đọc thông báo của ĐÚNG app đã chọn; mọi app khác bỏ qua, không lưu, không gửi.
@@ -84,10 +84,10 @@ object BankNoti {
         val pm = c.packageManager; pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
     }.getOrDefault(pkg)
 
-    /** App có vẻ là app ngân hàng / Share Noti của Techcombank */
+    /** App có vẻ là app ngân hàng / Store Noti của Techcombank */
     fun looksLikeBank(c: Context, pkg: String): Boolean {
         val s = (pkg + " " + appLabel(c, pkg)).lowercase()
-        return listOf("techcombank", "tcb", "sharenoti", "share noti").any { s.contains(it) }
+        return listOf("techcombank", "tcb", "sharenoti", "share noti", "storenoti", "store noti").any { s.contains(it) }
     }
 
     /** Các app vừa có thông báo (để chọn app nguồn), mới nhất trước, tối đa 15 */
