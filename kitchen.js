@@ -76,7 +76,8 @@ function start() {
   api.onKitchenChange(() => refresh());
   // SePay báo tiền vào (cập nhật 36): báo ngay trên màn hình, đơn tự chuyển sang Đã thu
   if (api.onBankTxn && BN.FEATURES.vietqr) api.onBankTxn(t => {
-    if (!t || !t.order_id) return;
+    if (!t || !t.order_id || t.status === 'mau' || t.status === 'chua_khop') return;
+    const seen = state.bankSeen || (state.bankSeen = new Set()); if (seen.has(t.id)) return; seen.add(t.id); // chỉ báo 1 lần
     const o = state.orders.find(x => x.id === t.order_id); if (o && !isMinePay(o)) return;
     const who = o ? (o.queue_number != null ? 'Bàn ' + o.queue_number : o.customer_name || 'đơn') : 'đơn';
     const amt = Number(t.amount).toLocaleString('vi-VN') + 'đ';

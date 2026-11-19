@@ -197,6 +197,7 @@ class MainActivity : ComponentActivity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, 1, 1, "Cài đặt chụp đơn")
             menu.add(0, 2, 2, "Sửa đơn vừa gửi")
+            menu.add(0, 6, 2, "Đọc thông báo chuyển khoản" + if (prefs.notiOn) (if (prefs.notiTest) " · ghi thử" else " · đang bật") else "")
             menu.add(0, 3, 3, "Tải lại trang")
             menu.add(0, 4, 4, if (prefs.testEnv) "Chuyển sang PRODUCT (quán dùng thật)" else "Chuyển sang TEST")
             menu.add(0, 5, 5, "Phiên bản " + BuildConfigCompat.version(this@MainActivity))
@@ -204,6 +205,7 @@ class MainActivity : ComponentActivity() {
                 when (it.itemId) {
                     1 -> startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
                     2 -> startActivity(Intent(this@MainActivity, EditOrderActivity::class.java))
+                    6 -> startActivity(Intent(this@MainActivity, BankNotiActivity::class.java))
                     3 -> web.reload()
                     4 -> {
                         prefs.testEnv = !prefs.testEnv

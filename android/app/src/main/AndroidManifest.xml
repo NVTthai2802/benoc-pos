@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Đọc thông báo chuyển khoản: xin chạy nền không bị tối ưu pin -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -19,6 +21,11 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
+        </intent>
+        <!-- Lấy tên app ngân hàng để hiển thị khi chọn app nguồn -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 
@@ -65,6 +72,23 @@
             android:taskAffinity="vn.benoc.pos.edit"
             android:windowSoftInputMode="stateVisible|adjustResize"
             android:theme="@style/Theme.Benoc.Dialog" />
+
+        <activity
+            android:name=".BankNotiActivity"
+            android:exported="false"
+            android:label="Đọc thông báo chuyển khoản"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Đọc thông báo tiền vào của app ngân hàng (người dùng tự bật trong Cài đặt) -->
+        <service
+            android:name=".BankNotiService"
+            android:exported="true"
+            android:label="Bé Nốc · đọc thông báo chuyển khoản"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".BubbleService"
