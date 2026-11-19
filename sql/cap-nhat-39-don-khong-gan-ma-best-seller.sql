@@ -28,7 +28,7 @@ alter table bank_txns add constraint bank_txns_status_check
 -- Khớp 1 giao dịch với đơn (thay bản của cập nhật 37/38)
 create or replace function private.bank_apply(p_txn bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare t bank_txns; o orders; v_n int; v_due int; v_status text; v_note text; v_sale uuid; v_name text;
+declare t bank_txns; o orders; s sales; v_n int; v_due int; v_status text; v_note text; v_sale uuid; v_name text; m text[];
 begin
   select * into t from bank_txns where id = p_txn for update;
   if t.amount <= 0 then
@@ -40,8 +40,17 @@ begin
     select count(*) into v_n from orders where private.pay_code(id) = t.pay_code and created_at > now() - interval '3 days';
     if v_n = 1 then
       select * into o from orders where private.pay_code(id) = t.pay_code and created_at > now() - interval '3 days' for update;
+    elsif v_n = 0 then
+      select * into s from sales where source = 'pos' and private.pay_code(id) = t.pay_code and paid_at > now() - interval '3 days' order by paid_at desc limit 1;
+      if found then
+        update sales set bank_txn_id = coalesce(bank_txn_id, t.id) where id = s.id;
+        update bank_txns set order_id = s.id, status = 'don_da_thu', note = 'Đơn đã được bấm thu trước đó' where id = t.id;
+        return jsonb_build_object('matched', true, 'status', 'don_da_thu', 'where', case when s.queue_number is not null then 'Bàn ' || s.queue_number else coalesce(s.customer_name, 'đơn') end);
+      end if;
+      update bank_txns set note = 'Không thấy đơn ' || t.pay_code where id = t.id;
+      return jsonb_build_object('matched', false, 'reason', 'code');
     else
-      update bank_txns set note = case when v_n = 0 then 'Không thấy đơn ' || t.pay_code else 'Nhiều đơn trùng mã ' || t.pay_code end where id = t.id;
+      update bank_txns set note = 'Nhiều đơn trùng mã ' || t.pay_code where id = t.id;
       return jsonb_build_object('matched', false, 'reason', 'code');
     end if;
   else
@@ -49,7 +58,11 @@ begin
     -- KHÔNG đoán theo số tiền (dễ gán nhầm sang đơn khác cùng giá). Chỉ ghi lại để đối soát.
     -- → tạo 1 hoá đơn "không gắn mã" để tính vào doanh thu (tab Đơn không gắn mã trong Hoá đơn)
     v_sale := gen_random_uuid();
-    v_name := initcap(lower(btrim((regexp_match(coalesce(t.content, ''), 'FT[0-9A-Z]+\s*,\s*([^,|]{2,60}?)\s*,'))[1])));
+    m := regexp_match(coalesce(t.content, ''), '[0-9]{6,}-[0-9]{8,12}-([A-Za-zÀ-ỹ ]{2,50}?)\s+(?:chuyen\s+tien|chuyển\s+tiền|thanh\s+toan|thanh\s+toán)', 'i');
+    if m is null then m := regexp_match(coalesce(t.content, ''), 'FT[0-9A-Z]+\s*,\s*([^,|]{2,60}?)\s*,'); end if;
+    if m is not null and m[1] !~* '(CONG TY|CTCP|DICH VU DI DONG|TRUC TUYEN)' then
+      v_name := initcap(lower(btrim(m[1])));
+    end if;
     insert into sales (id, queue_number, dine_type, total, payment_method, items, ordered_at, paid_at, customer_name, source, bank_txn_id)
     values (v_sale, null, 'tai_quan', t.amount, 'chuyen_khoan', '[]'::jsonb, coalesce(t.txn_at, now()), coalesce(t.txn_at, now()),
             coalesce(nullif(v_name, ''), 'Khách quét QR'), 'khong_ma', t.id);
@@ -62,9 +75,12 @@ begin
     v_status := 'don_da_thu'; v_note := 'Đơn đã thu đủ trước đó, kiểm tra trả lại khách';
   elsif t.amount >= v_due then
     update orders set paid_amount = total, paid_method = 'chuyen_khoan', paid_at = now(), paid_by = null where id = o.id;
-    if o.status = 'da_ra_mon' then perform private.finalize_order(o.id, 'chuyen_khoan'); end if;
     v_status := 'da_khop';
     v_note := case when t.amount > v_due then 'Khách chuyển dư ' || (t.amount - v_due) || 'đ' end;
+    update bank_txns set order_id = o.id, status = v_status, note = v_note where id = t.id;
+    if o.status = 'da_ra_mon' then perform private.finalize_order(o.id, 'chuyen_khoan'); end if;
+    return jsonb_build_object('matched', true, 'status', v_status,
+      'where', case when o.queue_number is not null then 'Bàn ' || o.queue_number else coalesce(o.customer_name, 'đơn') end);
   else
     update orders set paid_amount = coalesce(paid_amount, 0) + t.amount, paid_method = 'chuyen_khoan', paid_at = now(), paid_by = null where id = o.id;
     v_status := 'thieu_tien'; v_note := 'Còn thiếu ' || (v_due - t.amount) || 'đ';

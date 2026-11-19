@@ -481,6 +481,12 @@ async function renderInvoices(box) {
   if (box._invTok !== tok) return;
   all = list.slice().sort((a, b) => a.paid_at < b.paid_at ? 1 : -1);
   draw();
+  if (isToday && api.onBankTxn && !box._unsubBank) {
+    box._unsubBank = api.onBankTxn(t => {
+      if (!document.body.contains(box)) { try { box._unsubBank(); } catch (e) { /* bỏ qua */ } box._unsubBank = null; return; }
+      if (t && (t.status === 'khong_ma' || t.status === 'da_khop')) renderInvoices(box);
+    });
+  }
 }
 /* Xuất báo cáo Excel 1 tháng (doanh thu, món, hoá đơn, kho, nhân viên, lương) */
 function openExport() {
@@ -1674,7 +1680,7 @@ function bankBoxHtml(cfg) {
 }
 /* ---------- SePay: tự biết khách đã chuyển khoản ---------- */
 const SEPAY_URL = location.origin + '/api/sepay' + (window.BENOC_ENV === 'test' ? '-test' : '');
-const TXN_ST = { da_khop: ['Đã khớp đơn', 'pill-ok'], thieu_tien: ['Thiếu tiền', 'pill-warn'], chua_khop: ['Chưa khớp', 'pill-red'], don_da_thu: ['Đơn đã thu trước', 'pill-warn'], mau: ['Ghi thử', 'pill-mute'], khong_ma: ['Không gắn đơn', 'pill-mute'] };
+const TXN_ST = { da_khop: ['Đã khớp đơn', 'pill-ok'], thieu_tien: ['Thiếu tiền', 'pill-warn'], chua_khop: ['Chưa khớp', 'pill-red'], don_da_thu: ['Đơn đã thu trước', 'pill-warn'], mau: ['Ghi thử', 'pill-mute'], khong_ma: ['Đơn không gắn mã', 'pill-mute'] };
 function sepayBoxHtml() {
   const copyRow = (id, label, val, extra) => '<label class="field" for="' + id + '">' + label + '<div class="row" style="gap:6px;flex-wrap:nowrap"><input id="' + id + '" class="num" readonly value="' + esc(val) + '" style="flex:1;min-width:0"><button class="btn btn-sm btn-line" type="button" data-copy="' + id + '">Chép</button>' + (extra || '') + '</div></label>';
   return '<section class="box cc-xanhla" id="sepayBox"><h2 class="box-title"><span>Tự xác nhận chuyển khoản</span></h2>' +
@@ -1686,8 +1692,9 @@ function sepayBoxHtml() {
     '<li>Cài app <b>Bé Nốc POS 1.3</b> (<a href="app/benoc-pos-thong-bao.apk">tải APK</a>) <b>bằng máy tính qua cáp USB</b> (adb install). Mở file trực tiếp trên điện thoại sẽ bị Google Play Protect chặn vì app xin quyền đọc thông báo. Mở app → <b>⋮ → Đọc thông báo chuyển khoản</b>.</li>' +
     '<li>Bước 1: cho phép đọc thông báo và chạy nền không hạn chế. Bước 2: dán <b>khoá</b> ở trên → <b>Lưu khoá và kiểm tra kết nối</b>. Bước 4: bật <b>Đọc thông báo chuyển khoản</b>, để <b>Ghi thử</b>.</li>' +
     '<li>Chuyển thử 1–2 khoản nhỏ bằng mã QR của một đơn. Bảng dưới hiện dòng <b>Ghi thử</b>: kiểm tra đọc đúng số tiền và mã BN… Đúng rồi thì trong app <b>tắt Ghi thử</b>.</li>' +
-    '<li>Thông báo của Store Noti để <b>Im lặng</b> nếu không muốn bị làm phiền (đừng chặn hẳn).</li></ol>' +
-    '<p style="margin:6px 0 0">Mã thanh toán của đơn là <b>BN</b> + 6 ký tự, đứng đầu nội dung chuyển khoản trong mã QR. Tiền vào <b>không có mã</b> (khách gọi mồm quét QR dán trên loa, chuyển tay…) được ghi <b>Không gắn đơn</b> để đối soát, máy không tự gán vào đơn nào. Máy Android tắt / mất mạng thì tiền vẫn vào tài khoản bình thường, chỉ không tự đánh dấu.</p></details>' +
+    '<li>Thông báo của Store Noti để <b>Im lặng</b> nếu không muốn bị làm phiền (đừng chặn hẳn).</li>' +
+    '<li><b>Máy Xiaomi / Redmi / Oppo / Vivo</b>: bật <b>Tự khởi động (Autostart)</b> + <b>Pin: Không hạn chế</b> cho cả <b>Bé Nốc POS</b> và <b>Store Noti</b>, và <b>khoá cả 2 app trong màn hình đa nhiệm</b>. Nếu thấy Store Noti có thông báo mà bảng dưới không nhảy: trên điện thoại vào <i>Cài đặt → Quyền truy cập thông báo → Bé Nốc POS → Tắt rồi Bật lại</i>.</li></ol>' +
+    '<p style="margin:6px 0 0">Mã thanh toán của đơn là <b>BN</b> + 6 ký tự, đứng đầu nội dung chuyển khoản trong mã QR. Tiền vào <b>không có mã</b> (khách gọi mồm quét QR dán trên loa, chuyển tay…) được tự ghi vào tab <b>Đơn không gắn mã</b> trong phần Doanh thu → Hoá đơn và báo rõ trên màn hình bếp/quầy để nhân viên không bấm nhầm vào đơn khác.</p></details>' +
     '<div class="row" style="justify-content:space-between;align-items:center"><b>Tiền vào gần đây</b><button class="btn btn-sm btn-line" type="button" id="spReload">Tải lại</button></div>' +
     '<div id="spTxns" class="small"><p class="loading">Đang tải…</p></div>' +
     '<div class="row" style="margin-top:8px"><button class="btn btn-sm btn-line" type="button" id="spReset">Đổi khoá</button></div>' +
@@ -1708,7 +1715,7 @@ function wireSepayBox(main) {
     catch (e) { $('#spKey', box).value = ''; msg(need36(e) ? 'Cơ sở dữ liệu chưa chạy cập nhật SQL số 37. Chạy file sql/cap-nhat-37-doc-thong-bao-ngan-hang.sql trên Supabase rồi tải lại trang.' : 'Không lấy được khoá: ' + errText(e), true); }
   };
   const loadTxns = async () => {
-    const el = $('#spTxns', box);
+    const el = $('#spTxns', box); if (!el) return;
     try {
       const rows = await api.bankTxns(20) || [];
       el.innerHTML = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lúc</th><th class="r">Số tiền</th><th>Nội dung</th><th>Kết quả</th></tr></thead><tbody>' + rows.map(r => {
@@ -1717,6 +1724,10 @@ function wireSepayBox(main) {
       }).join('') + '</tbody></table></div>' : '<p class="muted">Chưa có giao dịch nào báo về.</p>';
     } catch (e) { el.innerHTML = '<p class="muted">' + (need36(e) ? 'Chưa chạy cập nhật SQL số 37.' : 'Không tải được: ' + esc(errText(e))) + '</p>'; }
   };
+  if (api.onBankTxn) {
+    if (state._unsubSepayBox) try { state._unsubSepayBox(); } catch (e) { /* bỏ qua */ }
+    state._unsubSepayBox = api.onBankTxn(() => { if (document.body.contains(box)) loadTxns(); });
+  }
   box.addEventListener('click', async e => {
     const c = e.target.closest('[data-copy]');
     if (c) { const inp = $('#' + c.dataset.copy, box), v = c.dataset.copy === 'spKey' ? key : inp.value; if (!v) return;

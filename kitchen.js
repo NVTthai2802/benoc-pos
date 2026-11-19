@@ -74,14 +74,21 @@ function start() {
   tick(); setInterval(tick, 1000 * 20);
   refresh();
   api.onKitchenChange(() => refresh());
-  // SePay báo tiền vào (cập nhật 36): báo ngay trên màn hình, đơn tự chuyển sang Đã thu
+  // Báo tiền vào (cập nhật 36–41):
+  // - Có mã đơn BN…: đơn tự chuyển sang Đã thu, báo tên bàn/khách.
+  // - Không có mã đơn (khách quét QR loa / gọi mồm): cũng báo rõ "QR loa (không mã đơn)" để nhân viên KHÔNG bấm nhầm vào đơn của khách khác.
   if (api.onBankTxn && BN.FEATURES.vietqr) api.onBankTxn(t => {
-    if (!t || !t.order_id || t.status === 'mau' || t.status === 'chua_khop') return;
-    const seen = state.bankSeen || (state.bankSeen = new Set()); if (seen.has(t.id)) return; seen.add(t.id); // chỉ báo 1 lần
-    const o = state.orders.find(x => x.id === t.order_id); if (o && !isMinePay(o)) return;
-    const who = o ? (o.queue_number != null ? 'Bàn ' + o.queue_number : o.customer_name || 'đơn') : 'đơn';
+    if (!t || t.status === 'mau' || t.status === 'chua_khop') return;
+    const seen = state.bankSeen || (state.bankSeen = new Set()); if (seen.has(t.id + ':' + t.status)) return; seen.add(t.id + ':' + t.status);
     const amt = Number(t.amount).toLocaleString('vi-VN') + 'đ';
-    ui.toast(t.status === 'thieu_tien' ? 'Nhận ' + amt + ' từ ' + who + ' · ' + (t.note || 'còn thiếu') : t.status === 'don_da_thu' ? who + ' chuyển thêm ' + amt + ' (đơn đã thu trước)' : 'Đã nhận chuyển khoản ' + amt + ' · ' + who);
+    if (t.status === 'khong_ma' || !t.order_id) {
+      ui.toast('Tiền vào QR loa (không mã đơn): ' + amt + ' · đã ghi Đơn không gắn mã');
+      if (state.sound) try { beep(); } catch (e) { /* bỏ qua */ }
+      return;
+    }
+    const o = state.orders.find(x => x.id === t.order_id); if (o && !isMinePay(o)) return;
+    const who = o ? (o.queue_number != null ? 'Bàn ' + o.queue_number : o.customer_name || 'đơn') : (t.pay_code || 'đơn');
+    ui.toast(t.status === 'thieu_tien' ? 'Nhận ' + amt + ' từ ' + who + ' · ' + (t.note || 'còn thiếu') : t.status === 'don_da_thu' ? who + ' chuyển khoản ' + amt + ' (đơn đã thu trước)' : 'Đã nhận chuyển khoản ' + amt + ' · ' + who);
     if (state.sound) try { beep(); } catch (e) { /* bỏ qua */ }
     refresh();
   });

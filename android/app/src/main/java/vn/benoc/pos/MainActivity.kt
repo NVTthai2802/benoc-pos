@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
         else openPage(prefs.page)
     }
 
-    override fun onResume() { super.onResume(); refreshBar() }
+    override fun onResume() { super.onResume(); BankNoti.ensureBound(this); refreshBar() }
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); web.saveState(out) }
 
     // ------------------------------------------------------------------ màn hình POS

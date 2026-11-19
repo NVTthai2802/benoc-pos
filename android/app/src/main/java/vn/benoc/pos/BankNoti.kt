@@ -28,13 +28,34 @@ import java.util.concurrent.Executors
  */
 class BankNotiService : NotificationListenerService() {
     private val main = Handler(Looper.getMainLooper())
-    private val retry = Runnable { BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() } }
+    private val retry = Runnable { scanActive(); BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() } }
     private fun scheduleRetry() { main.removeCallbacks(retry); main.postDelayed(retry, 60_000) }
 
-    override fun onListenerConnected() { connected = true; BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() } }
-    override fun onListenerDisconnected() { connected = false }
+    override fun onListenerConnected() {
+        connected = true
+        instance = this
+        scanActive()
+        BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() }
+    }
+
+    override fun onListenerDisconnected() {
+        connected = false
+        if (instance === this) instance = null
+        BankNoti.ensureBound(this)
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        handleSbn(sbn)
+    }
+
+    /** Quét lại các thông báo đang nằm trên thanh thông báo (phòng khi dịch vụ vừa bị Xiaomi tạm ngắt rồi nối lại) */
+    fun scanActive() {
+        if (!connected) return
+        val list = runCatching { activeNotifications }.getOrNull() ?: return
+        for (sbn in list) runCatching { handleSbn(sbn) }
+    }
+
+    private fun handleSbn(sbn: StatusBarNotification) {
         val p = Prefs(this)
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
@@ -47,8 +68,12 @@ class BankNotiService : NotificationListenerService() {
 
         val ex = n.extras
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val text = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+        val big = ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
+        val txt = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val lines = ex.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n") { it.toString() }.orEmpty()
+        val text = listOf(big, txt, lines).firstOrNull { it.isNotBlank() }.orEmpty()
         if (title.isBlank() && text.isBlank()) return
+        if (!BankNoti.markSeen(this, sbn.key, sbn.postTime, title, text)) return
         BankNoti.enqueue(this, JSONObject()
             .put("title", BankNoti.stripBalance(title)).put("text", BankNoti.stripBalance(text))
             .put("pkg", pkg).put("key", sbn.key).put("posted_at", sbn.postTime.toString())
@@ -57,17 +82,43 @@ class BankNotiService : NotificationListenerService() {
         BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() }
     }
 
-    override fun onDestroy() { main.removeCallbacks(retry); super.onDestroy() }
+    override fun onDestroy() { if (instance === this) instance = null; main.removeCallbacks(retry); super.onDestroy() }
 
-    companion object { @Volatile var connected = false }
+    companion object {
+        @Volatile var connected = false
+        @Volatile var instance: BankNotiService? = null
+    }
 }
 
 object BankNoti {
     private val io = Executors.newSingleThreadExecutor()
-    private const val Q = "noti_queue"; private const val LOG = "noti_log"; private const val APPS = "noti_apps"
+    private const val Q = "noti_queue"; private const val LOG = "noti_log"; private const val APPS = "noti_apps"; private const val SEEN = "noti_seen"
     private fun sp(c: Context) = c.getSharedPreferences("benoc_noti", Context.MODE_PRIVATE)
 
     val url get() = Prefs.SITE + "api/bank-noti"
+
+    /** Yêu cầu Android kết nối lại dịch vụ đọc thông báo nếu đã bật quyền mà bị MIUI/ColorOS ngắt ngầm */
+    fun ensureBound(c: Context) {
+        if (!permissionOn(c)) return
+        if (BankNotiService.connected && BankNotiService.instance != null) {
+            runCatching { BankNotiService.instance?.scanActive() }
+            return
+        }
+        runCatching {
+            NotificationListenerService.requestRebind(ComponentName(c, BankNotiService::class.java))
+        }
+    }
+
+    /** Chống đẩy trùng cùng 1 thông báo khi quét lại thanh trạng thái */
+    @Synchronized fun markSeen(c: Context, key: String?, postTime: Long, title: String, text: String): Boolean {
+        val sig = "${key.orEmpty()}|$postTime|${title.take(40)}|${text.take(120)}"
+        val arr = JSONArray(sp(c).getString(SEEN, "[]"))
+        for (i in 0 until arr.length()) if (arr.getString(i) == sig) return false
+        val out = JSONArray().put(sig)
+        for (i in 0 until minOf(arr.length(), 79)) out.put(arr.getString(i))
+        sp(c).edit().putString(SEEN, out.toString()).apply()
+        return true
+    }
 
     /** Xoá số dư: "SD: 12,345,678 VND", "Số dư 9.999.000đ"… */
     fun stripBalance(s: String) = s.replace(
@@ -109,6 +160,7 @@ object BankNoti {
     /** Gửi hết hàng đợi (luồng nền). done chạy ở luồng nền sau khi xong. */
     fun flush(c: Context, done: (() -> Unit)? = null) {
         val app = c.applicationContext
+        ensureBound(app)
         io.execute {
             val key = Prefs(app).notiKey
             while (key.isNotBlank()) {
@@ -160,8 +212,8 @@ object BankNoti {
             r.optBoolean("matched") -> "✅ " + money(amt) + " → " + r.optString("where") + when (r.optString("status")) {
                 "thieu_tien" -> " (thiếu tiền)"; "don_da_thu" -> " (đơn đã thu trước)"; else -> " · Đã thu" }
             amt <= 0 -> "⚠️ Không đọc được số tiền: \"" + sent.optString("text").take(120) + "\""
-            r.optString("reason") == "no_code" -> "· " + money(amt) + " không có mã đơn (quét QR loa): ghi để đối soát"
-            else -> "• " + money(amt) + " chưa khớp đơn (nhân viên bấm tay)"
+            r.optString("reason") == "no_code" -> "➕ " + money(amt) + " không có mã đơn (QR loa) → đã ghi Đơn không gắn mã"
+            else -> "• " + money(amt) + " chưa khớp đơn (" + r.optString("code", "không thấy đơn") + ")"
         }
     }
 

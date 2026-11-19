@@ -36,7 +36,7 @@ class BankNotiActivity : ComponentActivity() {
         setContentView(ScrollView(this).apply { addView(col) })
     }
 
-    override fun onResume() { super.onResume(); build() }
+    override fun onResume() { super.onResume(); BankNoti.ensureBound(this); build() }
 
     private fun t(s: String, size: Float = 14f, bold: Boolean = false, top: Int = 0, alpha: Float = 1f) = TextView(this).apply {
         text = s; textSize = size; if (bold) setTypeface(typeface, Typeface.BOLD); setPadding(0, (top * d).toInt(), 0, 0); this.alpha = alpha
@@ -51,6 +51,7 @@ class BankNotiActivity : ComponentActivity() {
         col.removeAllViews()
         val p = Prefs(this)
         val perm = BankNoti.permissionOn(this)
+        val live = BankNotiService.connected
         val pm = getSystemService(PowerManager::class.java)
         val battery = pm.isIgnoringBatteryOptimizations(packageName)
 
@@ -60,14 +61,28 @@ class BankNotiActivity : ComponentActivity() {
 
         // ---- 1. Quyền
         t("1. Quyền trên máy", 17f, true, 20)
-        t(if (perm) "✅ Đã cho phép đọc thông báo" else "❌ Chưa cho phép đọc thông báo", 15f, top = 6)
+        t(if (!perm) "❌ Chưa cho phép đọc thông báo"
+          else if (live) "✅ Đang lắng nghe thông báo"
+          else "⚠️ Đã bật quyền nhưng hệ thống (Xiaomi/MIUI) đang tạm ngắt dịch vụ đọc thông báo", 15f, top = 6)
         if (!perm) btn("Mở trang cho phép (bật Bé Nốc POS)") { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        else if (!live) {
+            btn("Kết nối lại dịch vụ đọc thông báo") {
+                BankNoti.ensureBound(this)
+                col.postDelayed({
+                    build()
+                    if (!BankNotiService.connected) {
+                        Toast.makeText(this, "Máy Xiaomi giữ dịch vụ: hãy TẮT rồi BẬT lại Bé Nốc POS ở màn hình tiếp theo", Toast.LENGTH_LONG).show()
+                        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    }
+                }, 600)
+            }
+        }
         t(if (battery) "✅ Pin: không hạn chế" else "⚠️ Pin đang bị tối ưu: máy để lâu có thể gửi chậm", 15f, top = 6)
         if (!battery) btn("Cho chạy nền không hạn chế") {
             runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) }
                 .onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
         }
-        t("Xiaomi / Oppo / Vivo: bật thêm Tự khởi động cho Bé Nốc POS. Không vuốt tắt app trong đa nhiệm.", 13f, top = 4, alpha = 0.7f)
+        t("Xiaomi / Oppo / Vivo: bật thêm Tự khởi động + Pin không hạn chế cho cả Bé Nốc POS và Store Noti, khoá cả 2 app trong màn hình đa nhiệm.", 13f, top = 4, alpha = 0.7f)
 
         // ---- 2. Khoá
         t("2. Khoá", 17f, true, 20)

@@ -97,15 +97,16 @@ Cần (làm một lần):
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| Không thấy dòng nào ở *Gần đây* khi có tiền vào | Bước 1 chưa bật quyền; hoặc đang chặn thông báo Store Noti; hoặc chưa bật *Đọc thông báo chuyển khoản* |
+| Không thấy dòng nào ở *Gần đây* khi có tiền vào (dù Store Noti vẫn có thông báo) | Hệ điều hành Xiaomi/MIUI tạm ngắt dịch vụ đọc thông báo: vào **⋮ → Đọc thông báo chuyển khoản** bấm **Kết nối lại dịch vụ đọc thông báo** (hoặc vào *Cài đặt Android → Quyền truy cập thông báo → Bé Nốc POS → Tắt rồi Bật lại*). Bật **Tự khởi động (Autostart)**, **Pin: Không hạn chế** và **khoá cả Bé Nốc POS + Store Noti trong màn hình đa nhiệm** |
 | ⛔ Sai khoá | Chủ quán vừa *Đổi khoá*: chép khoá mới vào bước 2 |
-| ⛔ Chưa chạy cập nhật SQL 37 | Chạy file SQL 37 trên Supabase Product |
+| ⛔ Chưa chạy cập nhật SQL 37 | Chạy file SQL 37 (và 39, 41) trên Supabase Product |
 | ⚠️ Không đọc được số tiền | Gửi dòng đó cho người làm app để chỉnh phần đọc |
-| · … không có mã đơn (quét QR loa) | Khách quét QR dán trên loa / chuyển tay (thường là khách gọi mồm, không có đơn): chỉ ghi để đối soát, không gán vào đơn nào (cập nhật 38) |
+| ➕ … không có mã đơn (QR loa) → đã ghi Đơn không gắn mã | Khách quét QR dán trên loa / chuyển tay (thường là khách gọi mồm, không có đơn): không gán vào đơn nào, tự ghi vào tab **Đơn không gắn mã** trong *Doanh thu → Hoá đơn* và báo trên màn hình bếp/quầy (cập nhật 39, 41) |
 | • … chưa khớp đơn | Có mã BN… nhưng không thấy đơn (đơn đã huỷ / quá 3 ngày): nhân viên bấm tay nếu cần |
 | ⏳ … chờ gửi | Máy mất mạng: tự gửi lại khi có mạng (hoặc bấm *Gửi lại ngay*) |
 
 - App **chỉ đọc thông báo của app đã chọn**, xoá **số dư** ngay trên máy trước khi gửi; phần mềm chỉ lưu số tiền, nội dung chuyển khoản và đơn đã khớp.
+- Khi kết nối lại dịch vụ đọc thông báo hoặc bấm *Gửi lại ngay / tải lại*, app tự quét luôn các thông báo Store Noti đang còn trên thanh trạng thái (chống trùng theo mã `FT…`).
 - Máy tắt / hết pin / mất mạng: tiền vẫn vào tài khoản quán bình thường (loa vẫn đọc), chỉ không tự đánh dấu đơn.
 - Màn hình **không cần sáng**: app đọc cả khi tắt màn hình, khoá máy.
 
