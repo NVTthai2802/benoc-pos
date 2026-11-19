@@ -36,7 +36,11 @@ class BankNotiActivity : ComponentActivity() {
         setContentView(ScrollView(this).apply { addView(col) })
     }
 
-    override fun onResume() { super.onResume(); build() }
+    override fun onResume() {
+        super.onResume()
+        if (BankNoti.permissionOn(this) && Prefs(this).notiOn) BankNotiService.rescan(this)   // mở màn hình này: quét luôn thông báo còn sót
+        build()
+    }
 
     private fun t(s: String, size: Float = 14f, bold: Boolean = false, top: Int = 0, alpha: Float = 1f) = TextView(this).apply {
         text = s; textSize = size; if (bold) setTypeface(typeface, Typeface.BOLD); setPadding(0, (top * d).toInt(), 0, 0); this.alpha = alpha
@@ -105,7 +109,7 @@ class BankNotiActivity : ComponentActivity() {
         t("5. Gần đây", 17f, true, 20)
         val q = BankNoti.pending(this)
         if (q > 0) t("⏳ $q thông báo chờ gửi (sẽ gửi khi có mạng)", 14f, top = 4)
-        btn("Gửi lại ngay / tải lại") { BankNoti.flush(this) { runOnUiThread { build() } } }
+        btn("Đọc lại thông báo đang có / gửi lại") { BankNotiService.rescan(this); BankNoti.flush(this) { runOnUiThread { build() } } }
         val lines = BankNoti.logLines(this)
         t(if (lines.isEmpty()) "Chưa có thông báo nào." else lines.joinToString("\n"), 13f, top = 4).setTextIsSelectable(true)
     }

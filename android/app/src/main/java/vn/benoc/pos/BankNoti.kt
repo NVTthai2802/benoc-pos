@@ -30,36 +30,63 @@ class BankNotiService : NotificationListenerService() {
     private val main = Handler(Looper.getMainLooper())
     private val retry = Runnable { BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() } }
     private fun scheduleRetry() { main.removeCallbacks(retry); main.postDelayed(retry, 60_000) }
+    private fun flushNow() = BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() }
 
-    override fun onListenerConnected() { connected = true; BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() } }
-    override fun onListenerDisconnected() { connected = false }
+    // Android bật lại dịch vụ (mở máy, mở lại app, sau khi bị tắt ngầm): quét luôn thông báo đang nằm
+    // trên thanh thông báo — tiền về lúc máy tắt / app bị đóng vẫn được đọc.
+    override fun onListenerConnected() { connected = true; instance = this; scanActive(); flushNow() }
+    override fun onListenerDisconnected() { connected = false; if (instance === this) instance = null }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification) {
+    override fun onNotificationPosted(sbn: StatusBarNotification) { if (handle(sbn)) flushNow() }
+
+    /** Đọc lại mọi thông báo đang có của app ngân hàng đã chọn (bỏ qua cái đã đọc) */
+    fun scanActive() {
+        val list = runCatching { activeNotifications }.getOrNull() ?: return
+        var any = false
+        list.sortedBy { it.postTime }.forEach { if (handle(it)) any = true }
+        if (any) flushNow()
+    }
+
+    /** true = đã đưa vào hàng đợi gửi */
+    private fun handle(sbn: StatusBarNotification): Boolean {
         val p = Prefs(this)
-        val n = sbn.notification ?: return
-        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
-        val pkg = sbn.packageName ?: return
-        if (pkg == packageName) return
+        val n = sbn.notification ?: return false
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return false
+        val pkg = sbn.packageName ?: return false
+        if (pkg == packageName) return false
         BankNoti.rememberApp(this, pkg)                       // chỉ ghi tên app (để chọn), không ghi nội dung
-        if (!p.notiOn) return
-        if (p.notiPkg.isBlank()) { if (BankNoti.looksLikeBank(this, pkg)) p.notiPkg = pkg else return }
-        if (pkg != p.notiPkg) return
+        if (!p.notiOn) return false
+        if (p.notiPkg.isBlank()) { if (BankNoti.looksLikeBank(this, pkg)) p.notiPkg = pkg else return false }
+        if (pkg != p.notiPkg) return false
 
         val ex = n.extras
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
-        if (title.isBlank() && text.isBlank()) return
+        if (title.isBlank() && text.isBlank()) return false
+        if (!BankNoti.markSeen(this, sbn.key + "|" + sbn.postTime + "|" + text.hashCode())) {   // đã đọc rồi
+            if (p.notiClear && !p.notiTest) runCatching { cancelNotification(sbn.key) }
+            return false
+        }
         BankNoti.enqueue(this, JSONObject()
             .put("title", BankNoti.stripBalance(title)).put("text", BankNoti.stripBalance(text))
             .put("pkg", pkg).put("key", sbn.key).put("posted_at", sbn.postTime.toString())
             .put("device", p.device).put("test", p.notiTest))
         if (p.notiClear && !p.notiTest) runCatching { cancelNotification(sbn.key) }
-        BankNoti.flush(this) { if (BankNoti.pending(this) > 0) scheduleRetry() }
+        return true
     }
 
-    override fun onDestroy() { main.removeCallbacks(retry); super.onDestroy() }
+    override fun onDestroy() { main.removeCallbacks(retry); if (instance === this) instance = null; super.onDestroy() }
 
-    companion object { @Volatile var connected = false }
+    companion object {
+        @Volatile var connected = false
+        @Volatile private var instance: BankNotiService? = null
+        /** Quét lại thông báo đang có (nút "Gửi lại ngay"). Dịch vụ chưa chạy thì nhờ Android bật lại. */
+        fun rescan(c: Context) {
+            val s = instance
+            if (s != null) runCatching { s.scanActive() }
+            else runCatching { requestRebind(ComponentName(c, BankNotiService::class.java)) }
+        }
+    }
 }
 
 object BankNoti {
@@ -105,6 +132,15 @@ object BankNoti {
         sp(c).edit().putString(Q, keep.toString()).apply()
     }
     fun pending(c: Context) = JSONArray(sp(c).getString(Q, "[]")).length()
+
+    /** Ghi nhớ thông báo đã đọc (200 cái gần nhất). false = đã đọc trước đó */
+    @Synchronized fun markSeen(c: Context, id: String): Boolean {
+        val a = JSONArray(sp(c).getString("noti_seen", "[]"))
+        for (i in 0 until a.length()) if (a.getString(i) == id) return false
+        val out = JSONArray().put(id); for (i in 0 until minOf(a.length(), 199)) out.put(a.getString(i))
+        sp(c).edit().putString("noti_seen", out.toString()).apply()
+        return true
+    }
 
     /** Gửi hết hàng đợi (luồng nền). done chạy ở luồng nền sau khi xong. */
     fun flush(c: Context, done: (() -> Unit)? = null) {
