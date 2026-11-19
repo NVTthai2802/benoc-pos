@@ -19,8 +19,8 @@ android {
         applicationId = "vn.benoc.pos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.3.1"
+        versionCode = 6
+        versionName = "1.3.2"
     }
 
     // 2 bản cùng mã nguồn, cùng applicationId + khoá ký (cài đè qua lại được):
