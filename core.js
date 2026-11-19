@@ -201,7 +201,7 @@ function supabaseApi() {
   const api = {
     /* ---------- Khách ---------- */
     getMenu: () => rpc('get_menu'),
-    /* Món bán chạy nhất 7 ngày mỗi quầy (cập nhật 39). Lỗi (chưa chạy SQL) → [] */
+    /* Món bán chạy nhất 7 ngày của từng mục menu, bằng nhau thì nhiều món (cập nhật 40). Lỗi → [] */
     async bestSellers() { try { return (await rpc('best_sellers')) || []; } catch (e) { return []; } },
     unlinkSale: id => rpc('unlink_sale', { p_id: id }),
     placeOrder: o => rpc('place_order', {
@@ -1043,7 +1043,7 @@ function demoApi() {
   const api = {
     /* ---------- Khách ---------- */
     async getMenu() { await wait(120); return buildPublicMenu(load()); },
-    async bestSellers() { const n = new Map(); load().sales.filter(s => Date.now() - new Date(s.paid_at) < 7 * 864e5).forEach(s => (s.items || []).forEach(i => { if (!i.menu_item_id || i.promo_part === 'tang') return; const k = i.menu_item_id; const v = n.get(k) || { menu_item_id: k, station: i.station || 'bep', qty: 0 }; v.qty += i.qty; n.set(k, v); })); const best = {}; n.forEach(v => { if (!best[v.station] || v.qty > best[v.station].qty) best[v.station] = v; }); return Object.values(best); },
+    async bestSellers() { const d = load(), cat = new Map(d.menu_items.map(m => [m.id, m.category_id])), n = new Map(); d.sales.filter(s => Date.now() - new Date(s.paid_at) < 7 * 864e5).forEach(s => (s.items || []).forEach(i => { if (!i.menu_item_id || i.promo_part === 'tang' || cat.get(i.menu_item_id) == null) return; n.set(i.menu_item_id, (n.get(i.menu_item_id) || 0) + i.qty); })); const top = new Map(); n.forEach((q, id) => { const c = cat.get(id); top.set(c, Math.max(top.get(c) || 0, q)); }); return [...n].filter(([id, q]) => q > 0 && q === top.get(cat.get(id))).map(([id, q]) => ({ menu_item_id: id, qty: q })); },
     async unlinkSale(id) { need('owner'); tx(d => { d.sales = d.sales.filter(s => !(s.id === id && s.source === 'khong_ma')); }); },
     async getPromotions() { await wait(60); return buildPublicPromos(load()); },
     async paymentInfo() { const st = load().shop_settings; return st.bank_account ? { bin: st.bank_bin, bank: st.bank_name, account: st.bank_account, holder: st.bank_holder || '', note: st.bank_note || NOTE_DEFAULT } : null; },
