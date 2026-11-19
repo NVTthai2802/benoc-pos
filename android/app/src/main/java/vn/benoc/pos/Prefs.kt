@@ -60,6 +60,27 @@ class Prefs(ctx: Context) {
 
     val ready get() = readyFor(testEnv)
 
+    // ---- Đọc thông báo chuyển khoản (app ngân hàng → /api/bank-noti)
+    var notiOn: Boolean
+        get() = p.getBoolean("noti_on", false)
+        set(v) = p.edit().putBoolean("noti_on", v).apply()
+    /** Khoá lấy ở trang Quản lý → Cài đặt → Tự xác nhận chuyển khoản */
+    var notiKey: String
+        get() = p.getString("noti_key", "") ?: ""
+        set(v) = p.edit().putString("noti_key", v.trim()).apply()
+    /** App nguồn (vd Techcombank Share Noti). Trống = tự nhận app có tên Techcombank / Share Noti */
+    var notiPkg: String
+        get() = p.getString("noti_pkg", "") ?: ""
+        set(v) = p.edit().putString("noti_pkg", v.trim()).apply()
+    /** Ghi thử: gửi lên để xem phần mềm đọc ra gì, KHÔNG khớp đơn */
+    var notiTest: Boolean
+        get() = p.getBoolean("noti_test", true)
+        set(v) = p.edit().putBoolean("noti_test", v).apply()
+    /** Tự xoá thông báo của app ngân hàng sau khi đọc */
+    var notiClear: Boolean
+        get() = p.getBoolean("noti_clear", true)
+        set(v) = p.edit().putBoolean("noti_clear", v).apply()
+
     companion object {
         const val DEFAULT_BOT_URL = "https://hixdacnaxfuxuccbajzn.supabase.co/functions/v1/bot-don"   // Supabase benoc-pos
         const val TEST_BOT_URL = "https://bsnpcinocphuruahpzwr.supabase.co/functions/v1/bot-don"      // Supabase benoc-pos-test

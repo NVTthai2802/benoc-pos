@@ -558,7 +558,7 @@ function supabaseApi() {
       let ch = null, stopped = false;
       cl().then(c => {
         if (stopped) return;
-        ch = c.channel('tien-ve').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bank_txns' }, e => cb(e.new)).subscribe();
+        ch = c.channel('tien-ve').on('postgres_changes', { event: '*', schema: 'public', table: 'bank_txns' }, e => e.new && cb(e.new)).subscribe(); // giao dịch được khớp đơn sau khi ghi (UPDATE)
       });
       return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
     },
