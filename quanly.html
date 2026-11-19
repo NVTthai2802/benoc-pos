@@ -1651,7 +1651,7 @@ function bankBoxHtml(cfg) {
 }
 /* ---------- SePay: tự biết khách đã chuyển khoản ---------- */
 const SEPAY_URL = location.origin + '/api/sepay' + (window.BENOC_ENV === 'test' ? '-test' : '');
-const TXN_ST = { da_khop: ['Đã khớp đơn', 'pill-ok'], thieu_tien: ['Thiếu tiền', 'pill-warn'], chua_khop: ['Chưa khớp', 'pill-red'], don_da_thu: ['Đơn đã thu trước', 'pill-warn'], mau: ['Ghi thử', 'pill-mute'] };
+const TXN_ST = { da_khop: ['Đã khớp đơn', 'pill-ok'], thieu_tien: ['Thiếu tiền', 'pill-warn'], chua_khop: ['Chưa khớp', 'pill-red'], don_da_thu: ['Đơn đã thu trước', 'pill-warn'], mau: ['Ghi thử', 'pill-mute'], khong_ma: ['Không gắn đơn', 'pill-mute'] };
 function sepayBoxHtml() {
   const copyRow = (id, label, val, extra) => '<label class="field" for="' + id + '">' + label + '<div class="row" style="gap:6px;flex-wrap:nowrap"><input id="' + id + '" class="num" readonly value="' + esc(val) + '" style="flex:1;min-width:0"><button class="btn btn-sm btn-line" type="button" data-copy="' + id + '">Chép</button>' + (extra || '') + '</div></label>';
   return '<section class="box cc-xanhla" id="sepayBox"><h2 class="box-title"><span>Tự xác nhận chuyển khoản</span></h2>' +
@@ -1664,7 +1664,7 @@ function sepayBoxHtml() {
     '<li>Bước 1: cho phép đọc thông báo và chạy nền không hạn chế. Bước 2: dán <b>khoá</b> ở trên → <b>Lưu khoá và kiểm tra kết nối</b>. Bước 4: bật <b>Đọc thông báo chuyển khoản</b>, để <b>Ghi thử</b>.</li>' +
     '<li>Chuyển thử 1–2 khoản nhỏ bằng mã QR của một đơn. Bảng dưới hiện dòng <b>Ghi thử</b>: kiểm tra đọc đúng số tiền và mã BN… Đúng rồi thì trong app <b>tắt Ghi thử</b>.</li>' +
     '<li>Thông báo của Store Noti để <b>Im lặng</b> nếu không muốn bị làm phiền (đừng chặn hẳn).</li></ol>' +
-    '<p style="margin:6px 0 0">Mã thanh toán của đơn là <b>BN</b> + 6 ký tự, đứng đầu nội dung chuyển khoản trong mã QR. Thông báo không có mã thì máy chỉ khớp khi có <b>đúng 1 đơn chưa thu cùng số tiền</b>; còn lại nhân viên bấm tay. Máy Android tắt / mất mạng thì tiền vẫn vào tài khoản bình thường, chỉ không tự đánh dấu.</p></details>' +
+    '<p style="margin:6px 0 0">Mã thanh toán của đơn là <b>BN</b> + 6 ký tự, đứng đầu nội dung chuyển khoản trong mã QR. Tiền vào <b>không có mã</b> (khách gọi mồm quét QR dán trên loa, chuyển tay…) được ghi <b>Không gắn đơn</b> để đối soát, máy không tự gán vào đơn nào. Máy Android tắt / mất mạng thì tiền vẫn vào tài khoản bình thường, chỉ không tự đánh dấu.</p></details>' +
     '<div class="row" style="justify-content:space-between;align-items:center"><b>Tiền vào gần đây</b><button class="btn btn-sm btn-line" type="button" id="spReload">Tải lại</button></div>' +
     '<div id="spTxns" class="small"><p class="loading">Đang tải…</p></div>' +
     '<div class="row" style="margin-top:8px"><button class="btn btn-sm btn-line" type="button" id="spReset">Đổi khoá</button></div>' +

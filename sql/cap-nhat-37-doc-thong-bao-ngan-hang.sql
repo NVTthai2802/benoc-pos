@@ -9,8 +9,8 @@
 --
 -- Khớp đơn:
 --   1. Có mã BN + 6 ký tự (đứng đầu nội dung CK trong mã QR của đơn) → đúng đơn đó.
---   2. Không có mã (thông báo không hiện nội dung) → chỉ khớp khi có ĐÚNG 1 đơn
---      chưa thu, tạo trong 6 giờ gần đây, tổng tiền bằng đúng số tiền nhận.
+--   2. Không có mã (khách quét QR dán trên loa, khách gọi mồm không có đơn…)
+--      → ghi "Không gắn đơn" để đối soát, KHÔNG đoán theo số tiền.
 --   Còn lại → "Chưa khớp", nhân viên bấm tay như cũ.
 --
 -- Dùng chung bảng giao dịch + khoá với cập nhật 36 (SePay, để dùng sau).
@@ -48,7 +48,7 @@ create index if not exists bank_txns_created on bank_txns(created_at desc);
 -- Trạng thái: thêm 'mau' (ghi thử, không khớp đơn)
 alter table bank_txns drop constraint if exists bank_txns_status_check;
 alter table bank_txns add constraint bank_txns_status_check
-  check (status in ('da_khop', 'thieu_tien', 'chua_khop', 'don_da_thu', 'mau'));
+  check (status in ('da_khop', 'thieu_tien', 'chua_khop', 'don_da_thu', 'mau', 'khong_ma'));
 alter table bank_txns enable row level security;
 drop policy if exists bank_txns_staff_read on bank_txns;
 create policy bank_txns_staff_read on bank_txns for select using (my_role() is not null);
@@ -83,7 +83,7 @@ end $$;
 -- 5. Khớp 1 giao dịch với đơn (dùng chung cho mọi nguồn)
 create or replace function private.bank_apply(p_txn bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare t bank_txns; o orders; v_n int; v_due int; v_status text; v_note text; v_by text := '';
+declare t bank_txns; o orders; v_n int; v_due int; v_status text; v_note text;
 begin
   select * into t from bank_txns where id = p_txn for update;
   if t.amount <= 0 then
@@ -100,17 +100,10 @@ begin
       return jsonb_build_object('matched', false, 'reason', 'code');
     end if;
   else
-    -- Không có mã: chỉ khớp khi có đúng 1 đơn chưa thu, cùng số tiền, trong 6 giờ
-    select count(*) into v_n from orders
-     where coalesce(paid_amount, 0) = 0 and total = t.amount and created_at > now() - interval '6 hours';
-    if v_n <> 1 then
-      update bank_txns set note = case when v_n = 0 then 'Không có mã đơn, không thấy đơn chưa thu ' || t.amount || 'đ'
-                                       else 'Không có mã đơn, ' || v_n || ' đơn cùng ' || t.amount || 'đ: bấm tay' end where id = t.id;
-      return jsonb_build_object('matched', false, 'reason', 'amount');
-    end if;
-    select * into o from orders
-     where coalesce(paid_amount, 0) = 0 and total = t.amount and created_at > now() - interval '6 hours' for update;
-    v_by := 'Khớp theo số tiền.';
+    -- Không có mã BN…: khách quét QR dán trên loa / chuyển tay (thường là khách gọi mồm, không có đơn).
+    -- KHÔNG đoán theo số tiền (dễ gán nhầm sang đơn khác cùng giá). Chỉ ghi lại để đối soát.
+    update bank_txns set status = 'khong_ma', note = 'Không có mã đơn (quét QR loa / chuyển tay)' where id = t.id;
+    return jsonb_build_object('matched', false, 'reason', 'no_code');
   end if;
 
   v_due := o.total - coalesce(o.paid_amount, 0);
@@ -125,7 +118,7 @@ begin
     update orders set paid_amount = coalesce(paid_amount, 0) + t.amount, paid_method = 'chuyen_khoan', paid_at = now(), paid_by = null where id = o.id;
     v_status := 'thieu_tien'; v_note := 'Còn thiếu ' || (v_due - t.amount) || 'đ';
   end if;
-  update bank_txns set order_id = o.id, status = v_status, note = nullif(btrim(v_by || ' ' || coalesce(v_note, '')), '') where id = t.id;
+  update bank_txns set order_id = o.id, status = v_status, note = v_note where id = t.id;
   return jsonb_build_object('matched', true, 'status', v_status,
     'where', case when o.queue_number is not null then 'Bàn ' || o.queue_number else coalesce(o.customer_name, 'đơn') end);
 end $$;

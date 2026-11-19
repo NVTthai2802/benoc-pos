@@ -89,9 +89,15 @@ class BankNotiActivity : ComponentActivity() {
 
         // ---- 4. Bật
         t("4. Bật", 17f, true, 20)
-        sw("Đọc thông báo chuyển khoản", p.notiOn) { p.notiOn = it; if (it && !perm) Toast.makeText(this, "Cần cho phép đọc thông báo ở bước 1", Toast.LENGTH_LONG).show() }
-        sw("Ghi thử (chỉ ghi lại, KHÔNG đánh dấu đơn đã thu)", p.notiTest) { p.notiTest = it }
-        t("Lần đầu để Ghi thử, chuyển thử vài khoản, xem nhật ký bên dưới đọc đúng số tiền và mã BN… rồi tắt Ghi thử.", 13f, alpha = 0.7f)
+        var test: Switch? = null
+        sw("Đọc thông báo chuyển khoản (công tắc chính)", p.notiOn) {
+            p.notiOn = it; test?.isEnabled = it
+            if (it && !perm) Toast.makeText(this, "Cần cho phép đọc thông báo ở bước 1", Toast.LENGTH_LONG).show()
+        }
+        test = sw("Ghi thử (đọc nhưng KHÔNG đánh dấu đơn đã thu)", p.notiTest) { p.notiTest = it }.apply { isEnabled = p.notiOn }
+        t(if (!p.notiOn) "⚠️ Công tắc chính đang tắt: app không đọc thông báo nào (kể cả Ghi thử)."
+          else if (p.notiTest) "Đang ghi thử: chuyển thử vài khoản, xem mục 5 đọc đúng số tiền và mã BN… rồi tắt Ghi thử để chạy thật."
+          else "✅ Đang chạy thật: đơn có mã BN… tự chuyển sang Đã thu.", 13f, alpha = 0.8f)
         sw("Tự xoá thông báo của app ngân hàng sau khi đọc", p.notiClear) { p.notiClear = it }
         t("Muốn không bị làm phiền: Cài đặt → Thông báo → app ngân hàng → để Im lặng. Đừng chặn hẳn (chặn thì Bé Nốc POS không đọc được).", 13f, alpha = 0.7f)
 

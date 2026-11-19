@@ -101,7 +101,8 @@ Cần (làm một lần):
 | ⛔ Sai khoá | Chủ quán vừa *Đổi khoá*: chép khoá mới vào bước 2 |
 | ⛔ Chưa chạy cập nhật SQL 37 | Chạy file SQL 37 trên Supabase Product |
 | ⚠️ Không đọc được số tiền | Gửi dòng đó cho người làm app để chỉnh phần đọc |
-| • … chưa khớp đơn | Thông báo không có mã BN… và có 0 hoặc 2+ đơn cùng số tiền: nhân viên bấm *Đã nhận chuyển khoản* |
+| · … không có mã đơn (quét QR loa) | Khách quét QR dán trên loa / chuyển tay (thường là khách gọi mồm, không có đơn): chỉ ghi để đối soát, không gán vào đơn nào (cập nhật 38) |
+| • … chưa khớp đơn | Có mã BN… nhưng không thấy đơn (đơn đã huỷ / quá 3 ngày): nhân viên bấm tay nếu cần |
 | ⏳ … chờ gửi | Máy mất mạng: tự gửi lại khi có mạng (hoặc bấm *Gửi lại ngay*) |
 
 - App **chỉ đọc thông báo của app đã chọn**, xoá **số dư** ngay trên máy trước khi gửi; phần mềm chỉ lưu số tiền, nội dung chuyển khoản và đơn đã khớp.

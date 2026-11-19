@@ -160,6 +160,7 @@ object BankNoti {
             r.optBoolean("matched") -> "✅ " + money(amt) + " → " + r.optString("where") + when (r.optString("status")) {
                 "thieu_tien" -> " (thiếu tiền)"; "don_da_thu" -> " (đơn đã thu trước)"; else -> " · Đã thu" }
             amt <= 0 -> "⚠️ Không đọc được số tiền: \"" + sent.optString("text").take(120) + "\""
+            r.optString("reason") == "no_code" -> "· " + money(amt) + " không có mã đơn (quét QR loa): ghi để đối soát"
             else -> "• " + money(amt) + " chưa khớp đơn (nhân viên bấm tay)"
         }
     }
