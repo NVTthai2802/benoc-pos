@@ -280,6 +280,11 @@
 .oc-qr { border: 1.5px dashed var(--line); border-radius: 12px; padding: 8px 12px; background: var(--card); }
 .oc-qr summary { cursor: pointer; font-weight: 600; }
 .oc-qr-box { text-align: center; padding-top: 8px; }
+.pay-now { text-align: center; }
+.pay-now .pn-amt { font-size: 18px; margin: 0 0 8px; }
+.pay-now .pn-qr img { width: min(260px, 70vw); height: auto; image-rendering: pixelated; }
+.pay-now .pn-act { justify-content: center; gap: 8px; margin: 8px 0; }
+.pay-now .btn-block { margin-top: 8px; }
 .oc-qr-box img { width: min(70vw, 260px); height: auto; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: 10px; }
 .oc-qr-box p { margin: 6px 0 0; }
 .line-act { display: flex; align-items: center; gap: 8px; justify-self: end; }
@@ -1070,7 +1075,10 @@ async function sendOrder(sh, confirm) {
     state.orders.unshift({ token: res.access_token, id: res.order_id, queue: isTake() ? null : queueNum(), dine: dineMode(), name: state.info.name.trim(), paid: false }); saveOrders();
     state.cart = []; state.cartNote = ''; saveCart(); refreshAddButtons();
     state.editingInfo = false; renderTicket();
-    ui.close(); showView('status'); startPolling(); ui.toast('Đã gửi đơn cho quán');
+    ui.close(); showView('status'); startPolling();
+    // Khách tự đặt: mời thanh toán chuyển khoản ngay bằng QR của đơn (có mã BN… để máy tự nhận tiền)
+    if (BN.FEATURES.vietqr && res.order_id && res.total > 0) payNowSheet({ id: res.order_id, token: res.access_token }, { dine_type: dineMode(), queue_number: isTake() ? null : queueNum(), customer_name: state.info.name.trim(), total: res.total });
+    else ui.toast('Đã gửi đơn cho quán');
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Gửi đơn cho quán';
     if (e.code === 'DUPLICATE_QUEUE') {
@@ -1154,6 +1162,33 @@ function payQrHtml(o, d) {
   return '<details class="oc-qr" data-qr="' + esc(o.token) + '"' + (open ? ' open' : '') + '><summary>Chuyển khoản bằng mã QR · <span class="num">' + vnd(due) + '</span></summary>' +
     '<div class="oc-qr-box">' + (img ? '<img src="' + img + '" alt="Mã VietQR chuyển khoản ' + vnd(due) + '">' : '<p class="loading">Đang tạo mã…</p>') +
     '<p><b>' + esc(BN.BANK.bank) + '</b> · <b class="num">' + esc(BN.BANK.account) + '</b></p><p class="small muted">Mở app ngân hàng, quét mã: số tiền và nội dung tự điền. Chuyển xong báo nhân viên để xác nhận nhé.</p></div></details>';
+}
+/* Ngay sau khi gửi đơn: màn hình mời chuyển khoản bằng QR của đơn. Bỏ qua được (trả tiền mặt / trả sau tại quầy). */
+async function payNowSheet(o, d) {
+  const note = custQrNote(o, d), payload = BN.vietQR(d.total, note);
+  const sh = ui.sheet(ui.head('Đã gửi đơn · Thanh toán') + '<div class="sh-body pay-now">' +
+    '<p class="pn-amt">Tổng đơn <b class="num">' + vnd(d.total) + '</b></p>' +
+    '<div class="pn-qr"><p class="loading">Đang tạo mã…</p></div>' +
+    '<p class="small">Mở app ngân hàng → <b>Quét mã</b>. Số tiền và nội dung tự điền, quán tự nhận được tiền. <b>Đừng quét mã dán ở quầy</b> vì mã đó không gắn với đơn của bạn.</p>' +
+    '<p class="small muted">Đang dùng chính điện thoại này? Bấm <b>Lưu ảnh mã</b>, rồi trong app ngân hàng chọn quét mã từ ảnh.</p>' +
+    '<div class="row pn-act"><button class="btn btn-sm btn-line" type="button" id="pnSave">Lưu ảnh mã</button><button class="btn btn-sm btn-line" type="button" id="pnCopy">Chép nội dung CK</button></div>' +
+    '<p class="small muted pn-info">' + esc(BN.BANK.bank) + (BN.BANK.holder ? ' · ' + esc(BN.BANK.holder) : '') + ' · Nội dung: <b class="num">' + esc(BN.qrInfo(note)) + '</b></p>' +
+    '<button class="btn btn-block" type="button" data-close>Đã chuyển khoản xong</button>' +
+    '<button class="btn btn-block btn-line" type="button" data-close>Để sau · trả tiền mặt tại quầy</button>' +
+    '<p class="small muted" style="text-align:center;margin:6px 0 0">Mã này luôn có lại ở mục <b>Chuyển khoản bằng mã QR</b> trong đơn của bạn.</p></div>');
+  let url = null;
+  try { url = await BN.qrDataUrl(payload, 360); const box = $('.pn-qr', sh); if (box) box.innerHTML = '<img src="' + url + '" alt="Mã VietQR chuyển khoản ' + vnd(d.total) + '">'; }
+  catch (e) { const box = $('.pn-qr', sh); if (box) box.innerHTML = '<p class="small muted">Chưa tạo được mã. Mở mục Chuyển khoản bằng mã QR trong đơn.</p>'; }
+  const save = $('#pnSave', sh), copy = $('#pnCopy', sh);
+  if (save) save.onclick = async () => {
+    if (!url) return;
+    try {
+      const blob = await (await fetch(url)).blob(), file = new File([blob], 'benoc-thanh-toan.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Mã thanh toán Bé Nốc' }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = url; a.download = 'benoc-thanh-toan.png'; document.body.appendChild(a); a.click(); a.remove(); ui.toast('Đã lưu ảnh mã');
+  };
+  if (copy) copy.onclick = async () => { try { await navigator.clipboard.writeText(BN.qrInfo(note)); ui.toast('Đã chép nội dung chuyển khoản'); } catch (e) { ui.toast(BN.qrInfo(note)); } };
 }
 document.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('.oc-qr')) return; if (d.open) { qrOpen.add(d.dataset.qr); renderStatus(); } else qrOpen.delete(d.dataset.qr); }, true);
 function renderStatus() {

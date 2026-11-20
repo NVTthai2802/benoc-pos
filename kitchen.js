@@ -48,6 +48,7 @@ function start() {
     '<header class="topbar"><div class="topbar-in"><div class="brand"><b>' + SHORT[STATION] + '</b><span>Bé Nốc</span></div>' +
     '<span class="clock num" id="clock"></span>' +
     '<button class="btn btn-sm btn-line" type="button" id="soundBtn" aria-pressed="false">Bật chuông báo</button>' +
+    (BN.FEATURES.vietqr ? '<button class="btn btn-sm btn-line bell" type="button" id="bellBtn" title="Tiền chuyển khoản qua QR loa">🔔<span class="bell-n num" id="bellN" hidden></span></button>' : '') +
     (BN.FEATURES.print ? '<button class="btn btn-sm btn-line" type="button" id="printBtn"></button>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm" href="index.html?dat=giao' + (DEMO ? '&slot=' + encodeURIComponent(BN.SLOT) : '') + '">+ Đơn giao hàng</a>' : '') +
     (role === 'owner' ? '<a class="btn btn-sm btn-line" href="' + (IS_BEP ? 'phache.html' : 'bep.html') + '">' + (IS_BEP ? 'Pha chế' : 'Bếp') + '</a><a class="btn btn-sm btn-line" href="quanly.html">Quản lý</a>' : '') +
@@ -55,6 +56,7 @@ function start() {
     '<div class="wrap" style="max-width:none"><div class="prq" id="prq"></div><div class="calls" id="calls"></div><div class="seg" id="seg"></div></div>' +
     '<main class="cols" id="cols">' + COLS.map(([k, t]) => '<section class="col cc-' + k + '" data-col="' + k + '"><h2 class="col-head"><span class="t">' + t + '</span><span class="n num" id="n-' + k + '">0</span></h2>' + (k === 'thanh_toan' ? '<input class="search kc-search" id="payQ" type="search" placeholder="Tìm số bàn, tên, SĐT, món, số tiền…" value="' + esc(state.payQ) + '" aria-label="Tìm đơn chờ thanh toán">' : '') + '<div class="klist" id="list-' + k + '"></div></section>').join('') + '</main>';
   $('#soundBtn').onclick = toggleSound;
+  if ($('#bellBtn')) { $('#bellBtn').onclick = openBell; loadBank(); setInterval(loadBank, 60000); }
   // Mở Quản lý / Đơn giao hàng / nơi khác đè lên trên, không rời trang này → máy in Bluetooth vẫn nối, vẫn tự in
   $('#app').querySelector('.topbar').addEventListener('click', e => {
     const a = e.target.closest('a[href]'); if (!a || a.target || e.ctrlKey || e.metaKey) return;
@@ -81,11 +83,7 @@ function start() {
     if (!t || t.status === 'mau' || t.status === 'chua_khop') return;
     const seen = state.bankSeen || (state.bankSeen = new Set()); if (seen.has(t.id + ':' + t.status)) return; seen.add(t.id + ':' + t.status);
     const amt = Number(t.amount).toLocaleString('vi-VN') + 'đ';
-    if (t.status === 'khong_ma' || !t.order_id) {
-      ui.toast('Tiền vào QR loa (không mã đơn): ' + amt + ' · đã ghi Đơn không gắn mã');
-      if (state.sound) try { beep(); } catch (e) { /* bỏ qua */ }
-      return;
-    }
+    if (t.status === 'khong_ma' || !t.order_id) { loadBank(); return; } // QR loa: không bật thông báo, chỉ cập nhật số trên nút 🔔
     const o = state.orders.find(x => x.id === t.order_id); if (o && !isMinePay(o)) return;
     const who = o ? (o.queue_number != null ? 'Bàn ' + o.queue_number : o.customer_name || 'đơn') : (t.pay_code || 'đơn');
     ui.toast(t.status === 'thieu_tien' ? 'Nhận ' + amt + ' từ ' + who + ' · ' + (t.note || 'còn thiếu') : t.status === 'don_da_thu' ? who + ' chuyển khoản ' + amt + ' (đơn đã thu trước)' : 'Đã nhận chuyển khoản ' + amt + ' · ' + who);
@@ -96,6 +94,85 @@ function start() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); if (state.sound) lockScreen(); } });
 }
 
+/* ---------- 🔔 Tiền QR loa (không có mã đơn) ----------
+   Khách có đơn nhưng quét QR dán trên loa → tiền vào không có mã BN… → gợi ý các đơn chưa thu cùng số tiền.
+   Nhân viên bấm "Gán vào …" (đơn Đã thu, bỏ hoá đơn không gắn mã) hoặc "Không phải" (khách gọi mồm).
+   Máy không tự gán. Không bật popup / tiếng: chỉ số trên nút 🔔. */
+const bank = { list: [], open: null };
+const FU = s => fold(String(s || '')).toUpperCase();
+const placeOf = o => o.queue_number != null ? 'Bàn ' + o.queue_number : o.dine_type === 'giao_hang' ? 'Ship · ' + (o.customer_name || '') : (o.customer_name || 'Mang về');
+const senderOf = t => { const m = String(t.content || '').match(/FT[0-9A-Z]+\s*,\s*([^,|]{2,60}?)\s*,/i); return m && !/CONG TY|MOMO|ZALOPAY|VNPAY|NAPAS/i.test(m[1]) ? m[1].trim() : ''; };
+/* Dấu hiệu khớp thêm (chỉ để xếp gợi ý lên đầu, không tự gán) */
+function hints(t, o) {
+  const c = FU(t.content), h = [], name = FU(o.customer_name).trim(), phone = String(o.customer_phone || '').replace(/\D/g, '');
+  if (name.length >= 3) { const sn = FU(senderOf(t)); const ws = name.split(/\s+/).filter(w => w.length >= 2); if (sn && ws.length && ws.every(w => sn.includes(w))) h.push('Tên khớp'); else if (ws.length && ws.every(w => c.includes(w))) h.push('Có tên trong nội dung'); }
+  if (phone.length >= 9 && c.replace(/\D/g, '').includes(phone.slice(-9))) h.push('SĐT khớp');
+  if (o.queue_number != null && new RegExp('\\b(BAN|SO|B)\\s*0?' + o.queue_number + '\\b').test(c)) h.push('Số bàn khớp');
+  return h;
+}
+function candidates(t) {
+  return state.orders.filter(o => dueOf(o) > 0 && dueOf(o) === t.amount)
+    .map(o => ({ o, h: hints(t, o) })).sort((a, b) => b.h.length - a.h.length || new Date(b.o.created_at) - new Date(a.o.created_at));
+}
+const pendingOf = l => l.filter(t => t.status === 'khong_ma' && t.sale_id && !t.reviewed_at);
+async function loadBank() {
+  try { bank.list = await api.bankTxnsToday() || []; } catch (e) { bank.list = []; }
+  paintBell(); if (bank.open) paintBell.sheet();
+}
+function paintBell() {
+  const n = pendingOf(bank.list).filter(t => candidates(t).length).length, el = $('#bellN'), b = $('#bellBtn');
+  if (!el) return; el.hidden = !n; el.textContent = n; b.classList.toggle('bell-on', !!n);
+}
+const money = vnd;
+function bellHtml() {
+  const pend = pendingOf(bank.list), done = bank.list.filter(t => !pend.includes(t)).slice(0, 15);
+  const withC = pend.filter(t => candidates(t).length), noC = pend.filter(t => !candidates(t).length);
+  const card = t => {
+    const cs = candidates(t), who = senderOf(t);
+    return '<li class="bn-it"><div class="bn-top"><b class="num">' + money(t.amount) + '</b> <span class="muted">' + hhmm(t.txn_at || t.created_at) + (who ? ' · ' + esc(who) : '') + '</span></div>' +
+      '<p class="small muted bn-ct">' + esc(String(t.content || '').replace(/^.*?\|\s*/, '').slice(0, 140)) + '</p>' +
+      (cs.length ? '<p class="small" style="margin:4px 0">Có thể là tiền của:</p><div class="bn-cands">' + cs.slice(0, 4).map(({ o, h }) =>
+        '<button class="btn btn-sm' + (h.length ? '' : ' btn-line') + '" type="button" data-link="' + t.id + '" data-order="' + esc(o.id) + '">Gán vào ' + esc(placeOf(o)) + (h.length ? ' <span class="bn-h">· ' + esc(h.join(', ')) + '</span>' : '') + '</button>').join('') + '</div>'
+        : '<p class="small muted" style="margin:4px 0">Không có đơn chưa thu nào ' + money(t.amount) + ': nhiều khả năng khách gọi mồm.</p>') +
+      '<div class="bn-row"><button class="btn btn-sm btn-line" type="button" data-pick="' + t.id + '">Chọn đơn khác…</button><button class="btn btn-sm btn-line" type="button" data-dismiss="' + t.id + '">' + (cs.length ? 'Không phải (khách gọi mồm)' : 'Đã xem') + '</button></div></li>';
+  };
+  const old = t => '<li class="bn-done"><span class="num">' + hhmm(t.txn_at || t.created_at) + '</span> <b class="num">' + money(t.amount) + '</b> <span class="muted">· ' +
+    esc(t.status === 'khong_ma' ? 'Đơn không gắn mã (khách gọi mồm)' : t.note || (t.status === 'da_khop' ? 'Đã tự khớp đơn' : t.status)) + '</span></li>';
+  return ui.head('Tiền vào qua QR loa') + '<div class="sh-body bell-sh">' +
+    '<p class="small muted" style="margin:0 0 8px">Khách chuyển khoản mà không có mã đơn (quét QR dán trên loa). Nếu là tiền của một đơn đang chờ thu, bấm <b>Gán vào…</b>: đơn chuyển sang Đã thu, doanh thu không bị tính 2 lần. Máy không tự gán.</p>' +
+    (withC.length ? '<h3 class="bn-h3">Cần xem (' + withC.length + ')</h3><ul class="bn-list">' + withC.map(card).join('') + '</ul>' : '<p class="empty" style="margin:8px 0">Không có khoản nào cần xem.</p>') +
+    (noC.length ? '<h3 class="bn-h3">Không có đơn cùng số tiền (' + noC.length + ')</h3><ul class="bn-list">' + noC.map(card).join('') + '</ul>' : '') +
+    (done.length ? '<h3 class="bn-h3">Đã xử lý hôm nay</h3><ul class="bn-list bn-old">' + done.map(old).join('') + '</ul>' : '') + '</div>';
+}
+function openBell() {
+  bank.open = ui.sheet(bellHtml(), sh => sh.addEventListener('click', onBell));
+  paintBell.sheet = () => { if (!bank.open || !document.body.contains(bank.open)) { bank.open = null; return; } const top = bank.open.scrollTop; bank.open.innerHTML = bellHtml(); bank.open.scrollTop = top; };
+  loadBank();
+}
+paintBell.sheet = () => {};
+async function onBell(e) {
+  const pick = e.target.closest('[data-pick]');
+  if (pick) {
+    const t = bank.list.find(x => String(x.id) === pick.dataset.pick), os = state.orders.filter(o => dueOf(o) > 0).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const li = pick.closest('.bn-it'); let box = li.querySelector('.bn-all');
+    if (box) { box.remove(); return; }
+    box = document.createElement('div'); box.className = 'bn-all bn-cands';
+    box.innerHTML = os.length ? os.map(o => '<button class="btn btn-sm btn-line" type="button" data-link="' + t.id + '" data-order="' + esc(o.id) + '">' + esc(placeOf(o)) + ' · ' + money(dueOf(o)) + '</button>').join('') : '<p class="small muted">Không có đơn nào đang chờ thu.</p>';
+    li.appendChild(box); return;
+  }
+  const b = e.target.closest('[data-link],[data-dismiss]'); if (!b) return;
+  b.disabled = true;
+  try {
+    if (b.dataset.link) {
+      const t = bank.list.find(x => String(x.id) === b.dataset.link), o = state.orders.find(x => x.id === b.dataset.order);
+      if (t && o && t.amount !== dueOf(o)) { const ok = b.dataset.sure; if (!ok) { b.dataset.sure = 1; b.disabled = false; b.textContent = 'Bấm lần nữa: ' + money(t.amount) + ' ≠ ' + money(dueOf(o)) + ' còn thu'; return; } }
+      await api.linkBankTxn(Number(b.dataset.link), b.dataset.order);
+      ui.toast('Đã gán vào ' + (o ? placeOf(o) : 'đơn') + ' · Đã thu chuyển khoản');
+    } else { await api.dismissBankTxn(Number(b.dataset.dismiss)); }
+  } catch (err) { ui.toast(errText(err)); b.disabled = false; }
+  await refresh(); loadBank();
+}
+
 function tick() { const c = $('#clock'); if (c) c.textContent = hhmm(Date.now()); if (state.orders.length) render(); }
 
 let busy = false;
@@ -103,6 +180,7 @@ async function refresh() {
   if (busy) return; busy = true;
   try {
     state.orders = await api.kitchenOrders();
+    if (bank.list.length) paintBell(); // số trên nút 🔔 tính theo đơn đang chờ thu
     // Đơn "của mình" = đơn có món cho nơi này; đơn mới thì báo
     const ids = new Set(state.orders.filter(o => mine(o)).map(o => o.id)), calls = new Set();
     state.orders.forEach(o => o.calls.forEach(c => calls.add(c.id)));

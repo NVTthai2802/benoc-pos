@@ -74,6 +74,9 @@ const ERR = {
   ITEM_NOT_FOUND: 'Món này không còn trong đơn. Tải lại màn hình.',
   ORDER_NOT_FOUND: 'Không tìm thấy đơn. Có thể đơn đã được thanh toán.',
   FORBIDDEN: 'Tài khoản này không có quyền làm việc này.',
+  TXN_ALREADY_HANDLED: 'Khoản tiền này đã được xử lý ở máy khác.',
+  ORDER_ALREADY_PAID: 'Đơn này đã thu đủ tiền rồi.',
+  ORDER_NOT_FOUND: 'Không thấy đơn này nữa (có thể đã đóng).',
   LOGIN_FAILED: 'Sai số điện thoại hoặc mật khẩu.',
   OWNER_EXISTS: 'Quán đã có tài khoản chủ. Hãy đăng nhập.',
   PHONE_TAKEN: 'Số điện thoại này đã có tài khoản.',
@@ -558,6 +561,10 @@ function supabaseApi() {
     getSepayKey: () => rpc('get_sepay_key'),
     resetSepayKey: () => rpc('reset_sepay_key'),
     async bankTxns(n) { const c = await cl(); return await q(c.from('bank_txns').select('*').order('created_at', { ascending: false }).limit(n || 30)); },
+    /* Tiền vào trong ngày (cho nút 🔔 ở Bếp / Pha chế) */
+    async bankTxnsToday() { const c = await cl(), d = new Date(); d.setHours(0, 0, 0, 0); return await q(c.from('bank_txns').select('id,amount,content,status,note,order_id,sale_id,txn_at,created_at,reviewed_at').gte('created_at', d.toISOString()).neq('status', 'mau').order('created_at', { ascending: false }).limit(80)); },
+    linkBankTxn: (txn, order) => rpc('link_bank_txn', { p_txn: txn, p_order: order }),
+    dismissBankTxn: txn => rpc('dismiss_bank_txn', { p_txn: txn }),
     onBankTxn(cb) {
       let ch = null, stopped = false;
       cl().then(c => {
@@ -1402,6 +1409,9 @@ function demoApi() {
     async getSepayKey() { need('owner'); return 'khoa-xem-thu-0123456789abcdef'; },
     async resetSepayKey() { need('owner'); return 'khoa-moi-' + Math.random().toString(16).slice(2, 14); },
     async bankTxns() { return (load().bank_txns || []).slice().reverse(); },
+    async bankTxnsToday() { return (load().bank_txns || []).filter(t => t.status !== 'mau').slice().reverse(); },
+    async linkBankTxn(txn, order) { tx(d => { const t = (d.bank_txns || []).find(x => x.id === txn), o = d.orders.find(x => x.id === order); if (!t || t.status !== 'khong_ma') throw Object.assign(new Error('TXN_ALREADY_HANDLED'), { code: 'TXN_ALREADY_HANDLED' }); d.sales = d.sales.filter(s => s.id !== t.sale_id); o.paid_amount = o.total; o.paid_method = 'chuyen_khoan'; Object.assign(t, { status: 'da_khop', order_id: o.id, sale_id: null, reviewed_at: new Date().toISOString(), note: 'Gán tay vào ' + (o.queue_number != null ? 'Bàn ' + o.queue_number : o.customer_name) }); }); return { ok: true }; },
+    async dismissBankTxn(txn) { tx(d => { const t = (d.bank_txns || []).find(x => x.id === txn); if (t) t.reviewed_at = new Date().toISOString(); }); },
     onBankTxn() { return () => {}; },
     async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT })); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },

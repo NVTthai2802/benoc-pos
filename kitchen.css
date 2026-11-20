@@ -189,3 +189,17 @@
 html.ovl-on, html.ovl-on body { overflow: hidden; }
 
 .kc-src { margin: 4px 0 0; font-size: 12px; font-weight: 800; color: #1877F2; letter-spacing: .02em; text-transform: uppercase; }
+
+/* ---------- /* ---------- 🔔 Tiền QR loa (không có mã đơn) ---------- */
+.bell { position: relative; }
+.bell-n { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #E03131; color: #fff; font: 700 11px/18px var(--f-body); text-align: center; }
+.bell-on { border-color: #E03131; }
+.bell-sh .bn-h3 { font-size: 14px; margin: 12px 0 6px; }
+.bell-sh .bn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bell-sh .bn-it { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card); }
+.bell-sh .bn-top { font-size: 16px; }
+.bell-sh .bn-ct { margin: 2px 0 0; word-break: break-word; }
+.bell-sh .bn-cands, .bell-sh .bn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.bell-sh .bn-h { font-weight: 500; opacity: .85; }
+.bell-sh .bn-old { gap: 4px; }
+.bell-sh .bn-done { font-size: 13px; }
