@@ -200,6 +200,18 @@
 .oc--paid .qbox b { color: var(--ok); }
 .oc--paid h2 { margin: 0; font: 700 20px/1.2 var(--f-head); color: var(--ok); }
 .oc--paid p { margin: 2px 0 6px; color: var(--ink-2); font-size: 14px; }
+.oc--huy { flex-direction: row; align-items: center; gap: 14px; border-color: var(--red); }
+.oc--huy .qbox { border-color: var(--red); width: 84px; flex: none; }
+.oc--huy .qbox b { color: var(--red); }
+.oc--huy h2 { margin: 0; font: 700 20px/1.2 var(--f-head); color: var(--red); }
+.oc--huy p { margin: 2px 0 6px; color: var(--ink-2); font-size: 14px; }
+.oc-chg { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); font-size: 14px; }
+.oc-chg h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: var(--warn); }
+.oc-chg ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.oc-chg li { display: flex; flex-direction: column; gap: 1px; }
+.oc-chg li small { color: var(--ink-2); font-size: 12px; }
+.oc-chg li.new span { font-weight: 600; }
+.oc-chg li.new small::after { content: ' · mới'; color: var(--warn); font-weight: 700; }
 .st-foot { color: var(--ink-2); font-size: 13px; text-align: center; padding-block: 8px 40px; }
 /* ---------- Ưu đãi: dải nổi bật đầu menu ---------- */
 .promos { padding-block: 10px 4px; }
@@ -336,7 +348,7 @@ const state = {
   info: Object.assign({ queue: '', name: '', phone: '', dine: '', dineAt: 0 }, store.get('info', {})),
   cart: [], cartNote: '',
   orders: store.get(DEMO ? 'demo.orders' : 'orders', []),
-  orderData: {}, editingInfo: false, view: 'menu',
+  orderData: {}, orderChanges: {}, editingInfo: false, view: 'menu',
   // Một menu chung cho mọi mã QR (kể cả mã cũ ?menu=an / ?menu=tra): đồ ăn + đồ uống.
   // Món của bếp vẫn về bếp, đồ uống về quầy pha chế (theo danh mục của món).
   // ?dat=giao → chủ quán / nhân viên tạo đơn giao hàng (khách nhắn Facebook, gọi điện)
@@ -1079,7 +1091,13 @@ async function sendOrder(sh, confirm) {
 }
 
 /* ---------- Trạng thái đơn ---------- */
-const activeOrders = () => state.orders.filter(o => !o.paid);
+const activeOrders = () => state.orders.filter(o => !o.paid && !o.cancelled);
+/* Các lần quán sửa đơn (cập nhật 44): mới trong 15 phút thì in đậm */
+function changesHtml(o) {
+  const cs = (state.orderChanges[o.token] || []).filter(c => c.kind === 'sua' && c.staff !== false); if (!cs.length) return '';
+  return '<div class="oc-chg"><h3>Quán đã sửa đơn</h3><ul>' + cs.slice().reverse().map(c =>
+    '<li class="' + (Date.now() - new Date(c.at) < 15 * 60000 ? 'new' : '') + '"><span>' + (c.lines || []).map(esc).join('<br>') + '</span><small>Lúc ' + hhmm(c.at) + '</small></li>').join('') + '</ul></div>';
+}
 const PART = { bep: 'Bếp', pha_che: 'Quầy pha chế' };
 function partText(p) {
   if (p.status === 'cho_nhan') return 'Chờ nhận';
@@ -1107,6 +1125,7 @@ function statusText(d) {
   return { title: 'Món đã ra', sub: '<p>Nhân viên đang mang tới chỗ có thẻ số ' + esc(d.queue_number) + '.</p>' };
 }
 function orderCard(o) {
+  if (o.cancelled) return '<article class="oc oc--huy">' + qboxHtml(o) + '<div><h2>Đơn đã bị huỷ</h2><p>Quán đã huỷ đơn này' + (o.cancelAt ? ' lúc ' + hhmm(o.cancelAt) : '') + '.' + (o.paidBefore > 0 ? ' Bạn đã trả trước ' + vnd(o.paidBefore) + ', báo nhân viên để được hoàn tiền nhé.' : ' Cần gì bạn gọi nhân viên hoặc đặt lại nhé.') + '</p><button class="link" type="button" data-dismiss="' + esc(o.token) + '">Ẩn đơn này</button></div></article>';
   if (o.paid) return '<article class="oc oc--paid">' + qboxHtml(o) + '<div><h2>Đã thanh toán</h2><p>Cảm ơn bạn, hẹn gặp lại ở Bé Nốc!</p><button class="link" type="button" data-dismiss="' + esc(o.token) + '">Ẩn đơn này</button></div></article>';
   const d = state.orderData[o.token];
   if (!d) return '<article class="oc"><p class="loading">Đang tải trạng thái đơn ' + esc(orderLabel(o)) + '…</p></article>';
@@ -1120,7 +1139,7 @@ function orderCard(o) {
     items.map((i, k) => (i.promo_group && (k === 0 || items[k - 1].promo_group !== i.promo_group) ? '<li class="oc-pr">' + (i.promo_kind === 'combo' ? '' : 'Ưu đãi · ') + esc(BN.promoTitle(i.promo_kind, i.promo_name)) + '</li>' : '') +
       '<li><span>' + (PART_TAG[i.promo_part] || '') + i.qty + ' × ' + esc(i.name) + '</span><span class="num">' + vnd(i.price * i.qty) + '</span>' +
       ((i.options && i.options.length) || i.note ? '<span class="line-sub">' + esc((i.options || []).map(x => x.choice).concat(i.note ? ['Ghi chú: ' + i.note] : []).join(' · ')) + '</span>' : '') + '</li>').join('') +
-    '</ul></details>' +
+    '</ul></details>' + changesHtml(o) +
     (d.note ? '<p class="oc-note"><b>Ghi chú:</b> ' + esc(d.note) + '</p>' : '') + payQrHtml(o, d) +
     '<button class="btn btn-soft btn-block" type="button" data-call="' + esc(o.token) + '"' + (d.has_open_call ? ' disabled' : '') + '>' + (d.has_open_call ? 'Đã gọi, nhân viên đang tới' : 'Gọi nhân viên') + '</button></article>';
 }
@@ -1172,7 +1191,21 @@ async function poll() {
   if (polling) { pollAgain = true; return; } polling = true; pollAgain = false;
   try {
     await Promise.all(activeOrders().map(async o => {
-      try { const d = await api.getMyOrder(o.token); if (d === null) { o.paid = true; delete state.orderData[o.token]; } else state.orderData[o.token] = d; }
+      try {
+        const [d, cs] = await Promise.all([api.getMyOrder(o.token), api.getOrderChanges(o.token).catch(() => null)]);
+        if (Array.isArray(cs)) {
+          state.orderChanges[o.token] = cs;
+          const fresh = cs.filter(c => c.kind === 'sua' && c.staff !== false && c.id > (o.seenChg || 0));
+          if (fresh.length && o.seenChg != null && d) ui.toast('Quán vừa sửa đơn ' + orderLabel(d) + ': ' + fresh[fresh.length - 1].lines.join(', '));
+          o.seenChg = cs.reduce((m, c) => Math.max(m, c.id), o.seenChg || 0);
+        }
+        if (d === null) {
+          const huy = Array.isArray(cs) && cs.find(c => c.kind === 'huy');
+          const prev = state.orderData[o.token];
+          if (huy) { o.cancelled = true; o.cancelAt = huy.at; o.paidBefore = prev && prev.paid_amount || 0; } else o.paid = true; // không có dấu huỷ = đơn đã thu xong
+          delete state.orderData[o.token];
+        } else state.orderData[o.token] = d;
+      }
       catch (e) { /* mạng chập chờn: giữ trạng thái cũ */ }
     }));
     saveOrders();

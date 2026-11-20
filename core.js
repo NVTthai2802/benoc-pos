@@ -219,6 +219,7 @@ function supabaseApi() {
     /* Có đang đăng nhập bằng tài khoản nhân viên / chủ không (trang tạo đơn giao hàng cần) */
     async staffSession() { try { const s = await api.session(); return s && s.employee ? s.employee : null; } catch (e) { return null; } },
     getMyOrder: token => rpc('get_my_order', { p_token: token }),
+    getOrderChanges: token => rpc('get_order_changes', { p_token: token }), // các lần quán sửa / huỷ đơn (cập nhật 44)
     /* Nghe tín hiệu "đơn vừa đổi" trên kênh riêng của đơn (cơ sở dữ liệu gửi khi bếp/pha chế bấm). Trả về hàm huỷ nghe. */
     async watchOrder(orderId, onChange) {
       const c = await cl();
@@ -1414,6 +1415,31 @@ function demoApi() {
       return { bep: wait('bep'), pha_che: wait('pha_che'), calls: db.staff_calls.filter(c => !c.resolved_at).length };
     }
   };
+  /* Giống sql/cap-nhat-44: ghi lại lần quán sửa / huỷ đơn để khách thấy */
+  {
+    const keyOf = i => i.item_name + ((i.options || []).length ? ' (' + i.options.map(x => x.choice).join(', ') + ')' : '') + (i.note ? ' · ' + i.note : '') + (i.promo_part === 'tang' ? ' (tặng)' : '');
+    const snap = (db, id) => { const o = db.orders.find(x => x.id === id); if (!o) return null; const m = new Map(); db.order_items.filter(i => i.order_id === id).forEach(i => m.set(keyOf(i), (m.get(keyOf(i)) || 0) + i.qty)); return { o: { ...o }, m }; };
+    const vn = n => (n || 0).toLocaleString('vi-VN') + 'đ';
+    const logChange = (id, b) => {
+      if (!b) return; const db = load(), a = snap(db, id), lines = [];
+      if (!a) { if (!db.sales.some(s => s.id === id)) lines.push('Quán đã huỷ đơn'); }
+      else {
+        const ks = [...new Set([...b.m.keys(), ...a.m.keys()])];
+        ks.filter(k => b.m.has(k)).concat(ks.filter(k => !b.m.has(k))).forEach(k => { const x = b.m.get(k) || 0, y = a.m.get(k) || 0; if (x === y) return; lines.push(!x ? 'Thêm ' + y + '× ' + k : !y ? 'Bỏ ' + x + '× ' + k : k + ': ' + x + ' → ' + y + ' phần'); });
+        if (lines.length && a.o.total !== b.o.total) lines.push('Tổng tiền: ' + vn(b.o.total) + ' → ' + vn(a.o.total));
+        if (a.o.dine_type !== b.o.dine_type) lines.push('Đổi sang: ' + ({ tai_quan: 'Ăn tại quán', mang_ve: 'Mang về', giao_hang: 'Giao hàng' }[a.o.dine_type] || a.o.dine_type));
+        if (a.o.queue_number !== b.o.queue_number && a.o.queue_number) lines.push(b.o.queue_number ? 'Đổi số bàn: ' + b.o.queue_number + ' → ' + a.o.queue_number : 'Số bàn: ' + a.o.queue_number);
+      }
+      if (!lines.length) return;
+      db.order_changes = db.order_changes || []; db.seq.order_changes = (db.seq.order_changes || 0) + 1;
+      db.order_changes.push({ id: db.seq.order_changes, order_id: id, token: b.o.access_token, kind: a ? 'sua' : 'huy', lines, at: iso(), staff: true }); save();
+    };
+    const wrap = (name, idOf) => { const f = api[name]; if (!f) return; api[name] = async (...args) => { const db = load(), id = idOf(db, args), b = id && snap(db, id); const r = await f(...args); if (id) logChange(id, b); return r; }; };
+    const byOrder = (db, a) => a[0], byItem = (db, a) => { const it = db.order_items.find(i => i.id === a[0]); return it && it.order_id; };
+    ['cancelOrder', 'staffAddItems', 'staffUpdateOrder'].forEach(n => wrap(n, byOrder));
+    Object.keys(api).filter(n => /^staffSetItem/.test(n)).forEach(n => wrap(n, byItem));
+    api.getOrderChanges = async token => (load().order_changes || []).filter(c => c.token === token);
+  }
   return api;
 }
 
