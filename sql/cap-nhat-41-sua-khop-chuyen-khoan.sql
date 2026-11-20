@@ -214,7 +214,7 @@ begin
   v_amount := coalesce(private.money_in(v_text), 0);
   v_code := (regexp_match(v_up, 'BN\s*([0-9A-F]{6})'))[1];
   if v_code is not null then v_code := 'BN' || v_code; end if;
-  v_ft := (regexp_match(v_up, '\b(FT[0-9A-Z]{8,20})\b'))[1];
+  v_ft := (regexp_match(v_up, '\m(FT[0-9A-Z]{8,20})\M'))[1];
   v_test := coalesce((p ->> 'test')::boolean, false);
   begin v_at := to_timestamp((p ->> 'posted_at')::bigint / 1000.0); exception when others then v_at := now(); end;
 
