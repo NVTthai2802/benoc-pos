@@ -539,7 +539,13 @@ function supabaseApi() {
     /* ---------- Doanh thu & cài đặt ---------- */
     async sales(f) {
       const c = await cl();
-      return await q(c.from('sales').select('*').gte('paid_at', new Date(f.from).toISOString()).lt('paid_at', new Date(f.to).toISOString()).order('paid_at'));
+      // Supabase trả tối đa 1.000 dòng mỗi lần → tải từng trang cho đủ (7 ngày / 30 ngày có thể hơn 1.000 hoá đơn)
+      const A = new Date(f.from).toISOString(), B = new Date(f.to).toISOString();
+      let out = [];
+      for (let i = 0; ; i += 1000) {
+        const rows = await q(c.from('sales').select('*').gte('paid_at', A).lt('paid_at', B).order('paid_at').order('id').range(i, i + 999));
+        out = out.concat(rows); if (rows.length < 1000) return out;
+      }
     },
     /* Báo cáo tháng: tải đủ mọi dòng (Supabase trả tối đa 1.000 dòng mỗi lần nên tải từng trang) */
     async reportData(f) {
@@ -547,7 +553,7 @@ function supabaseApi() {
       const all = async build => { let out = []; for (let i = 0; ; i += 1000) { const rows = await q(build().range(i, i + 999)); out = out.concat(rows); if (rows.length < 1000) return out; } };
       const opt = async fn => { try { return await fn(); } catch (e) { return null; } }; // bảng chưa có (chưa chạy SQL) thì bỏ qua
       const [sales, shifts, employees, stockItems, stockMoves, packs] = await Promise.all([
-        all(() => c.from('sales').select('*').gte('paid_at', A).lt('paid_at', B).order('paid_at')),
+        all(() => c.from('sales').select('*').gte('paid_at', A).lt('paid_at', B).order('paid_at').order('id')),
         all(() => c.from('shifts').select('*').gte('check_in_at', A).lt('check_in_at', B).order('check_in_at')),
         q(c.from('employees').select('*').order('full_name')),
         opt(() => all(() => c.from('stock_items').select('*').order('sort_order').order('name'))),
