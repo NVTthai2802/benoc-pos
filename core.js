@@ -565,11 +565,23 @@ function supabaseApi() {
     async bankTxnsToday() { const c = await cl(), d = new Date(); d.setHours(0, 0, 0, 0); return await q(c.from('bank_txns').select('id,amount,content,status,note,order_id,sale_id,txn_at,created_at,reviewed_at').gte('created_at', d.toISOString()).neq('status', 'mau').order('created_at', { ascending: false }).limit(80)); },
     linkBankTxn: (txn, order) => rpc('link_bank_txn', { p_txn: txn, p_order: order }),
     dismissBankTxn: txn => rpc('dismiss_bank_txn', { p_txn: txn }),
+    /* Doanh thu thay đổi: đơn đóng (thu xong → chuyển sang hoá đơn), tiền QR loa thành hoá đơn không gắn mã */
+    onSalesChange(cb) {
+      let ch = null, stopped = false;
+      cl().then(c => {
+        if (stopped) return;
+        ch = c.channel('doanh-thu-' + Math.random().toString(36).slice(2, 8))
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => cb())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bank_txns' }, e => { const t = e.new || {}; if (t.status === 'khong_ma' || t.status === 'da_khop' || t.sale_id) cb(); })
+          .subscribe();
+      });
+      return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
+    },
     onBankTxn(cb) {
       let ch = null, stopped = false;
       cl().then(c => {
         if (stopped) return;
-        ch = c.channel('tien-ve').on('postgres_changes', { event: '*', schema: 'public', table: 'bank_txns' }, e => e.new && cb(e.new)).subscribe(); // giao dịch được khớp đơn sau khi ghi (UPDATE)
+        ch = c.channel('tien-ve-' + Math.random().toString(36).slice(2, 8)).on('postgres_changes', { event: '*', schema: 'public', table: 'bank_txns' }, e => e.new && cb(e.new)).subscribe(); // giao dịch được khớp đơn sau khi ghi (UPDATE)
       });
       return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
     },
@@ -1413,6 +1425,7 @@ function demoApi() {
     async linkBankTxn(txn, order) { tx(d => { const t = (d.bank_txns || []).find(x => x.id === txn), o = d.orders.find(x => x.id === order); if (!t || t.status !== 'khong_ma') throw Object.assign(new Error('TXN_ALREADY_HANDLED'), { code: 'TXN_ALREADY_HANDLED' }); d.sales = d.sales.filter(s => s.id !== t.sale_id); o.paid_amount = o.total; o.paid_method = 'chuyen_khoan'; Object.assign(t, { status: 'da_khop', order_id: o.id, sale_id: null, reviewed_at: new Date().toISOString(), note: 'Gán tay vào ' + (o.queue_number != null ? 'Bàn ' + o.queue_number : o.customer_name) }); }); return { ok: true }; },
     async dismissBankTxn(txn) { tx(d => { const t = (d.bank_txns || []).find(x => x.id === txn); if (t) t.reviewed_at = new Date().toISOString(); }); },
     onBankTxn() { return () => {}; },
+    onSalesChange(cb) { const h = () => cb(); window.addEventListener('benoc-db', h); return () => window.removeEventListener('benoc-db', h); },
     async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT })); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {

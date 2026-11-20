@@ -511,7 +511,24 @@ function openExport() {
     };
   });
 }
+/* Trang Doanh thu tự cập nhật khi có đơn thu xong / tiền QR loa về (không phải tải lại trang) */
+let revLive = null, revT = null;
+function watchRevenue() {
+  if (revLive || !api.onSalesChange) return;
+  revLive = api.onSalesChange(() => {
+    clearTimeout(revT);
+    revT = setTimeout(() => {
+      const main = $('#main');
+      if (state.tab !== 'doanhthu' || !main || document.hidden || (document.getElementById('bnOverlay') && !document.getElementById('bnOverlay').hidden) || (document.activeElement && main.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))) { if (state.tab === 'doanhthu') revDirty = true; return; }
+      const y = window.scrollY;
+      renderRevenue(main).then(() => window.scrollTo(0, y)).catch(() => {});
+    }, 1200);
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && revDirty && state.tab === 'doanhthu') { revDirty = false; const y = window.scrollY; renderRevenue($('#main')).then(() => window.scrollTo(0, y)).catch(() => {}); } });
+}
+let revDirty = false;
 async function renderRevenue(main) {
+  watchRevenue(); revDirty = false;
   const r = rangeOf(state.range);
   const sales = await api.sales(r);
   const total = sales.reduce((s, x) => s + x.total, 0), count = sales.length;
