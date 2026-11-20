@@ -1521,8 +1521,12 @@ async function qrDataUrl(text, size) {
   const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-9999px;top:0';
   document.body.appendChild(box);
   try {
-    new window.QRCode(box, { text, width: size || 320, height: size || 320, colorDark: '#000000', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
-    const cv = box.querySelector('canvas'); return cv ? cv.toDataURL('image/png') : (box.querySelector('img') || {}).src;
+    const qr = new window.QRCode(box, { text, width: size || 320, height: size || 320, colorDark: '#000000', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+    const cv = box.querySelector('canvas'); if (!cv) return (box.querySelector('img') || {}).src;
+    // Viền trắng 4 ô quanh mã (chuẩn QR): thiếu viền thì app ngân hàng (vd MB Bank) quét từ ảnh đã lưu báo "không đúng định dạng"
+    const mc = (qr._oQRCode && qr._oQRCode.getModuleCount()) || 41, n = Math.ceil(cv.width / mc * 4), out = document.createElement('canvas'); out.width = cv.width + 2 * n; out.height = cv.height + 2 * n;
+    const g = out.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, out.width, out.height); g.imageSmoothingEnabled = false; g.drawImage(cv, n, n);
+    return out.toDataURL('image/png');
   } finally { box.remove(); }
 }
 
