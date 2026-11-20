@@ -38,6 +38,10 @@
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -1px; }
 .hbar { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 10px; align-items: center; padding-block: 6px; font-size: 14px; }
+/* Các dòng dùng chung 1 lưới: cột thanh và cột số thẳng hàng giữa các dòng */
+.hbars { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; column-gap: 10px; row-gap: 12px; align-items: center; padding-block: 6px; font-size: 14px; }
+.hbars .hbar { display: contents; }
+.hbars .num { text-align: right; }
 .hbar .nm { font-family: var(--f-hand); font-weight: 600; overflow-wrap: anywhere; }
 .hbar .track { height: 10px; background: var(--line); border-radius: 0 5px 5px 0; overflow: hidden; }
 .hbar .fill { height: 100%; background: var(--red); border-radius: 0 5px 5px 0; }
@@ -559,7 +563,7 @@ async function renderRevenue(main) {
   sales.forEach(x => (x.items || []).forEach(i => { const bag = items[kindOf(i)]; const m = bag.get(i.name) || { name: i.name, qty: 0, rev: 0 }; m.qty += i.qty; m.rev += i.price * i.qty; bag.set(i.name, m); }));
   const topOf = st => [...items[st].values()].sort((a, b) => b.qty - a.qty || b.rev - a.rev).slice(0, 10);
   const topBox = (st, title, cc) => { const top = topOf(st), max = top.length ? top[0].qty : 1, sum = [...items[st].values()].reduce((a, t) => ({ q: a.q + t.qty, r: a.r + t.rev }), { q: 0, r: 0 });
-    return '<section class="box ' + cc + '"><h2 class="box-title"><span>' + title + '</span></h2>' + (top.length ? '<p class="small muted" style="margin:0 0 8px">Tổng ' + sum.q + ' phần · ' + vnd(sum.r) + '</p>' + top.map((t, k) => '<div class="hbar"><span class="nm">' + (k + 1) + '. ' + esc(t.name) + '</span><span class="track"><span class="fill" style="width:' + (t.qty / max * 100) + '%;display:block"></span></span><span class="num small"><b>' + t.qty + '</b> phần · ' + short(t.rev) + '</span></div>').join('') : '<p class="empty">Chưa có món nào bán ra.</p>') + '</section>'; };
+    return '<section class="box ' + cc + '"><h2 class="box-title"><span>' + title + '</span></h2>' + (top.length ? '<p class="small muted" style="margin:0 0 8px">Tổng ' + sum.q + ' phần · ' + vnd(sum.r) + '</p>' + '<div class="hbars">' + top.map((t, k) => '<div class="hbar"><span class="nm">' + (k + 1) + '. ' + esc(t.name) + '</span><span class="track"><span class="fill" style="width:' + (t.qty / max * 100) + '%;display:block"></span></span><span class="num small"><b>' + t.qty + '</b> phần · ' + short(t.rev) + '</span></div>').join('') + '</div>' : '<p class="empty">Chưa có món nào bán ra.</p>') + '</section>'; };
   main.innerHTML =
     '<div class="ptitle"><h1>Doanh thu</h1>' + (BN.FEATURES.report ? '<button class="btn btn-sm" type="button" id="xlsBtn">Xuất Excel tháng</button>' : '') + '<div class="chips">' + [['today', 'Hôm nay'], ['7d', '7 ngày'], ['30d', '30 ngày'], ['month', 'Tháng này']].map(([k, t]) => '<button class="chipbtn" type="button" data-range="' + k + '" aria-pressed="' + (state.range === k) + '">' + t + '</button>').join('') + '</div></div>' +
     '<div class="stats">' +
