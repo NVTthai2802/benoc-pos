@@ -17,6 +17,9 @@ const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 const ON_TEST = DEMO || window.BENOC_ENV === 'test';
 const FEATURES = Object.assign({ print: true, vietqr: true, report: true }, CONFIG.FEATURES || {});
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+/* Kênh realtime có đang nối không: nối được thì các trang giãn vòng tự hỏi lại máy chủ */
+const RT = { ok: false };
+const rtStatus = s => { if (s === 'SUBSCRIBED') RT.ok = true; else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') RT.ok = false; };
 
 /* =====================================================================
    TIỆN ÍCH
@@ -72,7 +75,6 @@ const ERR = {
   MISSING_ADDRESS: 'Chưa nhập địa chỉ giao hàng.',
   ORDER_WOULD_BE_EMPTY: 'Đơn chỉ còn món này. Muốn bỏ hết thì huỷ đơn.',
   ITEM_NOT_FOUND: 'Món này không còn trong đơn. Tải lại màn hình.',
-  ORDER_NOT_FOUND: 'Không tìm thấy đơn. Có thể đơn đã được thanh toán.',
   FORBIDDEN: 'Tài khoản này không có quyền làm việc này.',
   TXN_ALREADY_HANDLED: 'Khoản tiền này đã được xử lý ở máy khác.',
   ORDER_ALREADY_PAID: 'Đơn này đã thu đủ tiền rồi.',
@@ -226,7 +228,7 @@ function supabaseApi() {
     /* Nghe tín hiệu "đơn vừa đổi" trên kênh riêng của đơn (cơ sở dữ liệu gửi khi bếp/pha chế bấm). Trả về hàm huỷ nghe. */
     async watchOrder(orderId, onChange) {
       const c = await cl();
-      const ch = c.channel('don-' + orderId).on('broadcast', { event: 'changed' }, () => onChange()).subscribe();
+      const ch = c.channel('don-' + orderId).on('broadcast', { event: 'changed' }, () => onChange()).subscribe(rtStatus);
       return () => { try { c.removeChannel(ch); } catch (e) { /* bỏ qua */ } };
     },
     callStaff: token => rpc('call_staff', { p_token: token }),
@@ -280,7 +282,7 @@ function supabaseApi() {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => cb())
           .on('postgres_changes', { event: '*', schema: 'public', table: 'order_stations' }, () => cb())
           .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_calls' }, () => cb())
-          .subscribe();
+          .subscribe(rtStatus);
       });
       return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
     },
@@ -1549,7 +1551,7 @@ const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice 
 
 window.BN = {
   sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, qrNoteFor, payCode, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
-  CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
+  CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, RT, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, isBooked, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS
 };
@@ -1617,6 +1619,15 @@ function mountEnvBanner() {
 }
 if (window.BENOC_ENV === 'test' && !DEMO) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountEnvBanner); else mountEnvBanner();
+}
+/* Bản xem trước (link nhánh của Cloudflare Pages) dùng dữ liệu quán thật: dải báo để không nhầm */
+function mountPreviewBanner() {
+  const b = document.createElement('div'); b.className = 'envbar'; b.id = 'envBar';
+  b.innerHTML = '<b>BẢN XEM TRƯỚC</b><span>Đang dùng dữ liệu quán thật — chỉ để thử, đừng in mã QR từ trang này</span>';
+  document.body.insertBefore(b, document.body.firstChild);
+}
+if (window.BENOC_PREVIEW && !DEMO) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountPreviewBanner); else mountPreviewBanner();
 }
 /* Trang đang mở đè trong màn hình bếp / pha chế: bấm link về đúng màn hình đó thì đóng lớp đè (không mở lồng) */
 (function () {

@@ -19,15 +19,20 @@
       STORE_PREFIX: 'benoc.test.'
     }
   };
-  // TEST nếu: trang nằm trong thư mục /test/, HOẶC là bản xem trước của Cloudflare Pages
-  // (dạng <nhánh hoặc mã>.benoc.pages.dev). Chỉ đúng địa chỉ chính mới dùng cơ sở dữ liệu thật.
+  // Bản xem trước của Cloudflare Pages (dạng <nhánh>.benoc-pos.pages.dev) dùng Supabase PRODUCT
+  // (môi trường Test đã xoá, 11/2026) và hiện dải "BẢN XEM TRƯỚC" để không nhầm với trang chính.
+  // Thư mục /test/ cũ vẫn trỏ Supabase test.
   const h = location.hostname;
   const isPreview = /\.pages\.dev$/.test(h) && h.split('.').length > 3;
-  const isTest = isPreview || /\/test(\/|$)/.test(location.pathname);
+  const isTest = /\/test(\/|$)/.test(location.pathname);
   window.BENOC_ENV = isTest ? 'test' : 'product';
+  window.BENOC_PREVIEW = isPreview && !isTest;
   window.BENOC_CONFIG = Object.assign({
     POLL_SECONDS: 15,
     ORDER_SESSION_MINUTES: 30, // quét mã QR gọi món xong có 30 phút để gửi đơn, hết giờ phải quét lại         // trang khách tự cập nhật trạng thái đơn mỗi 15 giây
     LOGIN_DOMAIN: 'benoc.app' // nhân viên đăng nhập bằng số điện thoại; hệ thống đổi thành <sđt>@benoc.app
   }, ENVS[window.BENOC_ENV]);
+  // Dữ liệu mẫu (seed.js, ~42 KB) chỉ cần cho chế độ xem thử (config để trống) — trang quán thật không tải nữa
+  const c = window.BENOC_CONFIG;
+  if (!(c.SUPABASE_URL && c.SUPABASE_ANON_KEY)) document.write('<script src="seed.js"><\/script>');
 })();

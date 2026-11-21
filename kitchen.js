@@ -75,7 +75,9 @@ function start() {
   $('#seg').addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) { state.col = b.dataset.seg; render(); } });
   tick(); setInterval(tick, 1000 * 20);
   refresh();
-  api.onKitchenChange(() => refresh());
+  // Gộp các tín hiệu sát nhau (1 đơn mới sinh nhiều tín hiệu: đơn, món, quầy) thành 1 lần tải
+  let rtT = null;
+  api.onKitchenChange(() => { clearTimeout(rtT); rtT = setTimeout(refresh, 200); });
   // Báo tiền vào (cập nhật 36–41):
   // - Có mã đơn BN…: đơn tự chuyển sang Đã thu, báo tên bàn/khách.
   // - Không có mã đơn (khách quét QR loa / gọi mồm): cũng báo rõ "QR loa (không mã đơn)" để nhân viên KHÔNG bấm nhầm vào đơn của khách khác.
@@ -90,7 +92,8 @@ function start() {
     if (state.sound) try { beep(); } catch (e) { /* bỏ qua */ }
     refresh();
   });
-  setInterval(refresh, DEMO ? 4000 : 10000);
+  // Lưới an toàn: kênh realtime đang nối thì 30 giây mới tự tải 1 lần; mất kết nối thì 10 giây như cũ
+  setInterval(() => { if (DEMO || !BN.RT.ok || Date.now() - lastRefresh > 28000) refresh(); }, DEMO ? 4000 : 10000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); if (state.sound) lockScreen(); } });
 }
 
@@ -175,9 +178,10 @@ async function onBell(e) {
 
 function tick() { const c = $('#clock'); if (c) c.textContent = hhmm(Date.now()); if (state.orders.length) render(); }
 
-let busy = false;
+let busy = false, again = false, lastRefresh = 0;
 async function refresh() {
-  if (busy) return; busy = true;
+  if (busy) { again = true; return; } // đang tải dở: hẹn tải lại ngay sau, không bỏ sót đơn mới
+  busy = true; again = false; lastRefresh = Date.now();
   try {
     state.orders = await api.kitchenOrders();
     if (bank.list.length) paintBell(); // số trên nút 🔔 tính theo đơn đang chờ thu
@@ -196,7 +200,7 @@ async function refresh() {
     autoPrint();
     render();
   } catch (e) { ui.toast(errText(e)); }
-  finally { busy = false; }
+  finally { busy = false; if (again) refresh(); }
 }
 
 /* ---------- Vẽ màn hình ---------- */

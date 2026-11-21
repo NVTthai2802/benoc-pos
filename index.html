@@ -5,6 +5,15 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://hixdacnaxfuxuccbajzn.supabase.co" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/functions-js@2.4.1/+esm">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/postgrest-js@1.16.1/+esm">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/realtime-js@2.10.2/+esm">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/storage-js@2.7.0/+esm">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/node-fetch@2.6.15/+esm">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@supabase/auth-js@2.65.0/+esm">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600&family=Mali:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="theme.css">
 <style>
@@ -322,7 +331,6 @@
 <div class="cartbar" id="cartBar" hidden><button class="btn" id="cartBtn" type="button"></button></div>
 
 <script src="config.js"></script>
-<script src="seed.js"></script>
 <script src="core.js"></script>
 <script>
 (function () {
@@ -1223,7 +1231,7 @@ function syncWatchers() {
   [...watchers.keys()].forEach(id => { if (!act.has(id)) { const stop = watchers.get(id); watchers.delete(id); if (stop) stop(); } });
 }
 async function poll() {
-  if (polling) { pollAgain = true; return; } polling = true; pollAgain = false;
+  if (polling) { pollAgain = true; return; } polling = true; pollAgain = false; lastPoll = Date.now();
   try {
     await Promise.all(activeOrders().map(async o => {
       try {
@@ -1249,23 +1257,46 @@ async function poll() {
   if (!activeOrders().length) clearInterval(pollTimer);
   if (pollAgain) pollNow();
 }
-function startPolling() { syncWatchers(); clearInterval(pollTimer); poll(); pollTimer = setInterval(poll, (DEMO ? 2 : CONFIG.POLL_SECONDS) * 1000); }
+let lastPoll = 0;
+const pollTick = () => { if (DEMO || !BN.RT.ok || Date.now() - lastPoll > 44e3) poll(); }; // kênh realtime đang nối: 45 giây mới hỏi lại 1 lần
+function startPolling() { syncWatchers(); clearInterval(pollTimer); poll(); pollTimer = setInterval(pollTick, (DEMO ? 2 : CONFIG.POLL_SECONDS) * 1000); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && activeOrders().length) startPolling(); });
 setInterval(() => { if (state.view === 'status') renderStatus(); }, 30000);
 
 /* ---------- Khởi động ---------- */
 /* Tải menu. Món hết / tuỳ chọn hết đang nằm trong giỏ thì bỏ ra và báo tên. Trả về danh sách tên món bị bỏ. */
 let lastMenuAt = 0, menuReloadT = null;
+/* Menu lần trước lưu trong máy: mở trang là hiện ngay, rồi thay bằng menu mới từ máy chủ (giá khi đặt luôn do máy chủ tính) */
+const MENU_CACHE = (CONFIG.STORE_PREFIX || 'benoc.') + 'menuCache';
+function applyMenu(menu, best, promos) {
+  state.menu = menu || [];
+  state.items = new Map(); state.itemCat = new Map();
+  state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
+  // Best seller tự động: món bán chạy nhất 7 ngày của mỗi quầy. Có số liệu thì bỏ nhãn "Best seller" gõ tay ở món khác.
+  if (best && best.length) { const ids = new Set(best.map(b => b.menu_item_id)); state.items.forEach(it => { if (ids.has(it.id)) it.best = true; else if (/^best\s*seller$/i.test(it.tag || '')) it.tag = null; }); }
+  state.promos = promos || [];
+  // Ưu đãi giảm giá / đồng giá: giá món hiện theo giá đã giảm (máy chủ cũng tính đúng như vậy)
+  state.items.forEach(it => { it.orig = it.price; const sl = saleOf(state.promos, it.id, it.price); if (sl) { it.price = sl.price; it.sale = sl; } });
+}
+function paintCachedMenu() {
+  if (DEMO) return;
+  try {
+    const c = JSON.parse(localStorage.getItem(MENU_CACHE) || 'null');
+    if (!c || !Array.isArray(c.menu) || !c.menu.length || Date.now() - c.at > 864e5) return;
+    applyMenu(c.menu, c.best, c.promos); renderMenu(); renderPromos(); renderCartBar();
+  } catch (e) { /* bộ nhớ đệm hỏng: bỏ qua, chờ máy chủ */ }
+}
 async function loadMenu() {
   try {
-    state.menu = await api.getMenu() || []; lastMenuAt = Date.now();
-    state.items = new Map(); state.itemCat = new Map();
-    state.menu.forEach(c => c.items.forEach(it => { state.items.set(it.id, it); state.itemCat.set(it.id, c); }));
-    // Best seller tự động: món bán chạy nhất 7 ngày của mỗi quầy. Có số liệu thì bỏ nhãn "Best seller" gõ tay ở món khác.
-    try { const best = await api.bestSellers(); if (best.length) { const ids = new Set(best.map(b => b.menu_item_id)); state.items.forEach(it => { if (ids.has(it.id)) it.best = true; else if (/^best\s*seller$/i.test(it.tag || '')) it.tag = null; }); } } catch (e) { /* bỏ qua */ }
-    try { state.promos = (await api.getPromotions()) || []; } catch (e) { state.promos = []; }
-    // Ưu đãi giảm giá / đồng giá: giá món hiện theo giá đã giảm (máy chủ cũng tính đúng như vậy)
-    state.items.forEach(it => { it.orig = it.price; const sl = saleOf(state.promos, it.id, it.price); if (sl) { it.price = sl.price; it.sale = sl; } });
+    // Gọi 3 thứ cùng lúc (trước đây gọi lần lượt): menu, món bán chạy, ưu đãi. Hai cái sau lỗi thì coi như rỗng.
+    const [menu, best, promos] = await Promise.all([
+      api.getMenu(),
+      api.bestSellers().catch(() => []),
+      api.getPromotions().catch(() => [])
+    ]);
+    lastMenuAt = Date.now();
+    try { localStorage.setItem(MENU_CACHE, JSON.stringify({ at: lastMenuAt, menu: menu || [], best: best || [], promos: promos || [] })); } catch (e) { /* hết chỗ: bỏ qua */ }
+    applyMenu(menu, best, promos);
     // Món thường trong giỏ: cập nhật giá theo ưu đãi đang chạy (ưu đãi vừa hết thì về giá gốc)
     state.cart.forEach(l => { if (l.promo) return; const it = state.items.get(l.itemId); if (it) { l.base = it.price; l.sale = it.sale ? it.sale.id : null; } });
     const choiceOk = (itemId, choices) => { const it = state.items.get(itemId); if (!it) return false; const ids = new Set(); it.option_groups.forEach(g => g.choices.forEach(c => ids.add(c.id))); return choices.every(c => ids.has(c.id)); };
@@ -1291,6 +1322,7 @@ if (GIAO) api.staffSession().then(e => { state.staff = e || false; renderTicket(
 const wantMenu = BN.PARAMS.get('xem') === 'menu';
 if (wantMenu) { try { const u = new URL(location.href); u.searchParams.delete('xem'); history.replaceState(null, '', u); } catch (e) { /* bỏ qua */ } }
 if (BN.FEATURES.vietqr) BN.loadBank().then(() => renderStatus());
+paintCachedMenu();
 loadMenu().then(() => { if (activeOrders().length) { showView(wantMenu ? 'menu' : 'status'); startPolling(); } else showView('menu'); });
 })();
 </script>

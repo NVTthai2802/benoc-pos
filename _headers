@@ -20,3 +20,9 @@
   Content-Type: application/vnd.android.package-archive
   Content-Disposition: attachment; filename="benoc-pos.apk"
   Cache-Control: no-cache
+
+# Ảnh món và tiếng chuông ít khi đổi: cho trình duyệt giữ 7 ngày (hết hạn vẫn dùng bản cũ trong lúc tải bản mới)
+/img/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/sound/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
