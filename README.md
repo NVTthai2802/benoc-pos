@@ -8,8 +8,12 @@ Gọi món qua QR, màn hình bếp nóng, màn hình quầy pha chế và quả
 - `kitchen.js`, `kitchen.css` — mã dùng chung của hai màn hình trên
 - `quanly.html` — quản lý / chấm công
 - `sql/` — cơ sở dữ liệu Supabase (`schema.sql` rồi `seed_menu.sql`; các file `cap-nhat-*.sql` để nâng cấp bản đã cài; `xoa-du-lieu-test.sql` để dọn dữ liệu thử)
-- `test/` — bản của MÔI TRƯỜNG TEST (tự sinh bằng `scripts/dua-len-test.sh`, đừng sửa tay)
-- `scripts/` — đưa bản mới lên test / product
+- `public/` — tệp tĩnh chép nguyên lên web: ảnh món (`img/`), tiếng chuông (`sound/`), APK (`app/`), thư viện quét mã (`lib/`), CSS, `_headers`
+- Đóng gói bằng **Vite** (`npm ci && npm run build` → thư mục `dist/`). Cloudflare Pages tự chạy lệnh này mỗi lần đẩy code.
+  JS được nén, gắn mã băm vào tên tệp; supabase-js đóng gói cùng trang (không tải từ CDN nữa).
+  Chạy thử trên máy: `npm ci && npm run dev`.
+- Quy trình: làm trên nhánh riêng → Cloudflare tạo link xem trước `<nhánh>.benoc-pos.pages.dev` (dùng dữ liệu quán thật, có dải BẢN XEM TRƯỚC) → ổn thì gộp vào `main` (Product).
+  Môi trường Test và thư mục `test/` đã bỏ (11/2026).
 - `HUONG-DAN.md` — hướng dẫn cài đặt, gồm cách dùng hai môi trường
 - `HUONG-DAN-PHIM-TAT-IPHONE.md` — lên đơn bằng Phím tắt iPhone (gõ lưng máy chụp màn hình chat)
 - `HUONG-DAN-APP-ANDROID.md` — app Android (APK): POS + nút nổi chụp đơn. Tải: https://benoc-pos.pages.dev/app/benoc-pos.apk. Mã nguồn `android/`

@@ -7,6 +7,7 @@
    - Để trống → chế độ xem thử: dữ liệu lưu trong localStorage của trình duyệt.
    Cả hai chế độ có cùng các hàm trong BN.api, trả về dữ liệu cùng hình dạng.
    ===================================================================== */
+import { createClient } from '@supabase/supabase-js'; // đóng gói cùng trang (trước tải từ jsdelivr, 7 file nối tiếp)
 (function () {
 'use strict';
 
@@ -16,7 +17,6 @@ const DEMO = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 /* Tính năng đang thử: chỉ bật ở môi trường TEST và bản xem thử. Bật cho quán thật: đổi thành true. */
 const ON_TEST = DEMO || window.BENOC_ENV === 'test';
 const FEATURES = Object.assign({ print: true, vietqr: true, report: true }, CONFIG.FEATURES || {});
-const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 /* Kênh realtime có đang nối không: nối được thì các trang giãn vòng tự hỏi lại máy chủ */
 const RT = { ok: false };
 const rtStatus = s => { if (s === 'SUBSCRIBED') RT.ok = true; else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') RT.ok = false; };
@@ -172,11 +172,10 @@ const ui = {
    SUPABASE
    ===================================================================== */
 function supabaseApi() {
-  let mod = null, client = null;
+  let client = null;
   async function cl() {
     if (!client) {
-      mod = await import(SUPABASE_JS);
-      client = mod.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      client = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
     }
     return client;
   }
@@ -494,8 +493,7 @@ function supabaseApi() {
       if (!e.phone || !e.password) fail('Cần số điện thoại và mật khẩu để nhân viên đăng nhập.');
       if (String(e.password).length < 6) fail('WEAK_PASSWORD');
       // Tạo tài khoản bằng một client riêng để chủ quán không bị đăng xuất
-      if (!mod) await cl();
-      const tmp = mod.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'benoc-tmp' } });
+      const tmp = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'benoc-tmp' } });
       const { data, error } = await tmp.auth.signUp({ email: phoneToEmail(e.phone), password: e.password });
       if (error) fail(/registered/i.test(error.message) ? 'PHONE_TAKEN' : error.message);
       if (!data.user || (data.user.identities && data.user.identities.length === 0)) fail('PHONE_TAKEN');

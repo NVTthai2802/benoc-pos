@@ -1,2 +1,4 @@
 tools/train/data/
 tools/train/__pycache__/
+node_modules/
+dist/

@@ -6,7 +6,7 @@
    Trang tự chọn môi trường theo địa chỉ: nằm trong thư mục /test/ là TEST.
    Để trống 2 dòng Supabase = chế độ xem thử (dữ liệu lưu trong trình duyệt).
    ===================================================================== */
-(function () {
+window.BENOC_DEMO = (function () {
   const ENVS = {
     product: {
       SUPABASE_URL: 'https://hixdacnaxfuxuccbajzn.supabase.co',
@@ -34,5 +34,7 @@
   }, ENVS[window.BENOC_ENV]);
   // Dữ liệu mẫu (seed.js, ~42 KB) chỉ cần cho chế độ xem thử (config để trống) — trang quán thật không tải nữa
   const c = window.BENOC_CONFIG;
-  if (!(c.SUPABASE_URL && c.SUPABASE_ANON_KEY)) document.write('<script src="seed.js"><\/script>');
+  return !(c.SUPABASE_URL && c.SUPABASE_ANON_KEY);
 })();
+// Dữ liệu mẫu (seed.js, ~42 KB) chỉ tải cho chế độ xem thử (config để trống): trang quán thật không tải
+if (window.BENOC_DEMO) await import('./seed.js');
