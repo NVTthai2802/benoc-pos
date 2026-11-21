@@ -7,6 +7,7 @@
    - Để trống → chế độ xem thử: dữ liệu lưu trong localStorage của trình duyệt.
    Cả hai chế độ có cùng các hàm trong BN.api, trả về dữ liệu cùng hình dạng.
    ===================================================================== */
+import './pwa.js'; // Bước 4: PWA + báo có bản mới
 import { createClient } from '@supabase/supabase-js'; // đóng gói cùng trang (trước tải từ jsdelivr, 7 file nối tiếp)
 (function () {
 'use strict';
