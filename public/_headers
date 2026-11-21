@@ -26,3 +26,7 @@
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /sound/*
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+# JS đã gắn mã băm trong tên tệp (Vite): nội dung đổi thì tên đổi, nên cho giữ 1 năm
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
