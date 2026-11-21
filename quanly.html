@@ -298,6 +298,25 @@ function go(tab) {
     .catch(e => { main.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; });
 }
 const rerender = () => go(state.tab);
+/* ---------- Bước 3: các tab viết bằng React ----------
+   React chỉ tải khi mở tab. Thêm ?cu=1 vào địa chỉ để dùng lại bản cũ (giao diện cũ vẫn còn đủ trong file này). */
+const LEGACY = BN.PARAMS.get('cu') === '1';
+async function mountReact(main, loader, tab) {
+  const [mod, common] = await Promise.all([loader(), import('./src/quanly/common.jsx')]);
+  if (state.tab !== tab) return; // đã chuyển tab trong lúc tải
+  if (state.unmount) { try { state.unmount(); } catch (e) { /* bỏ qua */ } state.unmount = null; }
+  state.unmount = common.mountTab(mod.default, main, reactCtx());
+}
+/* Những gì tab React cần từ mã cũ: dữ liệu, hàm tính, hộp thoại */
+const reactCtx = () => ({
+  api, ui, BN, state, esc, K, vnd, hhmm, ddmm, startOfDay, addDays, dur, errText, applyRounding, DEMO, promoWhen,
+  isOwner, rerender, loadScript, isExact, ruleText, payLine, MODE, PAY_STEPS, PAY, PAY_COLOR, qrTables,
+  openFbSettings, bankBoxHtml, sepayBoxHtml, wireBankBox, wireSepayBox,
+  nf, twoUnits, stockText, isLow, KIND, ICON_SCAN, ICON_BILL, receiptBanner, loadReceiptThumbs,
+  openStockMove, openStockItem, editStockItem, scanForMove, newReceiptSheet, openReceipt, editPack,
+  promoState, editPromo, thumb, choiceText, gKind, OKIND, editItem, editCat, editGroup,
+  rangeOf, barChart, wireChart, short, isDrinkCat, promoStatsBox, openExport, ymd, invMatch, invoiceItems
+});
 
 /* =====================================================================
    BOT LÊN ĐƠN — chủ quán chụp màn hình đoạn chat với khách, gửi cho bot Zalo / Telegram;
@@ -538,6 +557,7 @@ function watchRevenue() {
 }
 let revDirty = false;
 async function renderRevenue(main) {
+  if (!LEGACY) return mountReact(main, () => import('./src/quanly/RevenueTab.jsx'), 'doanhthu'); // Bước 3: bản React
   watchRevenue(); revDirty = false;
   const r = rangeOf(state.range);
   const sales = await api.sales(r);
@@ -639,6 +659,7 @@ function promoState(p) {
   return ['Ngoài khung giờ', 'pill-red'];
 }
 async function renderPromos(main) {
+  if (!LEGACY) return mountReact(main, () => import('./src/quanly/PromosTab.jsx'), 'uudai'); // Bước 3: bản React
   const [list, m, used] = await Promise.all([api.adminPromotions(), api.adminMenu(), api.promoUsage()]); // luôn lấy menu mới: món vừa gạt hết làm ưu đãi bị ẩn
   state.menuData = m; state.promoData = list;
   const limitTxt = p => p.limit_qty ? (used[p.id] || 0) + '/' + p.limit_qty + ' ' + (p.kind === 'giam_gia' ? 'ly' : p.kind === 'don_tang' ? 'đơn' : 'suất') + (p.limit_per === 'tong' ? ' cả đợt' : ' hôm nay') : '';
@@ -846,6 +867,7 @@ function stockText(it, q) {
 const isLow = it => it.is_active !== false && Number(it.qty) <= Number(it.min_qty);
 const STOCK_PRESETS = [['Thùng → gói', 'thùng', 'gói', 24], ['Thùng → can', 'thùng', 'can', 4], ['Can (nhập, dùng theo can)', 'can', 'can', 1], ['Bao → kg', 'bao', 'kg', 25], ['Thùng → hộp', 'thùng', 'hộp', 48], ['Thùng → cây (ly, ống hút)', 'thùng', 'cây', 20]];
 async function renderStock(main) {
+  if (!LEGACY) return mountReact(main, () => import('./src/quanly/StockTab.jsx'), 'kho'); // Bước 3: bản React
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [items, moves, packs, codes, buys, receipts] = await Promise.all([api.stockItems(), api.stockMoves({ limit: 400, from: addDays(monthStart, -1) }), api.stockPacks(), api.stockBarcodes(),
     isOwner() ? api.stockMoves({ kind: 'nhap', from: monthStart, limit: 5000 }).catch(() => null) : null, api.stockReceipts({ limit: 12 })]);
@@ -1295,6 +1317,7 @@ function thumb(it, cats) {
   return '<span class="thumb' + (c ? ' cc-' + esc(c.color) : '') + '">' + (it.image_path ? '<img src="' + esc(it.image_path) + '" alt="" loading="lazy">' : (c && DRINK_CATS.test(c.name) ? ICON_CUP : ICON_BOWL)) + '</span>';
 }
 async function renderMenu(main) {
+  if (!LEGACY) return mountReact(main, () => import('./src/quanly/MenuTab.jsx'), 'menu'); // Bước 3: bản React
   const m = await api.adminMenu(); state.menuData = m;
   const sub = state.menuSub;
   let body = '';
@@ -1661,6 +1684,7 @@ async function editShift(s) {
    CHẤM CÔNG (mọi nhân viên)
    ===================================================================== */
 async function renderClock(main) {
+  if (!LEGACY) return mountReact(main, () => import('./src/quanly/ClockTab.jsx'), 'chamcong'); // Bước 3: bản React
   const [open, mine, cfg] = await Promise.all([api.myOpenShift(), api.myShifts(30), api.settings()]);
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const month = mine.filter(s => new Date(s.check_in_at) >= monthStart && s.check_out_at);
@@ -1820,6 +1844,7 @@ function wireBankBox(main, cfg) {
   };
 }
 async function renderSettings(main) {
+  if (!LEGACY) return mountReact(main, () => import('./src/quanly/SettingsTab.jsx'), 'caidat'); // Bước 3: bản React
   const cfg = await api.settings();
   const orderUrl = new URL('./', location.href).href.split('#')[0].split('?')[0]; // ví dụ https://benoc-pos.pages.dev/ (mã QR ngắn hơn)
   main.innerHTML = '<div class="ptitle"><h1>Cài đặt</h1></div>' +
