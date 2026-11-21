@@ -1,6 +1,6 @@
 /* Tab "Menu" (React): Món · Danh mục · Tuỳ chọn. Hộp thoại sửa món / danh mục / nhóm tuỳ chọn vẫn dùng mã cũ. */
 import { useState } from 'react';
-import { Html, useLoad, Loading, ErrMsg } from './common.jsx';
+import { Html, useLoad, Loading, ErrMsg } from './common';
 
 function Avail({ q, it }) {
   const { api, ui, errText } = q;

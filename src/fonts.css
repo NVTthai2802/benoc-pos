@@ -1,0 +1,11 @@
+/* Font của quán, lưu ngay trên web của quán (trước tải từ Google Fonts).
+   Cùng 3 họ font và các độ đậm như cũ; trình duyệt chỉ tải phần chữ cần (Việt / Latin). */
+@import '@fontsource/baloo-2/600.css';
+@import '@fontsource/baloo-2/700.css';
+@import '@fontsource/baloo-2/800.css';
+@import '@fontsource/be-vietnam-pro/400.css';
+@import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
+@import '@fontsource/mali/500.css';
+@import '@fontsource/mali/600.css';
+@import '@fontsource/mali/700.css';

@@ -44,7 +44,7 @@
     <div id="log"></div>
   </div>
 </div>
-<script>
+<script type="module">
 (function () {
 'use strict';
 const $ = s => document.querySelector(s), log = (t, cls) => { const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = t; $('#log').appendChild(d); };

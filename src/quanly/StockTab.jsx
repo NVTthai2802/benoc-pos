@@ -1,6 +1,6 @@
 /* Tab "Kho" (React): hàng hoá + quy cách nhập hàng. Phiếu nhập / lấy dùng / kiểm kho, quét mã, ảnh hoá đơn vẫn dùng hộp thoại cũ. */
 import { useEffect, useRef, useState } from 'react';
-import { Html, useLoad, Loading, ErrMsg } from './common.jsx';
+import { Html, useLoad, Loading, ErrMsg } from './common';
 
 function Packs({ q, packs, items, subBar }) {
   const { BN, nf, state, editPack } = q;

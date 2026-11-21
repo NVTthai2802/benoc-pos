@@ -1,0 +1,30 @@
+# Kiểm tra tự động mỗi lần đẩy code: kiểu dữ liệu, build, test luồng đặt món trên bản xem thử
+name: Kiểm tra
+on:
+  push:
+  pull_request:
+jobs:
+  kiem-tra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Kiểm tra kiểu (TypeScript)
+        run: npm run typecheck
+      - name: Build bản quán thật
+        run: npm run build
+      - name: Cài trình duyệt cho test
+        run: npx playwright install --with-deps chromium
+      - name: Test tự động (bản xem thử, không đụng Supabase của quán)
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: bao-cao-test
+          path: playwright-report/
+          retention-days: 7

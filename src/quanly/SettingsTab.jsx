@@ -1,6 +1,6 @@
 /* Tab "Cài đặt" (React). Ô tài khoản ngân hàng và ô tự xác nhận chuyển khoản vẫn dùng mã cũ (Island). */
 import { useEffect, useRef, useState } from 'react';
-import { Html, Island, useLoad, Loading, ErrMsg, InlineConfirm } from './common.jsx';
+import { Html, Island, useLoad, Loading, ErrMsg, InlineConfirm } from './common';
 
 const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
 

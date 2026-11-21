@@ -2,3 +2,6 @@ tools/train/data/
 tools/train/__pycache__/
 node_modules/
 dist/
+dist-demo/
+test-results/
+playwright-report/

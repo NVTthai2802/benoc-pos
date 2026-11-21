@@ -11,6 +11,7 @@ const BUILD = Date.now().toString(36);
 const pages = ['index', 'bep', 'phache', 'quanly', 'maytem', 'chinh-sach'];
 
 export default defineConfig({
+  resolve: { alias: { 'benoc-seed': resolve(import.meta.dirname, process.env.VITE_DEMO === '1' ? 'seed.js' : 'src/empty.js') } },
   define: { __BUILD__: JSON.stringify(BUILD) },
   plugins: [react(), {
     name: 'benoc-pwa',

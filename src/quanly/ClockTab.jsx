@@ -1,6 +1,6 @@
 /* Tab "Chấm công" (React). Nhân viên chỉ thấy giờ làm, chủ quán thấy cả tiền lương. */
 import { useEffect, useState } from 'react';
-import { Html, useLoad, Loading, ErrMsg } from './common.jsx';
+import { Html, useLoad, Loading, ErrMsg } from './common';
 
 export default function ClockTab({ q }) {
   const { api, hhmm, dur, ddmm, vnd, isExact, ruleText, payLine, isOwner, state, errText, ui, rerender } = q;

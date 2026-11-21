@@ -1,6 +1,6 @@
 /* Tab "Ưu đãi" (React). Hộp thoại tạo / sửa ưu đãi vẫn dùng mã cũ (editPromo). */
 import { useState } from 'react';
-import { useLoad, Loading, ErrMsg } from './common.jsx';
+import { useLoad, Loading, ErrMsg } from './common';
 
 export default function PromosTab({ q }) {
   const { api, BN, state, K, promoWhen, promoState, editPromo, ui, errText, rerender } = q;

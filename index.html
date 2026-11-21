@@ -5,10 +5,8 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#E2325C">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://hixdacnaxfuxuccbajzn.supabase.co" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600&family=Mali:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="./src/fonts.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
 /* Trang khách: một cột như tờ menu; mỗi danh mục là một ô khung màu; giỏ hàng dính đáy màn hình */
@@ -1309,7 +1307,7 @@ async function loadMenu() {
 /* Chủ quán gạt "Hết món" / đổi giá: cơ sở dữ liệu báo tín hiệu, trang tải lại menu (lệch vài giây để 50 máy không tải cùng lúc) */
 api.watchMenu(() => { clearTimeout(menuReloadT); menuReloadT = setTimeout(loadMenu, 500 + Math.random() * 2000); }).catch(() => { /* vẫn còn tải lại khi mở lại màn hình */ });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastMenuAt > 60e3) loadMenu(); });
-$('#demoNote').hidden = !DEMO;
+{ const dn = $('#demoNote'); if (dn) dn.hidden = !DEMO; } // thanh chế độ test có thể đã gỡ ô này
 ui.init(); renderTicket(); renderPhien(); setInterval(renderPhien, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) renderPhien(); });
 if (GIAO) api.staffSession().then(e => { state.staff = e || false; renderTicket(); });

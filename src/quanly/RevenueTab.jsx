@@ -1,7 +1,7 @@
 /* Tab "Doanh thu" (React): thống kê, biểu đồ, món bán chạy, ưu đãi đã bán, hoá đơn trong ngày.
    Biểu đồ SVG vẫn do hàm cũ vẽ (barChart / wireChart). Tự cập nhật khi có đơn thu xong / tiền QR loa về. */
 import { useEffect, useRef, useState } from 'react';
-import { Html, Island, Loading, ErrMsg, InlineConfirm } from './common.jsx';
+import { Html, Island, Loading, ErrMsg, InlineConfirm } from './common';
 
 function InvoiceBox({ q }) {
   const { api, BN, state, ui, startOfDay, addDays, ddmm, hhmm, vnd, ymd, invMatch, invoiceItems, isOwner, errText, PAY, PAY_COLOR } = q;

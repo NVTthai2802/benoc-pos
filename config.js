@@ -6,6 +6,8 @@
    Trang tự chọn môi trường theo địa chỉ: nằm trong thư mục /test/ là TEST.
    Để trống 2 dòng Supabase = chế độ xem thử (dữ liệu lưu trong trình duyệt).
    ===================================================================== */
+// Màn hình bếp / pha chế ghi nơi làm trong thẻ <meta name="benoc-station"> (không dùng script nội tuyến, để bật CSP)
+{ const m = document.querySelector('meta[name="benoc-station"]'); if (m && !window.BENOC_STATION) window.BENOC_STATION = m.content; }
 window.BENOC_DEMO = (function () {
   const ENVS = {
     product: {
@@ -32,9 +34,12 @@ window.BENOC_DEMO = (function () {
     ORDER_SESSION_MINUTES: 30, // quét mã QR gọi món xong có 30 phút để gửi đơn, hết giờ phải quét lại         // trang khách tự cập nhật trạng thái đơn mỗi 15 giây
     LOGIN_DOMAIN: 'benoc.app' // nhân viên đăng nhập bằng số điện thoại; hệ thống đổi thành <sđt>@benoc.app
   }, ENVS[window.BENOC_ENV]);
+  // Bản build cho test tự động (VITE_DEMO=1): chạy chế độ xem thử, dữ liệu trong trình duyệt, không đụng Supabase
+  if (import.meta.env.VITE_DEMO === '1') { window.BENOC_CONFIG.SUPABASE_URL = ''; window.BENOC_CONFIG.SUPABASE_ANON_KEY = ''; }
   // Dữ liệu mẫu (seed.js, ~42 KB) chỉ cần cho chế độ xem thử (config để trống) — trang quán thật không tải nữa
   const c = window.BENOC_CONFIG;
   return !(c.SUPABASE_URL && c.SUPABASE_ANON_KEY);
 })();
-// Dữ liệu mẫu (seed.js, ~42 KB) chỉ tải cho chế độ xem thử (config để trống): trang quán thật không tải
-if (window.BENOC_DEMO) await import('./seed.js');
+// Dữ liệu mẫu (seed.js, ~42 KB) chỉ đóng gói trong bản build xem thử / test (VITE_DEMO=1); bản quán thật nhận một tệp rỗng.
+// (Không dùng await import ở đây: trang có nhiều <script type=module>, chờ ở đây làm các script sau chạy trước core.js.)
+import 'benoc-seed';
