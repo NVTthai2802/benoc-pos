@@ -292,6 +292,7 @@ function go(tab) {
   try { history.replaceState(null, '', location.pathname + location.search + '#' + tab); } catch (e) { /* bỏ qua */ }
   BN.store.set('qltab.' + BN.SLOT, tab);
   $$('.nav [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
+  if (state.unmount) { try { state.unmount(); } catch (e) { /* bỏ qua */ } state.unmount = null; } // gỡ tab React (nếu có) trước khi vẽ tab khác
   const main = $('#main'); main.onclick = null; main.onchange = null; main.innerHTML = '<p class="loading">Đang tải…</p>';
   ({ doanhthu: renderRevenue, menu: renderMenu, uudai: renderPromos, kho: renderStock, nhanvien: renderStaff, chamcong: renderClock, caidat: renderSettings })[tab](main)
     .catch(e => { main.innerHTML = '<p class="msg">' + esc(errText(e)) + '</p>'; });
@@ -1498,7 +1499,18 @@ function payBy(shifts) {
   return { list: [...sum.values()].sort((a, b) => b.pay - a.pay || a.name.localeCompare(b.name, 'vi')), tot };
 }
 const mmyyyy = d => String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+/* Tab Nhân viên: bản React (Bước 3). Thêm ?cu=1 vào địa chỉ để dùng lại bản cũ nếu cần. */
 async function renderStaff(main) {
+  if (BN.PARAMS.get('cu') === '1') return renderStaffLegacy(main);
+  const { mountStaffTab } = await import('./src/quanly/StaffTab.jsx'); // React chỉ tải khi mở tab này
+  if (state.tab !== 'nhanvien') return; // đã chuyển tab trong lúc tải
+  state.unmount = mountStaffTab(main, {
+    api, ui, ui_state: state,
+    h: { vnd, dur, ddmm, hhmm, isExact, staffRangeOf, payBy, mmyyyy, startOfDay, addDays, ROLE: BN.staff.ROLE, errText },
+    actions: { editEmployee, editShift, payout }
+  });
+}
+async function renderStaffLegacy(main) {
   const today = startOfDay(new Date()), m0 = new Date(today.getFullYear(), today.getMonth(), 1), m1 = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const r = staffRangeOf(state.staffRange);
   const from = r.from < m1 ? r.from : m1;
