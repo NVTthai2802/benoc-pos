@@ -132,7 +132,7 @@ function ticketCanvas(o, items, extra, set) {
   if (qm) {
     rule(true);
     text('Quét mã chuyển khoản ' + money(due), 20, true, 'center', 6);
-    const n = qm.length, cell = Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)), size = cell * n;
+    const n = qm.length, size = Math.min(IW, Math.round(Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)) * n * 1.05)), cell = size / n; // to hơn 5% so với trước
     ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 10 * k;
     const B = BN.BANK;
     text(B.bank + (B.holder ? ' · ' + B.holder : ''), 17, true, 'center');
@@ -144,7 +144,7 @@ function ticketCanvas(o, items, extra, set) {
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
-    if (op.qr) { op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + c * op.cell, op.y + r * op.cell, op.cell, op.cell); })); return; }
+    if (op.qr) { const P = i => Math.round(i * op.cell); op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + P(c), op.y + P(r), P(c + 1) - P(c), P(r + 1) - P(r)); })); return; } // ô lẻ điểm: làm tròn mép từng ô để in nét, không nhoè
     if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [6, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
     ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
     ctx.fillText(op.t, op.x != null ? op.x : op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
