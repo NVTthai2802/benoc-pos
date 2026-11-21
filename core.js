@@ -251,7 +251,7 @@ function supabaseApi() {
       if (error) fail('LOGIN_FAILED');
       return api.session();
     },
-    async signOut() { const c = await cl(); me = null; await c.auth.signOut(); },
+    async signOut() { const c = await cl(); me = null; await c.auth.signOut({ scope: 'local' }); }, // chỉ thoát máy này (mặc định của Supabase thoát mọi máy đang dùng tài khoản)
     hasOwner: () => rpc('has_owner'),
     async setupOwner(fullName, phone, password) {
       if (String(password).length < 6) fail('WEAK_PASSWORD');
