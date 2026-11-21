@@ -42,19 +42,19 @@ const ICON_BAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const ICON_SCOOTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7M15 17l-2-7h-3M13 10h3l2.5 7M4 12h5"/></svg>';
 const isDelivery = o => !!o && (o.dine_type === 'giao_hang' || o.dine === 'giao_hang');
 const isTakeaway = o => !!o && (o.dine_type === 'mang_ve' || o.dine === 'mang_ve' || isDelivery(o)); // đơn không có số thẻ
-const isPickup = o => !!o && !!o.pickup && !isDelivery(o); // khách đến lấy (quán tạo đơn bằng nút Qua lấy)
+const isPickup = o => !!o && !isDelivery(o) && (!!o.pickup || (o.dine_type === 'mang_ve' && !!o.deliver_at)); // khách qua lấy: quán tạo bằng nút Qua lấy, hoặc đơn mang về có hẹn giờ lấy (đơn chụp chat / online)
 /* Ăn tại quán đặt trước qua Facebook: chưa có số bàn, có giờ hẹn */
 const isBooked = o => !!o && (o.dine_type || o.dine) === 'tai_quan' && (o.queue_number == null && o.queue == null);
 const whenText = o => o.deliver_at ? hhmm(o.deliver_at) : '';
 const qboxHtml = (o, extra) => isDelivery(o)
   ? '<div class="qbox qbox--mv qbox--giao' + (extra ? ' ' + extra : '') + '">' + ICON_SCOOTER + '<span>' + (o.deliver_at ? 'Giao ' + hhmm(o.deliver_at) : 'Giao hàng') + '</span></div>'
   : isTakeaway(o)
-  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>' + (isPickup(o) ? 'Đến lấy' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'Mang về') + '</span></div>'
+  ? '<div class="qbox qbox--mv' + (extra ? ' ' + extra : '') + '">' + ICON_BAG + '<span>' + (isPickup(o) ? 'Qua lấy' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'Mang về') + '</span></div>'
   : isBooked(o)
   ? '<div class="qbox qbox--book' + (extra ? ' ' + extra : '') + '"><span>Đặt bàn</span><b class="num">' + (o.deliver_at ? hhmm(o.deliver_at) : '?') + '</b></div>'
   : '<div class="qbox' + (extra ? ' ' + extra : '') + '"><span>Bàn</span><b class="num">' + esc(o.queue_number != null ? o.queue_number : o.queue) + '</b></div>';
 /* "số 12" hoặc "mang về của Lan" — dùng trong thông báo */
-const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isBooked(o) ? 'đặt bàn của ' + (o.customer_name || o.name || '') : isTakeaway(o) ? (isPickup(o) ? 'đến lấy của ' : 'mang về của ') + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
+const orderLabel = o => isDelivery(o) ? 'giao hàng cho ' + (o.customer_name || o.name || '') : isBooked(o) ? 'đặt bàn của ' + (o.customer_name || o.name || '') : isTakeaway(o) ? (isPickup(o) ? 'qua lấy của ' : 'mang về của ') + (o.customer_name || o.name || '') : 'số ' + (o.queue_number != null ? o.queue_number : o.queue);
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(SP + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },

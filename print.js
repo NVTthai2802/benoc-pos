@@ -14,7 +14,7 @@
    ===================================================================== */
 (function () {
 'use strict';
-const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery } = BN; // (không in mã đơn)
+const { esc, hhmm, store, ui, sizeOf, isSizeOpt, sizeText, isTakeaway, isDelivery, isPickup } = BN; // (không in mã đơn)
 const money = n => Math.round(Number(n) || 0).toLocaleString('vi-VN') + 'đ';
 const STATION = window.BENOC_STATION || 'bep';
 const KEY = 'printer.' + STATION;
@@ -79,7 +79,7 @@ function ticketCanvas(o, items, extra, set) {
   text('BÉ NỐC', 18, true, 'center', 2);
   const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
   const at2 = o.deliver_at ? ' ' + hhmm(o.deliver_at) : '';
-  const where = isDelivery(o) ? 'GIAO' + (at2 || ' HÀNG') : o.pickup ? 'ĐẾN LẤY' + at2 : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'BÀN ' + o.queue_number;
+  const where = isDelivery(o) ? 'GIAO' + (at2 || ' HÀNG') : isPickup(o) ? 'QUA LẤY' + at2 : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'BÀN ' + o.queue_number;
   text(where, 36, true, 'center', 2);
   if (o.source === 'fb') text('ĐƠN ONLINE', 20, true, 'center');
   if (isDelivery(o) && o.address) text(o.address, 20, true, 'center');
@@ -192,7 +192,7 @@ function cups(items) {
   items.forEach(i => { for (let n = 0; n < (i.qty || 1); n++) out.push(i); });
   return out.map((i, n) => ({ i, n: n + 1, of: out.length }));
 }
-const whereShort = o => isDelivery(o) ? 'SHIP' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : o.pickup ? 'ĐẾN LẤY' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĐẶT BÀN' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'BÀN ' + o.queue_number;
+const whereShort = o => isDelivery(o) ? 'SHIP' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : isPickup(o) ? 'QUA LẤY' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĐẶT BÀN' + (o.deliver_at ? ' ' + hhmm(o.deliver_at) : '') : 'BÀN ' + o.queue_number;
 /* Giá 1 ly: món đã gộp (amount = cả dòng) thì chia theo số ly; quà tặng in "Tặng" */
 const cupPrice = i => { const v = i.amount != null ? i.amount / (i.qty || 1) : (i.unit_price || 0); return i.promo_part === 'tang' && !v ? 'Tặng' : money(v); };
 function labelCanvas(o, cup, set) {
