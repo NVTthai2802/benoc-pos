@@ -63,7 +63,7 @@ function ticketCanvas(o, items, extra, set) {
   set = set || get(); extra = extra || {};
   const SHOP = BN.SHOP || { name: 'Bé Nốc', address: '', phone: '', cats: {} };
   // Lề hai bên (đầu in hay mờ ở mép giấy), k: hệ số cỡ chữ theo khổ giấy
-  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1) * 1.10, IW = W - pad * 2, LH = 1.38; // chữ to thêm 10%
+  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.012), k = W / 384 * (set.big ? 1.08 : 1) * 1.21, IW = W - pad * 2, LH = 1.38; // lề hẹp (~0,6 mm), chữ to thêm 21% so với mẫu đầu
   const F = (px, b, it) => (it ? 'italic ' : '') + (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   const ops = []; let y = pad;
