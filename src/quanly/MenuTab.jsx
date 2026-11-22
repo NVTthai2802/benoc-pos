@@ -1,4 +1,4 @@
-/* Tab "Menu" (React): Món · Danh mục · Tuỳ chọn. Hộp thoại sửa món / danh mục / nhóm tuỳ chọn vẫn dùng mã cũ. */
+/* Tab "Menu" (React): Món · Danh mục · Tuỳ chọn. Hộp thoại ở src/quanly/dialogs/menu.jsx. */
 import { useState } from 'react';
 import { Html, useLoad, Loading, ErrMsg } from './common';
 

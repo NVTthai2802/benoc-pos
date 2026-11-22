@@ -299,6 +299,27 @@ const rerender = () => go(state.tab);
 /* ---------- Bước 3: các tab viết bằng React ----------
    React chỉ tải khi mở tab. Thêm ?cu=1 vào địa chỉ để dùng lại bản cũ (giao diện cũ vẫn còn đủ trong file này). */
 const LEGACY = BN.PARAMS.get('cu') === '1';
+/* Hộp thoại: bản React (src/quanly/dialogs), ?cu=1 dùng bản cũ (…Legacy) */
+const DLG = { menu: () => import('./src/quanly/dialogs/menu.jsx'), promo: () => import('./src/quanly/dialogs/promo.jsx'), stock: () => import('./src/quanly/dialogs/stock.jsx'), staff: () => import('./src/quanly/dialogs/staff.jsx'), other: () => import('./src/quanly/dialogs/other.jsx') };
+const dlg = (file, name, legacy) => (...a) => LEGACY ? legacy(...a) : DLG[file]().then(mod => mod[name](reactCtx(), ...a)).catch(e => ui.toast(errText(e)));
+const editItem = dlg('menu', 'editItem', editItemLegacy);
+const editCat = dlg('menu', 'editCat', editCatLegacy);
+const editGroup = dlg('menu', 'editGroup', editGroupLegacy);
+const editPromo = dlg('promo', 'editPromo', editPromoLegacy);
+const editPack = dlg('stock', 'editPack', editPackLegacy);
+const openStockMove = dlg('stock', 'openStockMove', openStockMoveLegacy);
+const newReceiptSheet = dlg('stock', 'newReceiptSheet', newReceiptSheetLegacy);
+const openReceipt = dlg('stock', 'openReceipt', openReceiptLegacy);
+const openStockItem = dlg('stock', 'openStockItem', openStockItemLegacy);
+const editStockItem = dlg('stock', 'editStockItem', editStockItemLegacy);
+const scanForMove = dlg('stock', 'scanForMove', scanForMoveLegacy);
+const openUnknownCode = dlg('stock', 'openUnknownCode', openUnknownCodeLegacy);
+const scanToLink = dlg('stock', 'scanToLink', scanToLinkLegacy);
+const payout = dlg('staff', 'payout', payoutLegacy);
+const editEmployee = dlg('staff', 'editEmployee', editEmployeeLegacy);
+const editShift = dlg('staff', 'editShift', editShiftLegacy);
+const openExport = dlg('other', 'openExport', openExportLegacy);
+const openFbSettings = dlg('other', 'openFbSettings', openFbSettingsLegacy);
 async function mountReact(main, loader, tab) {
   const [mod, common] = await Promise.all([loader(), import('./src/quanly/common.tsx')]);
   if (state.tab !== tab) return; // đã chuyển tab trong lúc tải
@@ -312,7 +333,7 @@ const reactCtx = () => ({
   openFbSettings, bankBoxHtml, sepayBoxHtml, wireBankBox, wireSepayBox,
   nf, twoUnits, stockText, isLow, KIND, ICON_SCAN, ICON_BILL, receiptBanner, loadReceiptThumbs,
   openStockMove, openStockItem, editStockItem, scanForMove, newReceiptSheet, openReceipt, editPack,
-  promoState, editPromo, thumb, choiceText, gKind, OKIND, editItem, editCat, editGroup,
+  promoState, editPromo, thumb, choiceText, gKind, OKIND, editItem, editCat, editGroup, COLORS, DOW, toLocalInput, STOCK_PRESETS, codeUnitText, ddmmyyyy, scan: { cleanCode, okCode, getDetector, loadZXing, lookupProductName },
   rangeOf, barChart, wireChart, short, isDrinkCat, promoStatsBox, openExport, ymd, invMatch, invoiceItems
 });
 
@@ -321,7 +342,7 @@ const reactCtx = () => ({
    bot đọc ảnh và gửi thẳng đơn vào bếp / pha chế (nhãn ĐƠN ONLINE). Ở đây chỉ còn phần cài đặt bot.
    ===================================================================== */
 const KENH_TEXT = { zalo: 'Zalo', tele: 'Telegram', fb: 'Fanpage', ios: 'Phím tắt iPhone / App Android' };
-function openFbSettings(st) {
+function openFbSettingsLegacy(st) {
   const botLink = { zalo: null, tele: null };
   ui.sheet(ui.head('Cài đặt bot lên đơn', 'Bot đọc ảnh chụp đoạn chat theo menu đang bán') + '<div class="sh-body">' +
     '<h3 class="og-head">Tài khoản được dùng bot</h3><ul class="list" id="fsUsers"><li class="small muted">Đang tải…</li></ul>' +
@@ -516,7 +537,7 @@ async function renderInvoices(box) {
   }
 }
 /* Xuất báo cáo Excel 1 tháng (doanh thu, món, hoá đơn, kho, nhân viên, lương) */
-function openExport() {
+function openExportLegacy() {
   const now = new Date(), ym = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
   let pick = ym(now);
   ui.sheet(ui.head('Xuất báo cáo Excel', 'Báo cáo 1 tháng để tổng hợp cuối tháng') + '<div class="sh-body">' +
@@ -693,7 +714,7 @@ async function renderPromos(main) {
   };
 }
 const SALE_LBL = { dong_gia: 'Giá bán đồng giá (VNĐ)', phan_tram: 'Giảm bao nhiêu %', tru_tien: 'Bớt bao nhiêu tiền mỗi món (VNĐ)' };
-function editPromo(p) {
+function editPromoLegacy(p) {
   const m = state.menuData, isNew = !p;
   p = p ? JSON.parse(JSON.stringify(p)) : { name: '', kind: 'combo', description: '', price: null, buy_qty: 1, get_qty: 1, gift_same: false, option_mode: 'cong_them', start_at: null, end_at: null, days: null, time_from: null, time_to: null, is_active: true, sort_order: 0, sale_mode: 'dong_gia', sale_value: null, min_total: null, items: [] };
   p.sale_mode = p.sale_mode || 'dong_gia';
@@ -928,7 +949,7 @@ function renderPacks(main, packs, items, subBar) {
   q.oninput = () => { state.packQuery = q.value; clearTimeout(q._t); q._t = setTimeout(async () => { const pos = q.selectionStart; await renderStock(main); const n = $('#pkq', main); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 250); };
   main.onclick = e => { const b = e.target.closest('[data-pk]'); if (b) { editPack(packs.find(x => x.id === Number(b.dataset.pk)), users(packs.find(x => x.id === Number(b.dataset.pk))).length); return; } if (e.target.closest('#addPack')) editPack(null, 0); };
 }
-function editPack(pk, used) {
+function editPackLegacy(pk, used) {
   const isNew = !pk; pk = pk ? Object.assign({}, pk) : { name: '', buy_unit: 'thùng', use_unit: 'gói', per_buy: 24, sort_order: 99 };
   ui.sheet(ui.head(isNew ? 'Thêm quy cách' : 'Sửa quy cách', isNew ? 'Ví dụ: Thùng 24 gói, Thùng 4 can, Can' : used + ' mặt hàng đang dùng') + '<div class="sh-body">' +
     '<div class="sk-conv"><span>1</span><input id="pqBuy" maxlength="15" value="' + esc(pk.buy_unit) + '" aria-label="Đơn vị nhập"><span>=</span><input id="pqPer" class="num" type="number" inputmode="decimal" min="0.001" step="any" value="' + esc(pk.per_buy) + '" aria-label="Quy đổi"><input id="pqUse" maxlength="15" value="' + esc(pk.use_unit) + '" aria-label="Đơn vị dùng"></div>' +
@@ -954,7 +975,7 @@ function editPack(pk, used) {
   });
 }
 /* Nhập / lấy dùng / hỏng / kiểm kho một mặt hàng */
-function openStockMove(it, kind, opt) {
+function openStockMoveLegacy(it, kind, opt) {
   const two = twoUnits(it);
   let inBuy = two && (opt && opt.inBuy != null ? !!opt.inBuy : kind === 'nhap'), amount = kind === 'kiem' ? '' : 1, whole = '', rest = '';
   const useAmt = () => kind === 'kiem' && two ? (Number(whole) || 0) * Number(it.per_buy) + (Number(rest) || 0) : (Number(amount) || 0) * (inBuy ? Number(it.per_buy) : 1);
@@ -1038,7 +1059,7 @@ function receiptPicker(box, cur, onPick) {
   paint();
 }
 /* Chụp hoá đơn trước rồi nhập lần lượt từng mặt hàng */
-function newReceiptSheet() {
+function newReceiptSheetLegacy() {
   let file = null;
   ui.sheet(ui.head('Ảnh hoá đơn nhập', 'Chụp 1 lần cho cả hoá đơn, rồi bấm Nhập ở từng mặt hàng') + '<div class="sh-body">' +
     '<div id="nrPh">' + photoBtns('n') + '</div>' +
@@ -1063,7 +1084,7 @@ function newReceiptSheet() {
   });
 }
 /* Xem 1 hoá đơn: ảnh to + các mặt hàng đã nhập theo nó */
-async function openReceipt(id) {
+async function openReceiptLegacy(id) {
   let r = (state.receipts || []).find(x => x.id === id);
   if (!r) { const got = await api.stockReceipts({ ids: [id] }); r = got && got[0]; }
   if (!r) { ui.toast('Không thấy hoá đơn này'); return; }
@@ -1080,7 +1101,7 @@ async function openReceipt(id) {
   });
 }
 /* Chi tiết 1 mặt hàng: tồn, lịch sử, các thao tác */
-async function openStockItem(it) {
+async function openStockItemLegacy(it) {
   let moves = []; try { moves = await api.stockMoves({ itemId: it.id, limit: 60 }); } catch (e) { /* bỏ qua */ }
   ui.sheet(ui.head(esc(it.name), esc((it.grp || 'Chưa xếp nhóm') + (twoUnits(it) ? ' · 1 ' + it.buy_unit + ' = ' + nf(it.per_buy) + ' ' + it.use_unit : ' · tính theo ' + it.use_unit))) + '<div class="sh-body">' +
     '<div class="sk-big"><span>Đang còn</span><b class="num">' + esc(stockText(it)) + '</b>' + (isLow(it) ? '<span class="pill pill-red">Sắp hết</span>' : '') + '</div>' +
@@ -1100,7 +1121,7 @@ async function openStockItem(it) {
   });
 }
 /* Thêm / sửa mặt hàng (chủ quán) */
-function editStockItem(it, opt) {
+function editStockItemLegacy(it, opt) {
   opt = opt || {}; // opt.barcode: thêm hàng mới từ mã vừa quét; opt.name: tên gợi ý
   // Quy cách: lấy từ bảng quy cách (cập nhật 17); chưa có thì dùng bộ mẫu
   const PRESETS = state.stockPacks ? state.stockPacks : STOCK_PRESETS.map(p => ({ id: null, name: p[0], buy_unit: p[1], use_unit: p[2], per_buy: p[3] }));
@@ -1250,7 +1271,7 @@ function openScanner(o) {
   return sh;
 }
 /* Quét để nhập / lấy dùng / kiểm kho. Mã lạ → gắn vào hàng (máy nhớ cho lần sau). */
-function scanForMove() {
+function scanForMoveLegacy() {
   state.scanMode = state.scanMode || 'nhap';
   openScanner({ title: 'Quét mã vạch', sub: 'Quét mã trên thùng hoặc gói', modes: true, onCode: async code => {
     const codes = await api.stockBarcodes(); state.barcodes = codes || [];
@@ -1262,7 +1283,7 @@ function scanForMove() {
   } });
 }
 /* Mã chưa gắn hàng nào: chọn hàng có sẵn hoặc thêm hàng mới */
-function openUnknownCode(code, kind, fixedItem) {
+function openUnknownCodeLegacy(code, kind, fixedItem) {
   let pick = fixedItem || null, unit = 'buy', query = '';
   const items = (state.stockData || []).filter(x => x.is_active !== false);
   const list = () => { const w = BN.fold(query).split(/\s+/).filter(Boolean); const sh = items.filter(i => w.every(x => BN.fold(i.name + ' ' + (i.grp || '')).indexOf(x) >= 0)).slice(0, 40);
@@ -1299,7 +1320,7 @@ function openUnknownCode(code, kind, fixedItem) {
   });
 }
 /* Gắn thêm mã cho một mặt hàng (từ trang chi tiết hàng) */
-function scanToLink(it) {
+function scanToLinkLegacy(it) {
   openScanner({ title: 'Gắn mã vạch', sub: esc(it.name), onCode: async code => {
     const codes = await api.stockBarcodes() || []; const ex = codes.find(b => b.code === code);
     if (ex && ex.item_id === it.id) { ui.close(); ui.toast('Mã này đã gắn cho ' + it.name); return; }
@@ -1389,7 +1410,7 @@ async function menuClick(e) {
   }
 }
 
-function editItem(it) {
+function editItemLegacy(it) {
   const m = state.menuData, isNew = !it;
   it = it || { name: '', category_id: (state.menuCat !== 'all' && state.menuCat) || (m.categories[0] && m.categories[0].id), price: 0, description: '', tag: '', prep_minutes: 5, is_available: true, image_path: null, group_ids: [] };
   let image = it.image_path;
@@ -1443,7 +1464,7 @@ function editItem(it) {
       };
     });
 }
-function editCat(c) {
+function editCatLegacy(c) {
   const isNew = !c; c = c || { name: '', color: 'vang', station: 'bep', sort_order: 99 };
   ui.sheet(ui.head(isNew ? 'Thêm danh mục' : 'Sửa danh mục') + '<div class="sh-body">' +
     '<label class="field" for="cName">Tên danh mục<input id="cName" maxlength="40" value="' + esc(c.name) + '"></label>' +
@@ -1461,7 +1482,7 @@ function editCat(c) {
     };
   });
 }
-function editGroup(g) {
+function editGroupLegacy(g) {
   const isNew = !g; g = g ? JSON.parse(JSON.stringify(g)) : { name: '', title: '', kind: 'do_uong', min_select: 0, max_select: 1, choices: [{ name: '', price_delta: 0 }], used_by: 0 };
   const kind = g.min_select >= 1 && g.max_select === 1 ? 'one' : g.max_select === 1 ? 'opt' : 'many';
   const chRow = (c, i) => '<div class="chrow" data-ch="' + i + '"><input type="text" placeholder="Tên lựa chọn" value="' + esc(c.name) + '" data-f="name" aria-label="Tên lựa chọn"><input type="number" step="1000" min="0" placeholder="+ giá" value="' + (c.price_delta || 0) + '" data-f="price" aria-label="Giá cộng thêm">' +
@@ -1583,13 +1604,13 @@ async function renderStaffLegacy(main) {
     else if (po) { const [k, id] = po.dataset.payout.split(':'); const x = (k === 'prev' ? prev : cur).list.find(v => v.id === id); payout(x, k === 'prev' ? 'tháng ' + mmyyyy(m1) : 'tháng ' + mmyyyy(m0)); }
   };
 }
-function payout(x, monthLabel) {
+function payoutLegacy(x, monthLabel) {
   ui.sheet(ui.head('Trả lương cho ' + esc(x.name), monthLabel ? 'Lương ' + monthLabel : '') + '<div class="sh-body"><p>Đánh dấu <b>' + x.unpaidIds.length + ' ca</b> chưa trả' + (monthLabel ? ' của ' + monthLabel : '') + ' là đã trả, tổng <b class="num">' + vnd(x.unpaid) + '</b>.</p><p class="small muted">Ca đang làm dở không được tính. Bạn trả tiền cho nhân viên trước rồi bấm xác nhận.</p></div>' +
     '<div class="sh-foot"><button class="btn btn-line" type="button" data-close>Thôi</button><button class="btn grow" type="button" id="poOk">Xác nhận đã trả ' + vnd(x.unpaid) + '</button></div>', sh => {
     $('#poOk', sh).onclick = async () => { try { await api.markShiftsPaid(x.unpaidIds); ui.close(); ui.toast('Đã ghi nhận trả lương'); rerender(); } catch (err) { ui.toast(errText(err)); } };
   });
 }
-function editEmployee(e) {
+function editEmployeeLegacy(e) {
   const isNew = !e; e = e || { full_name: '', phone: '', role: 'staff', hourly_rate: 25000, is_active: true };
   ui.sheet(ui.head(isNew ? 'Thêm nhân viên' : 'Sửa nhân viên') + '<div class="sh-body">' +
     '<label class="field" for="eName">Họ tên <span class="req">*</span><input id="eName" maxlength="60" value="' + esc(e.full_name) + '"></label>' +
@@ -1652,7 +1673,7 @@ function repricer(e, sh) {
   };
   return { plan, show };
 }
-async function editShift(s) {
+async function editShiftLegacy(s) {
   const urls = await Promise.all([s.check_in_photo, s.check_out_photo].map(p => p ? api.photoUrl(p).catch(() => null) : null));
   ui.sheet(ui.head('Ca của ' + esc(s.employee_name), ddmmyyyy(s.check_in_at)) + '<div class="sh-body">' +
     '<div class="pbig">' + ['Ảnh vào ca', 'Ảnh ra ca'].map((t, i) => '<figure>' + (urls[i] ? '<img src="' + esc(urls[i]) + '" alt="' + t + '">' : '<div class="ph">Không có ảnh</div>') + '<figcaption>' + t + ' · ' + (i ? (s.check_out_at ? hhmm(s.check_out_at) : 'chưa ra ca') : hhmm(s.check_in_at)) + '</figcaption></figure>').join('') + '</div>' +

@@ -1,4 +1,4 @@
-/* Tab "Kho" (React): hàng hoá + quy cách nhập hàng. Phiếu nhập / lấy dùng / kiểm kho, quét mã, ảnh hoá đơn vẫn dùng hộp thoại cũ. */
+/* Tab "Kho" (React): hàng hoá + quy cách nhập hàng. Hộp thoại (phiếu nhập, kiểm kho, quét mã, ảnh hoá đơn) ở src/quanly/dialogs/stock.jsx. */
 import { useEffect, useRef, useState } from 'react';
 import { Html, useLoad, Loading, ErrMsg } from './common';
 
