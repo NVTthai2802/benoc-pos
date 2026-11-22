@@ -191,19 +191,9 @@ function ticketCanvas(o, items, extra, set) {
   else if (paid >= total) { text('ĐÃ THANH TOÁN', 22, true, 'center'); if (how) text('(' + how + ')', 15, true, 'center'); }
   else text('CÒN PHẢI THU: ' + money(due), 22, true, 'center');
 
-  /* ===== MÃ QR: chỉ khi còn phải thu, đúng số tiền còn thu của cả đơn ===== */
-  const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
-  if (qm) {
-    rule(true);
-    text('Vui lòng kiểm tra kỹ trước khi thanh toán!', 14 * 0.85, false, 'center', 0, true); // nhỏ hơn 15%
-    text('Quét mã chuyển khoản ' + money(due), 16, true, 'center', 6);
-    const n = qm.length, size = Math.min(IW, Math.round(Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)) * n * 1.05)), cell = size / n;
-    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
-    const B = BN.BANK;
-    text((B.bank + (B.holder ? ' · ' + B.holder : '')).toUpperCase(), 14, true, 'center');
-  }
+  /* Không in mã QR / lời nhắc / ngân hàng: cuối phiếu chỉ còn trạng thái thanh toán + lời cảm ơn */
   rule(true);
-  text('Cảm ơn bạn, hẹn gặp lại!', 15, false, 'center');
+  text('Cảm ơn bạn, hẹn gặp lại!', 15 * 1.2, false, 'center'); // to hơn 20%
   y += 6 * k;
 
   cv.width = W; cv.height = Math.ceil(y);
@@ -631,7 +621,7 @@ function openSettings(onChange) {
     (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
       '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
       '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' +
-      (BN.FEATURES.vietqr ? '<label class="check"><input type="checkbox" id="prQr"' + (s.qr !== false ? ' checked' : '') + '><span><b>In mã QR chuyển khoản cuối phiếu</b><small>Chỉ in khi đơn còn phải thu tiền, đúng số tiền còn thu.</small></span></label>' : '') + prevT() +
+      prevT() +
       '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="phieu">In thử phiếu</button></div>' : '') + '</section>' +
     '<section class="pr-sec"><h3>Tem dán ly</h3><p class="small muted" style="margin:0 0 6px">Mỗi ly một tem: bàn / mang về, tên khách, món, size, đường, đá, topping, ghi chú.</p>' +
     radios('prt', s.tmode, [['ble', 'Bluetooth trực tiếp (khuyên dùng cho máy tem)', 'Trang nối thẳng máy in tem (CLABEL CT221B…). Dùng được cùng lúc với máy in phiếu.'], IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Chỉ khi điện thoại này không dùng RawBT để in phiếu.'], ['off', 'Không in tem', 'Máy này không in tem.']].filter(Boolean)) +
