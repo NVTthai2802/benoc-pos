@@ -164,7 +164,7 @@ function ticketCanvas(o, items, extra, set) {
   line(xL, top, xR, top, 2); line(xL, top, xL, bottom, 2); line(xR, top, xR, bottom, 2);
   [xSL, xDG, xTT].forEach(x => cols.forEach(([a, b]) => line(Math.round(x), a, Math.round(x), b, 1)));
   gap(8);
-  if (o.note) { rich([['GHI CHÚ: ', true], [o.note, false]], 16, 'left'); }
+  if (o.note) { rich([['GHI CHÚ: ', true], [o.note, true]], 16 * 1.2, 'left'); } // ghi chú cả đơn: to hơn 20%, in đậm
   rule(true);
 
   /* ===== TỔNG SỐ LƯỢNG THEO LOẠI: "2 cơm · 1 kimbap · 1 trà sữa" ===== */
