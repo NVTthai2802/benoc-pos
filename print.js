@@ -193,7 +193,7 @@ function ticketCanvas(o, items, extra, set) {
   const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
   if (qm) {
     rule(true);
-    text('Vui lòng kiểm tra kỹ trước khi thanh toán!', 14, false, 'center', 0, true);
+    text('Vui lòng kiểm tra kỹ trước khi thanh toán!', 14 * 0.85, false, 'center', 0, true); // nhỏ hơn 15%
     text('Quét mã chuyển khoản ' + money(due), 16, true, 'center', 6);
     const n = qm.length, size = Math.min(IW, Math.round(Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)) * n * 1.05)), cell = size / n;
     ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
