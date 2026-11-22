@@ -63,7 +63,7 @@ function ticketCanvas(o, items, extra, set) {
   set = set || get(); extra = extra || {};
   const SHOP = BN.SHOP || { name: 'Bé Nốc', address: '', phone: '', cats: {} };
   // Lề hai bên (đầu in hay mờ ở mép giấy), k: hệ số cỡ chữ theo khổ giấy
-  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1), IW = W - pad * 2, LH = 1.38;
+  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1) * 1.10, IW = W - pad * 2, LH = 1.38; // chữ to thêm 10%
   const F = (px, b, it) => (it ? 'italic ' : '') + (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   const ops = []; let y = pad;
@@ -112,7 +112,12 @@ function ticketCanvas(o, items, extra, set) {
 
   /* ===== BẢNG MÓN: Tên món | SL | ĐG | TT ===== */
   const cp = Math.round(5 * k);                                   // đệm trong ô
-  const cTT = Math.round(IW * 0.215), cDG = Math.round(IW * 0.195), cSL = Math.round(IW * 0.085);
+  // Cột số rộng theo số dài nhất (VD 540.000), không đè sang cột bên cạnh
+  const widest = (list, px, b) => { ctx.font = F(px, b); return Math.max(...list.map(t => ctx.measureText(t).width)); };
+  const ttList = ['TT'].concat(items.map(i => i.promo_part === 'tang' && !lineAmt(i) ? 'Tặng' : num(lineAmt(i))));
+  const dgList = ['ĐG'].concat(items.map(i => num(i.qty ? lineAmt(i) / i.qty : i.unit_price)));
+  const cTT = Math.ceil(Math.max(IW * 0.2, widest(ttList, 15, true) + cp * 2)), cDG = Math.ceil(Math.max(IW * 0.18, widest(dgList, 14, false) + cp * 2));
+  const cSL = Math.ceil(Math.max(IW * 0.08, widest(['SL'].concat(items.map(i => String(i.qty))), 17, true) + cp * 2));
   const xR = W - pad, xTT = xR - cTT, xDG = xTT - cDG, xSL = xDG - cSL, xL = pad, nameW = xSL - xL - cp * 2;
   const top = Math.round(y), cols = [];
   // dòng tiêu đề
@@ -176,7 +181,7 @@ function ticketCanvas(o, items, extra, set) {
   const sum = items.reduce((t, i) => t + lineAmt(i), 0);
   const total = o.total != null ? o.total : sum, paid = o.paid_amount || 0, due = Math.round(total - paid);
   if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 16);
-  pair('TỔNG THANH TOÁN', money(total), 19, true);
+  { let px = 19; ctx.font = F(px, true); while (px > 15 && ctx.measureText('TỔNG THANH TOÁN').width + ctx.measureText(money(total)).width + 12 * k > IW) ctx.font = F(--px, true); pair('TỔNG THANH TOÁN', money(total), px, true); } // nhỏ lại cho vừa một dòng
   if (o.paid_amount != null && paid > 0 && paid < total) pair('Đã trả', money(paid), 15);
   gap(8);
   const how = o.paid_method === 'chuyen_khoan' ? 'Chuyển khoản' : o.paid_method === 'tien_mat' ? 'Tiền mặt' : '';
