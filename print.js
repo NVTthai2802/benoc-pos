@@ -109,6 +109,8 @@ function ticketCanvas(o, items, extra, set) {
   text('Đặt: ' + hhmm(o.created_at) + ' — Nhận: ' + hhmm(Date.now()) + (extra.reprint ? ' · IN LẠI' : ''), 15, false, 'center');
   if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 18, true, 'center');
   gap(8);
+  // Ghi chú cả đơn: ngay trên bảng món, in đậm, to hơn ~26% (20% rồi thêm 5%)
+  if (o.note) { rich([['GHI CHÚ: ', true], [o.note, true]], 16 * 1.2 * 1.05, 'left'); gap(6); }
 
   /* ===== BẢNG MÓN: Tên món | SL | ĐG | TT ===== */
   const cp = Math.round(5 * k);                                   // đệm trong ô
@@ -164,7 +166,6 @@ function ticketCanvas(o, items, extra, set) {
   line(xL, top, xR, top, 2); line(xL, top, xL, bottom, 2); line(xR, top, xR, bottom, 2);
   [xSL, xDG, xTT].forEach(x => cols.forEach(([a, b]) => line(Math.round(x), a, Math.round(x), b, 1)));
   gap(8);
-  if (o.note) { rich([['GHI CHÚ: ', true], [o.note, true]], 16 * 1.2, 'left'); } // ghi chú cả đơn: to hơn 20%, in đậm
   rule(true);
 
   /* ===== TỔNG SỐ LƯỢNG THEO LOẠI: "2 cơm · 1 kimbap · 1 trà sữa" ===== */
