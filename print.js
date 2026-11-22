@@ -140,14 +140,16 @@ function ticketCanvas(o, items, extra, set) {
     const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
     const amt = lineAmt(i), gift = i.promo_part === 'tang' && !amt;
     // cột số: cùng dòng đầu của tên món
-    const base = y + 17 * k;
+    const base = y + 17 * 1.1 * k; // cùng dòng chữ với tên món
     ops.push({ t: String(i.qty), font: F(17, true), y: base, align: 'center', x: (xSL + xDG) / 2 });
     ops.push({ t: num(i.qty ? amt / i.qty : i.unit_price), font: F(14, false), y: base, align: 'right', x: xTT - cp });
     ops.push({ t: gift ? 'Tặng' : num(amt), font: F(15, true), y: base, align: 'right', x: xR - cp });
     // tên món + size, rồi tuỳ chọn / topping / ghi chú thụt vào
-    ctx.font = F(17, true);
-    wrap(ctx, i.item_name + (sz ? ' · ' + sizeText(sz) : ''), nameW).forEach(l => { ops.push({ t: l, font: F(17, true), y: y + 17 * k, align: 'left', x: xL + cp }); y += 17 * k * 1.3; });
-    const sub = (t, b) => { ctx.font = F(14, b); wrap(ctx, t, nameW - 6 * k).forEach(l => { ops.push({ t: l, font: F(14, b), y: y + 14 * k, align: 'left', x: xL + cp + 6 * k }); y += 14 * k * 1.32; }); };
+    // Chữ tên món và tuỳ chọn to hơn 10% (cột SL / ĐG / TT giữ cỡ cũ)
+    const NP = 17 * 1.1, SP = 14 * 1.1;
+    ctx.font = F(NP, true);
+    wrap(ctx, i.item_name + (sz ? ' · ' + sizeText(sz) : ''), nameW).forEach(l => { ops.push({ t: l, font: F(NP, true), y: y + NP * k, align: 'left', x: xL + cp }); y += NP * k * 1.3; });
+    const sub = (t, b) => { ctx.font = F(SP, b); wrap(ctx, t, nameW - 6 * k).forEach(l => { ops.push({ t: l, font: F(SP, b), y: y + SP * k, align: 'left', x: xL + cp + 6 * k }); y += SP * k * 1.32; }); };
     const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
     const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
     if (rest.length) sub(rest.join(', '), false);
