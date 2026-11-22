@@ -397,6 +397,62 @@ async function bleRestore(k) {
     return true;
   } catch (e) { return false; }
 }
+/* ---------- Gửi phiếu theo nhịp in của máy ----------
+   Máy in nhiệt rẻ (MPT-II…) không báo "đầy bộ nhớ": gửi nhanh hơn tốc độ đốt giấy thì phần thừa
+   dồn vào bộ nhớ đệm, tràn là rơi byte → in ra chữ rác. Nên tính trước mỗi byte thuộc hàng chấm nào,
+   giả lập máy in đốt giấy PACE.rows hàng / giây, và chỉ gửi tiếp khi phần máy chưa in kịp
+   (kể cả gói sắp gửi) không quá PACE.cap byte. Phiếu dài bao nhiêu cũng không tràn; chỗ trắng
+   (1 byte / hàng) và chữ thưa thì gửi rất nhanh, chỉ chậm lại ở đoạn đậm như mã QR.
+   Số đo cho máy 58 mm loại chậm nhất (30 mm/s, đệm ≥ 4 KB), dư an toàn; đổi được:
+   localStorage benoc.blePace = {"rows":240,"cap":1536,"chunk":180,"sync":4} */
+const PACE = Object.assign({ rows: 240, cap: 1536, chunk: 180, sync: 4 }, store.get('blePace', null) || {});
+const paceMm = () => Math.round(PACE.rows / 8);
+const setPace = mm => { PACE.rows = mm * 8; store.set('blePace', Object.assign({}, store.get('blePace', null) || {}, { rows: PACE.rows })); };
+/* Vị trí byte kết thúc của từng hàng chấm trong lệnh ESC/POS (đọc lại chính lệnh escpos tạo ra) */
+function rowEnds(u8) {
+  const ends = [];
+  for (let i = 0; i < u8.length;) {
+    const a = u8[i], b = u8[i + 1];
+    if (a === 0x1D && b === 0x76 && u8[i + 2] === 0x30) { // GS v 0: ảnh wb byte × h hàng
+      const wb = u8[i + 4] | u8[i + 5] << 8, h = u8[i + 6] | u8[i + 7] << 8; i += 8;
+      for (let r = 0; r < h; r++) { i += wb; ends.push(Math.min(i, u8.length)); }
+    } else if (a === 0x1B && b === 0x64) { i += 3; for (let r = 0; r < u8[i - 1] * 30; r++) ends.push(i); } // ESC d n: đẩy n dòng ≈ 30 chấm / dòng
+    else if (a === 0x1B && b === 0x4A) { i += 3; for (let r = 0; r < u8[i - 1]; r++) ends.push(i); }      // ESC J n: đẩy n chấm
+    else if (a === 0x1B && b === 0x40) i += 2;
+    else i++;
+  }
+  return ends;
+}
+/* Số hàng đã nhận đủ khi máy có `off` byte đầu (tìm nhị phân) */
+const rowsAt = (ends, off) => { let lo = 0, hi = ends.length; while (lo < hi) { const m = (lo + hi) >> 1; if (ends[m] <= off) lo = m + 1; else hi = m; } return lo; };
+/* Gửi u8 theo nhịp in. fast = ghi không chờ xác nhận (null nếu không có), slow = ghi có xác nhận.
+   Cứ PACE.sync gói thì có 1 gói chờ xác nhận để hàng đợi Bluetooth của điện thoại không dồn ứ.
+   wait / now cho phép kiểm thử. Trả về thống kê để đo. */
+async function pacedSend(u8, fast, slow, wait, now) {
+  wait = wait || sleep; now = now || (() => performance.now());
+  const ends = rowEnds(u8), rate = PACE.rows / 1000, cap = Math.max(PACE.cap, PACE.chunk);
+  let sent = 0, n = 0, printed = 0, t = now(), waited = 0, peak = 0;
+  while (sent < u8.length) {
+    const e = Math.min(u8.length, sent + PACE.chunk);
+    // Máy in đốt giấy liên tục nhưng không vượt quá số hàng đã nhận đủ
+    const adv = () => { const t2 = now(); printed = Math.min(rowsAt(ends, sent), printed + (t2 - t) * rate); t = t2; };
+    adv();
+    // Phải in xong tới byte (e - cap) thì gói này mới vừa bộ nhớ đệm
+    const need = e - cap;
+    if (need > 0) {
+      const r = rowsAt(ends, need - 1) + 1; // hàng chứa byte need-1 phải in xong
+      if (r > printed) { const ms = (r - printed) / rate; await wait(ms); waited += ms; adv(); }
+    }
+    const done = Math.min(ends.length, Math.floor(printed + 1e-6)), used = e - (done ? ends[done - 1] : 0); // byte còn nằm trong máy in
+    if (used > peak) peak = used;
+    const part = u8.slice(sent, e);
+    if (fast && n % PACE.sync !== PACE.sync - 1 && e < u8.length) {
+      try { await fast(part); } catch (err) { fast = null; await slow(part); } // máy không nhận ghi nhanh: chuyển hẳn sang ghi có xác nhận
+    } else await slow(part);
+    sent = e; n++;
+  }
+  return { bytes: u8.length, rows: ends.length, packets: n, waited: Math.round(waited), peak };
+}
 /* Gửi lệnh theo hàng đợi, từng gói nhỏ có xác nhận (không mất dữ liệu) */
 function bleSend(k, u8) {
   const b = slots[k];
@@ -407,7 +463,9 @@ function bleSend(k, u8) {
     // Gửi nhanh: liền nhiều gói không chờ xác nhận, cứ 8 gói chờ 1 lần để máy in kịp nhận (không tràn bộ nhớ)
     const fast = b.ch.properties.writeWithoutResponse && b.ch.writeValueWithoutResponse && store.get('bleFast', true) ? x => b.ch.writeValueWithoutResponse(x) : null;
     if (k === 'phieu') {
-      // Phiếu: gói nhỏ, chờ xác nhận từng gói, nghỉ chút cho máy in kịp đốt giấy (phiếu dài / mã QR hay bị rơi chữ cuối phiếu)
+      // Gửi nhanh: theo nhịp in của máy (không tràn bộ nhớ dù phiếu dài)
+      if (fast) { await pacedSend(u8, fast, slow); return; }
+      // Gửi chậm mà chắc: gói nhỏ, chờ xác nhận từng gói, nghỉ chút cho máy in kịp đốt giấy
       for (let i = 0; i < u8.length; i += 120) { await slow(u8.slice(i, i + 120)); await sleep(18); }
       return;
     }
@@ -469,6 +527,12 @@ async function tryAuto(o, items, extra, set) {
 }
 
 /* ---------- Cài đặt máy in (từng máy) ---------- */
+/* Phiếu thử dài (~35 cm, 18 dòng món, có mã QR): thử máy in không tràn bộ nhớ ở tốc độ đã chọn */
+function sampleLong() {
+  const x = sample(), base = x.items.concat([{ qty: 3, unit_price: 20000, item_name: 'Cơm heo chiên xù', options: [{ group: 'Đường', choice: 'Đường bình thường' }, { group: 'Đá', choice: 'Đá bình thường' }], note: 'Không hành' }]);
+  const items = []; for (let i = 0; i < 6; i++) base.forEach(it => items.push(Object.assign({}, it)));
+  return { o: Object.assign({}, x.o, { note: 'In thử phiếu dài' }), items };
+}
 function sample() {
   return { o: { id: 'abcd1234', queue_number: 12, customer_name: 'Khách thử', customer_phone: '0912345678', dine_type: 'tai_quan', created_at: new Date().toISOString(), note: 'In thử phiếu' },
     items: [{ qty: 2, unit_price: window.BENOC_STATION === 'pha_che' ? 40000 : 40000, item_name: window.BENOC_STATION === 'pha_che' ? 'Hồng trà sữa trân châu' : 'Cơm heo chua ngọt', options: window.BENOC_STATION === 'pha_che' ? [{ group: 'Upsize', choice: 'Upsize', price: 10000 }, { group: 'Đường', choice: 'Ít đường' }, { group: 'Topping thêm', choice: 'Trân châu hoàng gia' }] : [{ group: 'Topping thêm', choice: 'Trứng ốp la' }], note: 'ít cay' },
@@ -488,7 +552,11 @@ function openSettings(onChange) {
   const body = () => '' +
     '<section class="pr-sec"><h3>Phiếu món</h3><p class="small muted" style="margin:0 0 6px">Phiếu các món của ' + PLACE + ': giá từng món, tổng tiền, đã / chưa thanh toán (không in mã đơn).</p>' +
     radios('prm', s.mode, [IOS ? null : ['rawbt', 'Qua app RawBT (Android)', 'Máy in mặc định trong RawBT (ví dụ MPT-II). Mở RawBT chọn máy một lần.'], ['ble', 'Bluetooth trực tiếp', 'Trang nối thẳng máy in phiếu. Dùng trên iPhone (qua app Bluefy) hoặc khi RawBT đã dùng cho máy khác.'], IOS ? null : ['browser', 'Hộp thoại in của trình duyệt', 'Máy in có ứng dụng in riêng của hãng.'], ['off', 'Không in phiếu', 'Máy này không in phiếu.']].filter(Boolean)) +
-    (s.mode === 'ble' ? bleBox('phieu') : '') +
+    (s.mode === 'ble' ? bleBox('phieu') + (store.get('bleFast', true)
+      ? '<div class="field">Tốc độ đốt giấy của máy in phiếu</div>' + seg('pace', paceMm(), [[25, '25 mm/s'], [30, '30'], [40, '40'], [50, '50']]) +
+        '<p class="small muted" style="margin:0">Trang gửi đúng bằng tốc độ này nên phiếu dài không tràn bộ nhớ máy in. Số càng lớn in càng nhanh: tăng dần và bấm <b>In thử phiếu dài</b>, thấy chữ rác / mất dòng thì lùi lại một nấc.</p>' +
+        '<div class="row"><button class="btn btn-line btn-sm" type="button" data-test="dai">In thử phiếu dài</button></div>'
+      : '') : '') +
     (s.mode !== 'off' ? '<div class="field">Khổ giấy</div>' + seg('w', s.width, [[58, '58 mm'], [80, '80 mm']]) +
       '<div class="grid2"><label class="field" for="prCopies">Số bản mỗi lần<input id="prCopies" class="num" type="number" min="1" max="3" value="' + s.copies + '"></label>' +
       '<label class="check" style="align-self:end"><input type="checkbox" id="prBig"' + (s.big ? ' checked' : '') + '><span><b>Chữ to</b><small>Dễ đọc khi đứng làm</small></span></label></div>' +
@@ -517,7 +585,8 @@ function openSettings(onChange) {
     bleSubs.push(onBle);
     sh.addEventListener('change', e => { if (e.target.name === 'prm') s.mode = e.target.value; if (e.target.name === 'prt') s.tmode = e.target.value; redraw(); });
     sh.addEventListener('click', async e => {
-      const t = e.target.closest('[data-w],[data-lb],[data-lang],[data-off],[data-offy]');
+      const t = e.target.closest('[data-w],[data-lb],[data-lang],[data-off],[data-offy],[data-pace]');
+      if (t && t.dataset.pace) { setPace(Number(t.dataset.pace)); redraw(); return; }
       if (t) { if (t.dataset.w) s.width = Number(t.dataset.w); if (t.dataset.lb) s.label = t.dataset.lb; if (t.dataset.lang) s.lang = t.dataset.lang; if (t.dataset.off) s.offx = Math.max(-10, Math.min(10, (s.offx || 0) + Number(t.dataset.off))); if (t.dataset.offy) s.offy = Math.max(-10, Math.min(10, (s.offy || 0) + Number(t.dataset.offy))); redraw(); return; }
       if (e.target.closest('[data-ble]')) {
         const b = e.target.closest('[data-ble]'), k = b.dataset.ble; b.disabled = true;
@@ -525,6 +594,12 @@ function openSettings(onChange) {
         redraw(); return;
       }
       const tb = e.target.closest('[data-test]');
+      if (tb && tb.dataset.test === 'dai') {
+        read(); const x = sampleLong(), t0 = Date.now();
+        const n = printTicket(x.o, x.items, { minutes: 10 }, s, ['phieu']);
+        if (n) slots.phieu.q.then(() => ui.toast('Đã gửi phiếu dài trong ' + ((Date.now() - t0) / 1000).toFixed(1) + ' giây ở ' + paceMm() + ' mm/s'));
+        return;
+      }
       if (tb) { read(); const x = sample(), k = tb.dataset.test; printTicket(x.o, k === 'tem' ? x.items.slice(0, 1).map(i => Object.assign({}, i, { qty: 1 })) : x.items, { minutes: 10 }, s, [k]); return; }
       if (e.target.closest('#prSave')) {
         read(); save(s); unsub(); ui.close();
@@ -544,6 +619,6 @@ function label(set) {
   return on.map(k => k === 'tem' ? 'tem' : 'phiếu').join(' + ');
 }
 
-window.BNPrint = { get, save, jobs, label, ticketCanvas, labelCanvas, cups, escpos, tspl, rawbtUrl, build, printTicket, tryAuto, openSettings,
+window.BNPrint = { get, save, jobs, label, ticketCanvas, labelCanvas, cups, escpos, tspl, rowEnds, pacedSend, PACE, rawbtUrl, build, printTicket, tryAuto, openSettings,
   errMsg, ble: { ok: bleOk, has: k => !!slots[k].dev || !!window.BENOC_BLE_HOOK, name: bleName, label: k => SLOT_NAME[k], connect: bleConnect, restore: bleRestore, send: bleSend, on: f => { bleSubs.push(f); } } };
 })();
