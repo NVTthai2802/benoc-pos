@@ -593,6 +593,7 @@ function supabaseApi() {
       return () => { stopped = true; if (ch) cl().then(c => c.removeChannel(ch)); };
     },
     async saveBank(b) { const c = await cl(); await q(c.from('shop_settings').update({ bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT, updated_at: new Date().toISOString() }).eq('id', 1)); },
+    async savePrintInfo(p) { const c = await cl(); await q(c.from('shop_settings').update({ print_address: p.address || '', print_phone: p.phone || '', updated_at: new Date().toISOString() }).eq('id', 1)); },
     async saveSettings(s) {
       const c = await cl();
       await q(c.from('shop_settings').update({ shop_name: s.shop_name, round_minutes: s.round_minutes, round_mode: s.round_mode, pay_round: s.pay_round, kitchen_capacity: s.kitchen_capacity, bar_capacity: s.bar_capacity, updated_at: new Date().toISOString() }).eq('id', 1));
@@ -921,7 +922,7 @@ function demoSeed() {
   const S = demoSizeMigrate(JSON.parse(JSON.stringify(window.BENOC_SEED || {})));
   const now = Date.now(), R = rng(2802);
   const db = {
-    shop_settings: { id: 1, shop_name: 'Bé Nốc', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2, bar_capacity: 2 },
+    shop_settings: { id: 1, shop_name: 'Bé Nốc', print_address: 'An Khánh, Hoài Đức', print_phone: '', round_minutes: 1, round_mode: 'nearest', pay_round: 1000, kitchen_capacity: 2, bar_capacity: 2 },
     menu_categories: S.menu_categories || [], menu_items: S.menu_items || [], option_groups: S.option_groups || [],
     option_choices: S.option_choices || [], menu_item_option_groups: S.menu_item_option_groups || [],
     employees: [
@@ -1434,6 +1435,7 @@ function demoApi() {
     onBankTxn() { return () => {}; },
     onSalesChange(cb) { const h = () => cb(); window.addEventListener('benoc-db', h); return () => window.removeEventListener('benoc-db', h); },
     async saveBank(b) { need('owner'); tx(db => Object.assign(db.shop_settings, { bank_bin: b.bin, bank_name: b.bank, bank_account: b.account, bank_holder: b.holder || '', bank_note: b.note || NOTE_DEFAULT })); },
+    async savePrintInfo(p) { need('owner'); tx(db => Object.assign(db.shop_settings, { print_address: p.address || '', print_phone: p.phone || '' })); },
     async saveSettings(s) { need('owner'); tx(db => Object.assign(db.shop_settings, { shop_name: s.shop_name, round_minutes: Number(s.round_minutes), round_mode: s.round_mode, pay_round: Number(s.pay_round) || 1000, kitchen_capacity: Number(s.kitchen_capacity), bar_capacity: Number(s.bar_capacity) || 2 })); },
     demoReset() {
       try { Object.keys(localStorage).filter(k => k.indexOf(SP) === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ }
@@ -1501,6 +1503,14 @@ const BANKS = [['970422', 'MB Bank', 'Quân đội'], ['970436', 'Vietcombank', 
   ['970439', 'Public Bank', 'Public Việt Nam'], ['970442', 'Hong Leong', 'Hong Leong Việt Nam'], ['970434', 'Indovina', 'Indovina'], ['970421', 'VRB', 'Việt - Nga'], ['970446', 'Co-opBank', 'Hợp tác xã'],
   ['546034', 'CAKE', 'Ngân hàng số CAKE (VPBank)'], ['546035', 'Ubank', 'Ngân hàng số Ubank (VPBank)'], ['963388', 'Timo', 'Ngân hàng số Timo'], ['963326', 'TNEX', 'TNEX (MSB)'], ['971133', 'PVcomBank Pay', 'Ngân hàng số PVcomBank']];
 /* Lấy tài khoản nhận tiền chủ quán đã cài (chưa chạy cập nhật 18 thì giữ mặc định) */
+/* Tên quán, địa chỉ, số điện thoại in đầu phiếu + tên danh mục của từng món (để in "2 cơm · 1 trà sữa").
+   Máy bếp / pha chế tải khi mở trang và mỗi 5 phút (đổi trong Cài đặt thì in đúng sau tối đa 5 phút). */
+const SHOP = { name: 'Bé Nốc', address: '', phone: '', cats: {} };
+async function loadShop() {
+  try { const st = await api.settings(); if (st) Object.assign(SHOP, { ok: true, name: st.shop_name || SHOP.name, address: st.print_address || '', phone: st.print_phone || '' }); } catch (e) { /* chưa đăng nhập: giữ bản cũ */ }
+  try { const cats = {}; (await api.getMenu()).forEach(c => (c.items || []).forEach(m => { cats[m.id] = c.name; })); SHOP.cats = cats; } catch (e) { /* giữ bản cũ */ }
+  return SHOP;
+}
 async function loadBank() { try { const r = await api.paymentInfo(); if (r && r.account && r.bin) Object.assign(BANK, r, CONFIG.BANK || {}); } catch (e) { /* giữ mặc định */ } return BANK; }
 const tlv = (id, v) => id + String(v.length).padStart(2, '0') + v;
 function crc16(str) { // CRC-16/CCITT-FALSE
@@ -1549,7 +1559,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const isSizeOpt = o => SIZE_RE.test(o.choice || '') || /^upsize/i.test(o.choice || '');
 
 window.BN = {
-  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, qrNoteFor, payCode, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
+  sizeGroup, sizeOf, isSizeOpt, sizeText, fold, promoLive, promoPrices, promoWhen, promoTitle, saleOf, saleCalc, saleBadge, DOW, BANK, BANKS, loadBank, SHOP, loadShop, qrNoteFor, payCode, NOTE_DEFAULT, vietQR, qrInfo, qrDataUrl, loadScript,
   CONFIG, DEMO, FEATURES, PARAMS, PAGE, SLOT, api, RT, STATIONS: { bep: 'Bếp', pha_che: 'Quầy pha chế' }, ui, store, ERR, errText, fail,
   ICON_BAG, ICON_SCOOTER, isTakeaway, isDelivery, isPickup, isBooked, qboxHtml, orderLabel,
   esc, K, vnd, wait, hhmm, ddmm, ddmmyyyy, startOfDay, addDays, dur, ago, uuid, toLocalInput, toJpeg, applyRounding, roundMoney, DRINK_CATS

@@ -1870,6 +1870,10 @@ async function renderSettings(main) {
   main.innerHTML = '<div class="ptitle"><h1>Cài đặt</h1></div>' +
     '<section class="box cc-nau"><h2 class="box-title"><span>Quán</span></h2><div class="sh-body" style="padding:0">' +
     '<label class="field" for="sName">Tên quán<input id="sName" maxlength="40" value="' + esc(cfg.shop_name) + '"></label>' +
+    '<h3 class="box-title" style="margin:6px 0 0">In trên phiếu</h3>' +
+    '<div class="grid2"><label class="field" for="sAddr">Địa chỉ<input id="sAddr" maxlength="80" placeholder="VD: An Khánh, Hoài Đức" value="' + esc(cfg.print_address || '') + '"></label>' +
+    '<label class="field" for="sPhone">Số điện thoại<input id="sPhone" maxlength="20" inputmode="tel" placeholder="VD: 0345 678 910" value="' + esc(cfg.print_phone || '') + '"></label></div>' +
+    '<p class="small muted" style="margin:0">In thành một dòng nhỏ dưới tên quán: <b id="sAddrEx">' + esc([cfg.print_address, cfg.print_phone].map(x => String(x || '').trim()).filter(Boolean).join(' · ') || '(để trống thì không in)') + '</b>. Máy bếp / pha chế nhận địa chỉ mới sau tối đa 5 phút.</p>' +
     '<h3 class="box-title" style="margin:6px 0 0">Tính lương</h3>' +
     '<p class="small muted" style="margin:0">Mặc định tính đúng từng phút làm việc. Chỉ bật làm tròn giờ công nếu quán muốn.</p>' +
     '<label class="switch"><input type="checkbox" id="sRoundOn"' + (isExact(cfg) ? '' : ' checked') + '><span class="track"></span>Làm tròn giờ công</label>' +
@@ -1903,9 +1907,13 @@ async function renderSettings(main) {
   };
   ex(); ['#sRoundOn', '#sStep', '#sMode', '#sPay'].forEach(id => { $(id, main).onchange = ex; });
   $('#sBot', main).onclick = () => openFbSettings(cfg);
+  ['#sAddr', '#sPhone'].forEach(id => { $(id, main).oninput = () => { $('#sAddrEx', main).textContent = [$('#sAddr', main).value, $('#sPhone', main).value].map(x => x.trim()).filter(Boolean).join(' · ') || '(để trống thì không in)'; }; });
   $('#sSave', main).onclick = async e => {
     e.target.disabled = true;
-    try { await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1), bar_capacity: Math.max(1, Number($('#sBar', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
+    try {
+      const addr = $('#sAddr', main).value.trim(), phone = $('#sPhone', main).value.trim();
+      if (addr !== (cfg.print_address || '') || phone !== (cfg.print_phone || '')) { await api.savePrintInfo({ address: addr, phone }); cfg.print_address = addr; cfg.print_phone = phone; }
+      await api.saveSettings({ shop_name: $('#sName', main).value.trim() || 'Bé Nốc', round_minutes: readRule().round_minutes, round_mode: $('#sMode', main).value, pay_round: readRule().pay_round, kitchen_capacity: Math.max(1, Number($('#sCap', main).value) || 1), bar_capacity: Math.max(1, Number($('#sBar', main).value) || 1) }); ui.toast('Đã lưu cài đặt'); }
     catch (err) { ui.toast(errText(err)); }
     e.target.disabled = false;
   };

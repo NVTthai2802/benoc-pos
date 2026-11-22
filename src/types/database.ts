@@ -1199,6 +1199,8 @@ export type Database = {
           fb_train_on: boolean
           id: number
           kitchen_capacity: number
+          print_address: string
+          print_phone: string
           pay_round: number
           round_minutes: number
           round_mode: string
@@ -1219,6 +1221,8 @@ export type Database = {
           fb_train_on?: boolean
           id?: number
           kitchen_capacity?: number
+          print_address?: string
+          print_phone?: string
           pay_round?: number
           round_minutes?: number
           round_mode?: string
@@ -1239,6 +1243,8 @@ export type Database = {
           fb_train_on?: boolean
           id?: number
           kitchen_capacity?: number
+          print_address?: string
+          print_phone?: string
           pay_round?: number
           round_minutes?: number
           round_mode?: string

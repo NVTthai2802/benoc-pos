@@ -23,7 +23,7 @@ export default function SettingsTab({ q }) {
   const [saving, setSaving] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   useEffect(() => {
-    if (cfg) setF({ name: cfg.shop_name, roundOn: !isExact(cfg), step: isExact(cfg) ? 15 : cfg.round_minutes, mode: cfg.round_mode, pay: Number(cfg.pay_round || 1000), cap: cfg.kitchen_capacity, bar: cfg.bar_capacity || 2 });
+    if (cfg) setF({ name: cfg.shop_name, addr: cfg.print_address || '', phone: cfg.print_phone || '', roundOn: !isExact(cfg), step: isExact(cfg) ? 15 : cfg.round_minutes, mode: cfg.round_mode, pay: Number(cfg.pay_round || 1000), cap: cfg.kitchen_capacity, bar: cfg.bar_capacity || 2 });
   }, [cfg]);
   useEffect(() => { q.loadScript(QR_LIB).then(() => setQrOk(true), () => setQrOk(false)); }, []);
 
@@ -37,7 +37,12 @@ export default function SettingsTab({ q }) {
   const changeN = v => { setN(v); try { localStorage.setItem('benoc.qrTables', String(Math.max(1, Math.min(60, Number(v) || 12)))); } catch (e) { /* bỏ qua */ } };
   const save = async () => {
     setSaving(true);
-    try { await api.saveSettings({ shop_name: f.name.trim() || 'Bé Nốc', round_minutes: rule.round_minutes, round_mode: f.mode, pay_round: rule.pay_round, kitchen_capacity: Math.max(1, Number(f.cap) || 1), bar_capacity: Math.max(1, Number(f.bar) || 1) }); ui.toast('Đã lưu cài đặt'); }
+    try {
+      // Địa chỉ in phiếu lưu riêng: Supabase chưa chạy migration địa chỉ thì chỉ phần này báo lỗi
+      if (f.addr.trim() !== (cfg.print_address || '') || f.phone.trim() !== (cfg.print_phone || '')) {
+        await api.savePrintInfo({ address: f.addr.trim(), phone: f.phone.trim() }); cfg.print_address = f.addr.trim(); cfg.print_phone = f.phone.trim();
+      }
+      await api.saveSettings({ shop_name: f.name.trim() || 'Bé Nốc', round_minutes: rule.round_minutes, round_mode: f.mode, pay_round: rule.pay_round, kitchen_capacity: Math.max(1, Number(f.cap) || 1), bar_capacity: Math.max(1, Number(f.bar) || 1) }); ui.toast('Đã lưu cài đặt'); }
     catch (e) { ui.toast(errText(e)); }
     setSaving(false);
   };
@@ -47,6 +52,10 @@ export default function SettingsTab({ q }) {
       <div className="ptitle"><h1>Cài đặt</h1></div>
       <section className="box cc-nau"><h2 className="box-title"><span>Quán</span></h2><div className="sh-body" style={{ padding: 0 }}>
         <label className="field" htmlFor="sName">Tên quán<input id="sName" maxLength={40} value={f.name} onChange={e => set('name', e.target.value)} /></label>
+        <h3 className="box-title" style={{ margin: '6px 0 0' }}>In trên phiếu</h3>
+        <div className="grid2"><label className="field" htmlFor="sAddr">Địa chỉ<input id="sAddr" maxLength={80} placeholder="VD: An Khánh, Hoài Đức" value={f.addr} onChange={e => set('addr', e.target.value)} /></label>
+          <label className="field" htmlFor="sPhone">Số điện thoại<input id="sPhone" maxLength={20} inputMode="tel" placeholder="VD: 0345 678 910" value={f.phone} onChange={e => set('phone', e.target.value)} /></label></div>
+        <p className="small muted" style={{ margin: 0 }}>In thành một dòng nhỏ dưới tên quán: <b>{[f.addr.trim(), f.phone.trim()].filter(Boolean).join(' · ') || '(để trống thì không in)'}</b>. Máy bếp / pha chế nhận địa chỉ mới sau tối đa 5 phút.</p>
         <h3 className="box-title" style={{ margin: '6px 0 0' }}>Tính lương</h3>
         <p className="small muted" style={{ margin: 0 }}>Mặc định tính đúng từng phút làm việc. Chỉ bật làm tròn giờ công nếu quán muốn.</p>
         <label className="switch"><input type="checkbox" id="sRoundOn" checked={f.roundOn} onChange={e => set('roundOn', e.target.checked)} /><span className="track"></span>Làm tròn giờ công</label>

@@ -37,6 +37,8 @@ const jobs = set => [set.mode !== 'off' && 'phieu', set.tmode !== 'off' && 'tem'
    Phiếu vẽ đồng bộ nên tải sẵn thư viện QR khi mở trang; chưa tải xong thì phiếu in không có mã. */
 const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
 if (BN.FEATURES.vietqr && BN.loadScript) { BN.loadScript(QR_LIB).catch(() => {}); if (BN.loadBank) BN.loadBank(); }
+/* Tên quán, địa chỉ in đầu phiếu, danh mục món: tải lại mỗi 5 phút (chưa đăng nhập thì thử lại sau 20 giây) */
+if (BN.loadShop) { const tick = () => BN.loadShop().then(sh => setTimeout(tick, sh.ok ? 300e3 : 20e3), () => setTimeout(tick, 20e3)); tick(); }
 /* Ma trận ô đen/trắng của mã QR (null nếu chưa có thư viện) */
 function qrMatrix(text) {
   if (!window.QRCode) return null;
@@ -59,93 +61,155 @@ function wrap(ctx, text, maxW) {
 /* o: đơn; items: món của nơi này; extra: { minutes, station, reprint } */
 function ticketCanvas(o, items, extra, set) {
   set = set || get(); extra = extra || {};
-  // Lề hai bên rộng hơn (giấy cuộn nhỏ, đầu in hay mờ ở mép), chữ nhỏ lại, dòng thưa hơn cho dễ đọc
-  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1), IW = W - pad * 2, LH = 1.42;
-  const F = (px, b) => (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
+  const SHOP = BN.SHOP || { name: 'Bé Nốc', address: '', phone: '', cats: {} };
+  // Lề hai bên (đầu in hay mờ ở mép giấy), k: hệ số cỡ chữ theo khổ giấy
+  const W = DOTS[set.width] || 384, pad = Math.round(W * 0.04), k = W / 384 * (set.big ? 1.08 : 1), IW = W - pad * 2, LH = 1.38;
+  const F = (px, b, it) => (it ? 'italic ' : '') + (b ? '800 ' : '500 ') + Math.round(px * k) + 'px "Be Vietnam Pro", "Roboto", sans-serif';
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
   const ops = []; let y = pad;
-  const put = (t, px, bold, align, x) => ops.push({ t, font: F(px, bold), y: y + px * k, align: align || 'left', x });
-  const text = (t, px, bold, align, gap) => { ctx.font = F(px, bold); wrap(ctx, t, IW).forEach(l => { put(l, px, bold, align); y += px * k * LH; }); y += (gap || 0) * k; };
-  const rule = (dash) => { y += 4 * k; ops.push({ rule: true, y: Math.round(y), dash }); y += 10 * k; };
+  const put = (t, px, bold, align, x, it) => ops.push({ t, font: F(px, bold, it), y: y + px * k, align: align || 'left', x });
+  const text = (t, px, bold, align, gp, it) => { ctx.font = F(px, bold, it); wrap(ctx, t, IW).forEach(l => { put(l, px, bold, align, null, it); y += px * k * LH; }); y += (gp || 0) * k; };
+  const line = (x1, y1, x2, y2, w, dash) => ops.push({ line: [x1, y1, x2, y2], w: w || 1, dash });
+  const rule = dash => { y += 5 * k; line(pad, Math.round(y), W - pad, Math.round(y), 2, dash); y += 9 * k; };
   const gap = n => { y += n * k; };
-  // Hai cột trái / phải; không đủ chỗ thì số tiền xuống dòng dưới (không đè chữ)
+  // Chữ nhiều kiểu trên một dòng (VD "Ngày: **21/11/2026**"): [[chữ, đậm], ...], tự xuống dòng theo từng từ
+  const rich = (parts, px, align) => {
+    const words = []; parts.forEach(([t, b]) => String(t).split(/(?<=\s)/).forEach(w => w && words.push({ w, b })));
+    const width = x => { ctx.font = F(px, x.b); return ctx.measureText(x.w).width; };
+    const lines = [[]]; let lw = 0;
+    words.forEach(x => { const ww = width(x); if (lw + ww > IW && lines[lines.length - 1].length) { lines.push([]); lw = 0; } lines[lines.length - 1].push(x); lw += ww; });
+    lines.forEach(ws => {
+      const tw = ws.reduce((s, x) => s + width(x), 0); let x = align === 'center' ? (W - tw) / 2 : pad;
+      ws.forEach(w => { ops.push({ t: w.w, font: F(px, w.b), y: y + px * k, align: 'left', x }); x += width(w); });
+      y += px * k * LH;
+    });
+  };
+  // Hai cột trái / phải; không đủ chỗ thì số tiền xuống dòng (không đè chữ)
   const pair = (l, r, px, bold) => {
     ctx.font = F(px, bold); const fit = ctx.measureText(l).width + ctx.measureText(r).width + 12 * k <= IW;
-    put(l, px, bold, 'left'); if (!fit) { y += px * k * LH; } put(r, px, bold, 'right'); y += px * k * LH;
+    put(l, px, bold, 'left'); if (!fit) y += px * k * LH; put(r, px, bold, 'right'); y += px * k * LH;
   };
+  const num = n => Math.round(Number(n) || 0).toLocaleString('vi-VN');
   const lineAmt = i => i.amount != null ? i.amount : (i.unit_price || 0) * i.qty;
+  const ddmmyyyy = t => { const d = new Date(t || Date.now()); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear(); };
 
-  /* ===== PHẦN BẾP: nơi ăn, khách, giờ ===== */
-  text('BÉ NỐC', 18, true, 'center', 2);
-  const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '';
-  const at2 = o.deliver_at ? ' ' + hhmm(o.deliver_at) : '';
+  /* ===== ĐẦU PHIẾU: quán, nơi ăn, khách, giờ ===== */
+  text(String(SHOP.name || 'Bé Nốc').toUpperCase(), 26, true, 'center');
+  const info = [SHOP.address, SHOP.phone].map(s => String(s || '').trim()).filter(Boolean).join(' · ');
+  if (info) text(info, 14, false, 'center');
+  gap(2);
+  const at = o.deliver_at ? ' · ' + hhmm(o.deliver_at) : '', at2 = o.deliver_at ? ' ' + hhmm(o.deliver_at) : '';
   const where = isDelivery(o) ? 'GIAO' + (at2 || ' HÀNG') : isPickup(o) ? 'QUA LẤY' + at2 : isTakeaway(o) ? 'MANG VỀ' : o.queue_number == null ? 'ĂN TẠI QUÁN' + at : 'BÀN ' + o.queue_number;
   text(where, 36, true, 'center', 2);
-  if (o.source === 'fb') text('ĐƠN ONLINE', 20, true, 'center');
-  if (isDelivery(o) && o.address) text(o.address, 20, true, 'center');
-  if (o.customer_name) text(o.customer_name, 26, true, 'center');
-  if (o.customer_phone) text(o.customer_phone, 20, true, 'center');
-  text('Đặt ' + hhmm(o.created_at) + ' · Nhận ' + hhmm(Date.now()) + (extra.reprint ? ' · IN LẠI' : ''), 18, false, 'center');
-  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 20, true, 'center');
-  rule(false);
+  if (o.source === 'fb') text('ĐƠN ONLINE', 18, true, 'center');
+  if (isDelivery(o) && o.address) text('Đ/c: ' + o.address, 17, true, 'center');
+  if (o.customer_name) text(o.customer_name, 22, true, 'center');
+  if (o.customer_phone) text(o.customer_phone, 17, false, 'center');
+  rich([['Ngày: ', false], [ddmmyyyy(o.created_at), true]], 15, 'center');
+  text('Đặt: ' + hhmm(o.created_at) + ' — Nhận: ' + hhmm(Date.now()) + (extra.reprint ? ' · IN LẠI' : ''), 15, false, 'center');
+  if (extra.full) text('PHIẾU TỔNG CẢ ĐƠN', 18, true, 'center');
+  gap(8);
 
-  /* ===== MÓN: số lượng bên trái, tên món, tiền bên phải; tuỳ chọn thụt vào ===== */
+  /* ===== BẢNG MÓN: Tên món | SL | ĐG | TT ===== */
+  const cp = Math.round(5 * k);                                   // đệm trong ô
+  const cTT = Math.round(IW * 0.215), cDG = Math.round(IW * 0.195), cSL = Math.round(IW * 0.085);
+  const xR = W - pad, xTT = xR - cTT, xDG = xTT - cDG, xSL = xDG - cSL, xL = pad, nameW = xSL - xL - cp * 2;
+  const top = Math.round(y), cols = [];
+  // dòng tiêu đề
+  { const h = 15 * k * LH + cp * 2, by = y + cp;
+    ops.push({ t: 'Tên món', font: F(15, true), y: by + 15 * k, align: 'left', x: xL + cp });
+    ops.push({ t: 'SL', font: F(15, true), y: by + 15 * k, align: 'center', x: (xSL + xDG) / 2 });
+    ops.push({ t: 'ĐG', font: F(15, true), y: by + 15 * k, align: 'right', x: xTT - cp });
+    ops.push({ t: 'TT', font: F(15, true), y: by + 15 * k, align: 'right', x: xR - cp });
+    y += h; line(xL, Math.round(y), xR, Math.round(y), 2); cols.push([top, Math.round(y)]); }
   let lastGroup = null, count = 0;
   items.forEach((i, idx) => {
-    if (i.promo_group && i.promo_group !== lastGroup) text('[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''), 18, true, 'left', 2);
+    // Hàng tên ưu đãi / combo trải hết bảng
+    if (i.promo_group && i.promo_group !== lastGroup) {
+      const t = '[' + (i.promo_kind === 'combo' ? 'COMBO' : 'ƯU ĐÃI') + '] ' + (i.promo_name || ''); y += cp;
+      ctx.font = F(14, true); wrap(ctx, t, IW - cp * 2).forEach(l => { ops.push({ t: l, font: F(14, true), y: y + 14 * k, align: 'left', x: xL + cp }); y += 14 * k * LH; });
+      y += cp; line(xL, Math.round(y), xR, Math.round(y), 1);
+    }
     lastGroup = i.promo_group || null; count += i.qty;
+    const r0 = Math.round(y); y += cp;
     const sz = sizeOf(i.options), opts = (i.options || []).filter(x => !isSizeOpt(x));
-    const amt = lineAmt(i), price = i.promo_part === 'tang' && !amt ? 'Tặng' : money(amt);
-    ctx.font = F(26, true); const qw = ctx.measureText('9x ').width;
-    ctx.font = F(20, true); const pw = ctx.measureText(price).width + 10 * k;
-    ctx.font = F(26, true);
-    wrap(ctx, i.item_name + (sz ? ' · ' + sizeText(sz) : ''), IW - qw - pw).forEach((l, n) => {
-      if (n === 0) { put(i.qty + 'x', 26, true, 'left'); ops.push({ t: price, font: F(20, true), y: y + 26 * k, align: 'right' }); }
-      put(l, 26, true, 'left', pad + qw); y += 26 * k * 1.32;
-    });
-    const sub = (t, px, b) => { ctx.font = F(px, b); wrap(ctx, t, IW - qw).forEach(l => { put(l, px, b, 'left', pad + qw); y += px * k * LH; }); };
+    const amt = lineAmt(i), gift = i.promo_part === 'tang' && !amt;
+    // cột số: cùng dòng đầu của tên món
+    const base = y + 17 * k;
+    ops.push({ t: String(i.qty), font: F(17, true), y: base, align: 'center', x: (xSL + xDG) / 2 });
+    ops.push({ t: num(i.qty ? amt / i.qty : i.unit_price), font: F(14, false), y: base, align: 'right', x: xTT - cp });
+    ops.push({ t: gift ? 'Tặng' : num(amt), font: F(15, true), y: base, align: 'right', x: xR - cp });
+    // tên món + size, rồi tuỳ chọn / topping / ghi chú thụt vào
+    ctx.font = F(17, true);
+    wrap(ctx, i.item_name + (sz ? ' · ' + sizeText(sz) : ''), nameW).forEach(l => { ops.push({ t: l, font: F(17, true), y: y + 17 * k, align: 'left', x: xL + cp }); y += 17 * k * 1.3; });
+    const sub = (t, b) => { ctx.font = F(14, b); wrap(ctx, t, nameW - 6 * k).forEach(l => { ops.push({ t: l, font: F(14, b), y: y + 14 * k, align: 'left', x: xL + cp + 6 * k }); y += 14 * k * 1.32; }); };
     const rest = opts.filter(x => !/topping/i.test(x.group || '')).map(x => x.choice);
     const tops = opts.filter(x => /topping/i.test(x.group || '')).map(x => '+ ' + x.choice);
-    if (rest.length) sub(rest.join(', '), 20, false);
-    if (tops.length) sub(tops.join('  '), 20, true);
-    if (i.note) sub('* ' + i.note, 20, true);
-    if (i.qty > 1 && amt) { put(i.qty + ' x ' + money(amt / i.qty), 17, false, 'right'); y += 17 * k * LH; }
-    gap(idx < items.length - 1 ? 10 : 2);
+    if (rest.length) sub(rest.join(', '), false);
+    tops.forEach(t => sub(t, false));
+    if (i.note) sub('* ' + i.note, true);
+    y += cp;
+    cols.push([r0, Math.round(y)]);
+    line(xL, Math.round(y), xR, Math.round(y), idx < items.length - 1 ? 1 : 2);
   });
-  if (o.note) { rule(true); text('GHI CHÚ: ' + o.note, 20, true, 'left'); }
+  const bottom = Math.round(y);
+  // khung ngoài + đường dọc giữa các cột
+  line(xL, top, xR, top, 2); line(xL, top, xL, bottom, 2); line(xR, top, xR, bottom, 2);
+  [xSL, xDG, xTT].forEach(x => cols.forEach(([a, b]) => line(Math.round(x), a, Math.round(x), b, 1)));
+  gap(8);
+  if (o.note) { rich([['GHI CHÚ: ', true], [o.note, false]], 16, 'left'); }
+  rule(true);
 
-  /* ===== PHẦN TIỀN ===== */
-  rule(false);
+  /* ===== TỔNG SỐ LƯỢNG THEO LOẠI: "2 cơm · 1 kimbap · 1 trà sữa" ===== */
+  const short = n => { n = String(n || '').toLowerCase().split('·')[0].replace(/\s+trộn\b/, '').replace(/^đồ\s+/, '').trim(); return n || 'món khác'; };
+  const kinds = new Map(); items.forEach(i => { const c = short((SHOP.cats && SHOP.cats[i.menu_item_id]) || i.category_name); kinds.set(c, (kinds.get(c) || 0) + i.qty); });
+  { const b0 = Math.round(y); y += cp * 1.6;
+    ctx.font = F(16, true);
+    put('TỔNG SL (' + count + ' món):', 16, true, 'left', pad + cp * 2); y += 16 * k * LH;
+    wrap(ctx, Array.from(kinds, ([c, n]) => n + ' ' + c).join(' · '), IW - cp * 4).forEach(l => { put(l, 16, true, 'left', pad + cp * 2); y += 16 * k * LH; });
+    y += cp; const b1 = Math.round(y);
+    line(pad, b0, W - pad, b0, 2); line(pad, b1, W - pad, b1, 2); line(pad, b0, pad, b1, 2); line(W - pad, b0, W - pad, b1, 2);
+  }
+  gap(12);
+
+  /* ===== TIỀN ===== */
   const sum = items.reduce((t, i) => t + lineAmt(i), 0);
   const total = o.total != null ? o.total : sum, paid = o.paid_amount || 0, due = Math.round(total - paid);
-  if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 20);
-  pair(total !== sum ? 'TỔNG ĐƠN' : 'TỔNG (' + count + ' món)', money(total), 26, true);
-  if (o.paid_amount != null && paid > 0 && paid < total) pair('Đã trả', money(paid), 20);
-  gap(4);
+  if (total !== sum) pair((extra.full ? 'Cộng món' : 'Món phiếu này') + ' (' + count + ')', money(sum), 16);
+  pair('TỔNG THANH TOÁN', money(total), 19, true);
+  if (o.paid_amount != null && paid > 0 && paid < total) pair('Đã trả', money(paid), 15);
+  gap(8);
   const how = o.paid_method === 'chuyen_khoan' ? 'Chuyển khoản' : o.paid_method === 'tien_mat' ? 'Tiền mặt' : '';
-  if (o.paid_amount == null || paid <= 0) text('CHƯA THANH TOÁN', 24, true, 'center');
-  else if (paid >= total) { text('ĐÃ THANH TOÁN', 24, true, 'center'); if (how) text(how, 20, true, 'center'); }
-  else text('CÒN THU ' + money(due), 24, true, 'center');
+  if (o.paid_amount == null || paid <= 0) text('CHƯA THANH TOÁN', 22, true, 'center');
+  else if (paid >= total) { text('ĐÃ THANH TOÁN', 22, true, 'center'); if (how) text('(' + how + ')', 15, true, 'center'); }
+  else text('CÒN PHẢI THU: ' + money(due), 22, true, 'center');
 
   /* ===== MÃ QR: chỉ khi còn phải thu, đúng số tiền còn thu của cả đơn ===== */
   const qm = set.qr !== false && BN.FEATURES.vietqr && due > 0 && o.id ? qrMatrix(BN.vietQR(due, BN.qrNoteFor(o))) : null;
   if (qm) {
     rule(true);
-    text('Quét mã chuyển khoản ' + money(due), 20, true, 'center', 6);
-    const n = qm.length, size = Math.min(IW, Math.round(Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)) * n * 1.05)), cell = size / n; // to hơn 5% so với trước
-    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 10 * k;
+    text('Vui lòng kiểm tra kỹ trước khi thanh toán!', 14, false, 'center', 0, true);
+    text('Quét mã chuyển khoản ' + money(due), 16, true, 'center', 6);
+    const n = qm.length, size = Math.min(IW, Math.round(Math.max(3, Math.floor(Math.min(IW * 0.72, 230 * k) / n)) * n * 1.05)), cell = size / n;
+    ops.push({ qr: qm, x: Math.round((W - size) / 2), y: Math.round(y), cell }); y += size + 8 * k;
     const B = BN.BANK;
-    text(B.bank + (B.holder ? ' · ' + B.holder : ''), 17, true, 'center');
+    text((B.bank + (B.holder ? ' · ' + B.holder : '')).toUpperCase(), 14, true, 'center');
   }
-  gap(6);
-  text('Cảm ơn bạn, hẹn gặp lại!', 18, false, 'center');
+  rule(true);
+  text('Cảm ơn bạn, hẹn gặp lại!', 15, false, 'center');
   y += 6 * k;
 
   cv.width = W; cv.height = Math.ceil(y);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
   ops.forEach(op => {
-    if (op.qr) { const P = i => Math.round(i * op.cell); op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + P(c), op.y + P(r), P(c + 1) - P(c), P(r + 1) - P(r)); })); return; } // ô lẻ điểm: làm tròn mép từng ô để in nét, không nhoè
-    if (op.rule) { ctx.lineWidth = 2; ctx.setLineDash(op.dash ? [6, 6] : []); ctx.beginPath(); ctx.moveTo(pad, op.y); ctx.lineTo(W - pad, op.y); ctx.stroke(); ctx.setLineDash([]); return; }
+    if (op.qr) { const P = i => Math.round(i * op.cell); op.qr.forEach((row, r) => row.forEach((d, c) => { if (d) ctx.fillRect(op.x + P(c), op.y + P(r), P(c + 1) - P(c), P(r + 1) - P(r)); })); return; } // ô lẻ điểm: làm tròn mép từng ô để in nét
+    if (op.line) {
+      // đường thẳng vẽ bằng ô chữ nhật đúng chấm (nét in sắc, không nhoè); nét đứt: đoạn 6 chấm
+      const [x1, y1, x2, y2] = op.line, w = op.w, hz = y1 === y2;
+      if (op.dash) { for (let x = x1; x < x2; x += 12) ctx.fillRect(x, y1 - (w >> 1), Math.min(6, x2 - x), w); return; }
+      if (hz) ctx.fillRect(Math.min(x1, x2) - (w >> 1), y1 - (w >> 1), Math.abs(x2 - x1) + w, w); else ctx.fillRect(x1 - (w >> 1), Math.min(y1, y2), w, Math.abs(y2 - y1));
+      return;
+    }
     ctx.font = op.font; ctx.textAlign = op.align; ctx.textBaseline = 'alphabetic';
     ctx.fillText(op.t, op.x != null ? op.x : op.align === 'center' ? W / 2 : op.align === 'right' ? W - pad : pad, op.y);
   });
@@ -529,14 +593,14 @@ async function tryAuto(o, items, extra, set) {
 /* ---------- Cài đặt máy in (từng máy) ---------- */
 /* Phiếu thử dài (~35 cm, 18 dòng món, có mã QR): thử máy in không tràn bộ nhớ ở tốc độ đã chọn */
 function sampleLong() {
-  const x = sample(), base = x.items.concat([{ qty: 3, unit_price: 20000, item_name: 'Cơm heo chiên xù', options: [{ group: 'Đường', choice: 'Đường bình thường' }, { group: 'Đá', choice: 'Đá bình thường' }], note: 'Không hành' }]);
+  const x = sample(), base = x.items.concat([{ qty: 3, unit_price: 20000, item_name: 'Cơm heo chiên xù', category_name: 'Cơm trộn', options: [{ group: 'Đường', choice: 'Đường bình thường' }, { group: 'Đá', choice: 'Đá bình thường' }], note: 'Không hành' }]);
   const items = []; for (let i = 0; i < 6; i++) base.forEach(it => items.push(Object.assign({}, it)));
   return { o: Object.assign({}, x.o, { note: 'In thử phiếu dài' }), items };
 }
 function sample() {
   return { o: { id: 'abcd1234', queue_number: 12, customer_name: 'Khách thử', customer_phone: '0912345678', dine_type: 'tai_quan', created_at: new Date().toISOString(), note: 'In thử phiếu' },
-    items: [{ qty: 2, unit_price: window.BENOC_STATION === 'pha_che' ? 40000 : 40000, item_name: window.BENOC_STATION === 'pha_che' ? 'Hồng trà sữa trân châu' : 'Cơm heo chua ngọt', options: window.BENOC_STATION === 'pha_che' ? [{ group: 'Upsize', choice: 'Upsize', price: 10000 }, { group: 'Đường', choice: 'Ít đường' }, { group: 'Topping thêm', choice: 'Trân châu hoàng gia' }] : [{ group: 'Topping thêm', choice: 'Trứng ốp la' }], note: 'ít cay' },
-      { qty: 1, unit_price: 25000, item_name: window.BENOC_STATION === 'pha_che' ? 'Trà đào' : 'Kimbap chiên', options: [], note: null }] };
+    items: [{ qty: 2, unit_price: window.BENOC_STATION === 'pha_che' ? 40000 : 40000, item_name: window.BENOC_STATION === 'pha_che' ? 'Hồng trà sữa trân châu' : 'Cơm heo chua ngọt', category_name: window.BENOC_STATION === 'pha_che' ? 'Trà sữa' : 'Cơm trộn', options: window.BENOC_STATION === 'pha_che' ? [{ group: 'Upsize', choice: 'Upsize', price: 10000 }, { group: 'Đường', choice: 'Ít đường' }, { group: 'Topping thêm', choice: 'Trân châu hoàng gia' }] : [{ group: 'Topping thêm', choice: 'Trứng ốp la' }], note: 'ít cay' },
+      { qty: 1, unit_price: 25000, item_name: window.BENOC_STATION === 'pha_che' ? 'Trà đào' : 'Kimbap chiên', category_name: window.BENOC_STATION === 'pha_che' ? 'Trà hoa quả' : 'Kimbap', options: [], note: null }] };
 }
 function openSettings(onChange) {
   let s = get();
