@@ -43,8 +43,7 @@ class SettingsActivity : ComponentActivity() {
 
         col.addView(TextView(this).apply { text = "Cài đặt chụp đơn"; textSize = 22f; setTypeface(typeface, Typeface.BOLD) })
         col.addView(TextView(this).apply {
-            text = "Nút chụp gửi đơn vào môi trường đang chọn trong app (hiện đang chọn: " + (if (p.testEnv) "TEST" else "PRODUCT") +
-                "). Đổi ở ⋮ → Chuyển sang TEST / PRODUCT. Nút cam = PRODUCT (đơn thật), nút tím chữ T = TEST."
+            text = "Mỗi lần chạm nút cam là gửi đơn thật vào bếp / pha chế của quán."
             textSize = 14f; alpha = 0.8f; setPadding(0, (6 * d).toInt(), 0, 0)
         })
 
@@ -53,13 +52,8 @@ class SettingsActivity : ComponentActivity() {
         label("Mã bí mật PRODUCT", "Giống mã x-capture-key trong Phím tắt iPhone.")
         val key = field(p.captureKey, hidden)
 
-        // ---- TEST
-        heading("TEST · thử tính năng", 0xFF7C3AED.toInt())
-        label("Mã bí mật TEST", "Mã riêng của Supabase Test. Để trống thì ở chế độ TEST nút chụp không gửi gì.")
-        val keyTest = field(p.captureKeyTest, hidden)
-
         val show = Switch(this).apply { text = "Hiện mã"; setPadding(0, (8 * d).toInt(), 0, 0); setOnCheckedChangeListener { _, on ->
-            for (k in listOf(key, keyTest)) { k.inputType = if (on) shown else hidden; k.setSelection(k.text.length) } } }
+            for (k in listOf(key)) { k.inputType = if (on) shown else hidden; k.setSelection(k.text.length) } } }
         col.addView(show)
 
         // ---- chung
@@ -71,25 +65,24 @@ class SettingsActivity : ComponentActivity() {
         val wait = Switch(this).apply { text = "Đợi bot đọc xong"; isChecked = p.waitResult }
         col.addView(wait)
 
-        if (OcrEngine.available) label("OCR trên máy (chỉ TEST)", "Khi chụp ở TEST, app tự đọc chữ bằng mô hình nhẹ chạy ngay trên điện thoại rồi gửi kèm ảnh. Gemini vẫn lên đơn như cũ; kết quả OCR lưu ở bảng ocr_mau (Supabase Test) để so sánh. PRODUCT không bị ảnh hưởng.")
+        if (OcrEngine.available && p.testEnv) label("OCR trên máy (chỉ TEST)", "Khi chụp ở TEST, app tự đọc chữ bằng mô hình nhẹ chạy ngay trên điện thoại rồi gửi kèm ảnh. Gemini vẫn lên đơn như cũ; kết quả OCR lưu ở bảng ocr_mau (Supabase Test) để so sánh. PRODUCT không bị ảnh hưởng.")
         val ocr = Switch(this).apply { text = "Đọc chữ trên máy khi chụp ở TEST"; isChecked = p.ocrTest }
-        if (OcrEngine.available) col.addView(ocr)
+        if (OcrEngine.available && p.testEnv) col.addView(ocr)
         if (OcrEngine.available && p.lastOcr.isNotBlank()) col.addView(TextView(this).apply {
             text = "Lần đọc gần nhất: " + p.lastOcr; textSize = 12f; alpha = 0.75f; typeface = Typeface.MONOSPACE
             setPadding(0, (6 * d).toInt(), 0, 0); setTextIsSelectable(true); maxLines = 40
         })
 
-        label("Địa chỉ bot (nâng cao)", "Để mặc định. Dòng trên: PRODUCT, dòng dưới: TEST.")
+        label("Địa chỉ bot (nâng cao)", "Để mặc định.")
         val url = field(p.botUrl, uri)
-        val urlTest = field(p.botUrlTest, uri)
 
         val status = TextView(this).apply { textSize = 14f; setPadding(0, (12 * d).toInt(), 0, 0); setTextIsSelectable(true) }
         fun save(): Boolean {
-            if (!url.text.startsWith("https://") || !urlTest.text.startsWith("https://")) {
+            if (!url.text.startsWith("https://")) {
                 Toast.makeText(this, "Địa chỉ bot phải bắt đầu bằng https://", Toast.LENGTH_SHORT).show(); return false
             }
-            p.captureKey = key.text.toString(); p.captureKeyTest = keyTest.text.toString()
-            p.botUrl = url.text.toString(); p.botUrlTest = urlTest.text.toString()
+            p.captureKey = key.text.toString()
+            p.botUrl = url.text.toString()
             p.device = dev.text.toString(); p.waitResult = wait.isChecked; p.ocrTest = ocr.isChecked
             dev.setText(p.device)
             return true
@@ -105,8 +98,7 @@ class SettingsActivity : ComponentActivity() {
                 lines[idx] = if (r.ok) "✅ $name: kết nối được bot" else "❌ $name: " + r.text.removePrefix(BotClient.TEST_TAG)
             }
             io.execute {
-                val a = Thread { check(false, 0) }; val b = Thread { check(true, 1) }
-                a.start(); b.start(); a.join(); b.join()
+                check(false, 0)
                 runOnUiThread { status.text = lines.filterNotNull().joinToString("\n") }
             }
         } }

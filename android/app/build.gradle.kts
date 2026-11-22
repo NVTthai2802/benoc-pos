@@ -19,16 +19,19 @@ android {
         applicationId = "vn.benoc.pos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.3.3"
+        versionCode = 8
+        versionName = "1.4"
     }
 
     // 2 bản cùng mã nguồn, cùng applicationId + khoá ký (cài đè qua lại được):
-    //  - lite: bản đăng trên trang quán (benoc-pos.apk), KHÔNG có OCR, nhẹ như cũ
+    //  - lite : bản đầy đủ (benoc-pos-thong-bao.apk), có đọc thông báo chuyển khoản, KHÔNG có OCR
+    //  - coban: bản đăng trên trang quán (benoc-pos.apk), như lite nhưng bỏ đọc thông báo chuyển khoản
     //  - ocr : thêm OCR trên máy (ONNX Runtime + mô hình PP-OCRv5 mobile, ~37MB) để test / làm đồ án
     flavorDimensions += "ocr"
     productFlavors {
         create("lite") { dimension = "ocr" }
+        // coban: như lite nhưng KHÔNG có đọc thông báo chuyển khoản (không xin quyền đọc thông báo → mở APK trên điện thoại không bị Play Protect chặn)
+        create("coban") { dimension = "ocr"; versionNameSuffix = "-coban" }
         create("ocr") {
             dimension = "ocr"
             versionNameSuffix = "-ocr"
@@ -56,6 +59,7 @@ android {
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
+    sourceSets { getByName("coban") { java.srcDir("src/lite/java") } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

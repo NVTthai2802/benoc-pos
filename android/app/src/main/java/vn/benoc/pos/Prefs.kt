@@ -48,15 +48,18 @@ class Prefs(ctx: Context) {
         get() = p.getString("last_ocr", "") ?: ""
         set(v) = p.edit().putString("last_ocr", v.take(6000)).apply()
 
-    /** Trang POS đang mở trong app (đường dẫn sau tên miền, vd "quanly.html"). */
+    /** Trang POS đang mở trong app (đường dẫn sau tên miền, vd "quanly.html").
+     *  Menu khách cũ tách 2 trang (index.html?menu=an / tra) nay gộp làm 1. */
     var page: String
-        get() = p.getString("page", null) ?: ""
+        get() = (p.getString("page", null) ?: "").let { if (it.startsWith("index.html")) "index.html" else it }
         set(v) = p.edit().putString("page", v).apply()
 
-    /** Môi trường đang chọn: trang POS trong app VÀ nút chụp đơn cùng theo môi trường này. */
+    /** Môi trường TEST đã xoá (11/2026): app luôn chạy PRODUCT. Giữ thuộc tính để mã cũ (nút tím, OCR ở TEST) không phải sửa,
+     *  máy nào trước đó đang để TEST cũng tự về PRODUCT. */
+    @Suppress("UNUSED_PARAMETER")
     var testEnv: Boolean
-        get() = p.getBoolean("test_env", false)
-        set(v) = p.edit().putBoolean("test_env", v).apply()
+        get() = false
+        set(v) {}
 
     val ready get() = readyFor(testEnv)
 

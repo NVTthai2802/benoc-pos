@@ -21,16 +21,15 @@ Cập nhật bản mới: tải lại link trên rồi cài đè, dữ liệu v�
 
 1. App mở **Quản lý**. Đăng nhập như trên web.
 2. Bấm tên màn hình trên thanh cam (vd *Quản lý / chấm công ▾*) để đổi sang **Bếp**, **Pha chế** hoặc **Menu khách**. App nhớ màn hình đã chọn. Bếp và Pha chế giữ màn hình luôn sáng.
-3. **⋮** → **Chuyển sang TEST** khi muốn thử trên môi trường Test (thanh tiêu đề có chữ **TEST**). Từ bản 1.1, **nút chụp đơn cũng gửi theo môi trường này** (xem phần *PRODUCT và TEST* bên dưới).
+3. Từ bản 1.4 app chỉ chạy **PRODUCT** (môi trường Test đã xoá). Máy nào trước đó để TEST tự về PRODUCT.
 
 ## Cài nút chụp đơn
 
 1. **⋮** → **Cài đặt chụp đơn**:
    - **Mã bí mật PRODUCT**: giống mã `x-capture-key` trong Phím tắt iPhone (hỏi người quản lý POS).
-   - **Mã bí mật TEST**: mã riêng của Supabase Test (chỉ cần nếu dùng chế độ TEST).
    - **Tên máy**: tự điền `android-<tên máy>`. Không trùng máy khác.
    - **Đợi kết quả từng ảnh**: để **tắt** (chụp liên tục được).
-   - Bấm **Lưu và kiểm tra kết nối** → phải hiện **✅ PRODUCT: kết nối được bot** (và **✅ TEST…** nếu đã nhập mã Test).
+   - Bấm **Lưu và kiểm tra kết nối** → phải hiện **✅ PRODUCT: kết nối được bot**.
 2. Về màn hình chính, bấm **📸 Nút chụp đơn** trên thanh cam:
    - Lần đầu Android mở trang **Hiển thị trên ứng dụng khác** → bật cho **Bé Nốc POS** → quay lại app → bấm **📸 Nút chụp đơn** lần nữa.
    - Cho phép **thông báo**.
@@ -41,30 +40,7 @@ Mỗi lần khởi động lại điện thoại hoặc tắt nút thì bấm **
 
 ## PRODUCT và TEST
 
-Nút chụp đơn gửi vào **môi trường đang chọn trong app** (⋮ → Chuyển sang TEST / PRODUCT). Nhìn màu nút là biết:
-
-| Nút | Gửi vào | Ghi chú |
-|---|---|---|
-| 🟠 **Cam** | **PRODUCT**: bếp của quán, **đơn thật** | Thông báo: *Nút chụp đơn · PRODUCT (đơn thật)* |
-| 🟣 **Tím, huy hiệu vàng chữ T** | **TEST**: Supabase Test, quán không thấy | Mọi câu báo bắt đầu bằng **🧪 TEST ·** |
-
-- Đổi môi trường khi nút đang bật thì nút đổi màu ngay, có báo *"Nút chụp đơn giờ gửi vào TEST / PRODUCT"*.
-- Mỗi ảnh gửi vào môi trường **lúc chạm nút**; đổi môi trường ngay sau đó không làm ảnh vừa chụp đi nhầm chỗ.
-- Ô **Sửa đơn** cũng theo môi trường (tiêu đề *🧪 Sửa đơn vừa gửi · TEST*).
-- Chưa nhập **Mã bí mật TEST** mà ở chế độ TEST thì nút báo *"Chưa nhập mã bí mật TEST"*, **không gửi đi đâu cả** (không lọt sang Product).
-- Phím tắt iPhone vẫn chỉ gửi vào Product.
-
-### OCR trên máy (chỉ TEST)
-
-Chỉ có ở **bản app `ocr`** (bản đăng trên trang quán không có, xem cuối trang). Ở chế độ **TEST**, mỗi lần chạm nút tím app tự **đọc chữ ngay trên điện thoại** (mô hình nhẹ PP-OCRv5 mobile, không cần mạng cho bước này) rồi gửi kèm ảnh. Gemini **vẫn lên đơn như cũ**; kết quả OCR chỉ lưu vào bảng `ocr_mau` của Supabase Test để so sánh (tốc độ, độ đúng).
-
-- Sau khi chạm, câu báo có thêm dòng *🔤 OCR trên máy: …ms (tìm chữ … + đọc …), … dòng*.
-- Xem chữ đọc được lần gần nhất: **⋮ → Cài đặt chụp đơn** → mục **OCR trên máy**.
-- Tắt: bỏ chọn **Đọc chữ trên máy khi chụp ở TEST** trong Cài đặt.
-- Lần chụp đầu sau khi mở app chậm hơn khoảng 1 giây (nạp mô hình).
-- **PRODUCT không chạy OCR**, không gửi gì thêm.
-- Supabase Test phải chạy `sql/cap-nhat-34-ocr-tren-may.sql` và deploy `bot-don` mới. Chưa chạy thì đơn vẫn lên, chỉ không lưu kết quả OCR.
-- Mô hình hiện tại là bản gốc, **chưa đọc được nhiều chữ tiếng Việt có dấu** (ả, ạ, ế, ọ…), nên chữ hiện ra sẽ thiếu dấu, thiếu chữ. Đây là mốc để so sánh trước khi fine-tune. Chi tiết: `tools/ocr/README.md`.
+Môi trường Test đã xoá (11/2026). Từ bản **1.4**, app và nút chụp đơn **luôn gửi vào PRODUCT** (nút cam, đơn thật). Mục *Chuyển sang TEST*, mã bí mật TEST và OCR trên máy (chỉ chạy ở TEST) không còn hiện.
 
 ## Dùng hằng ngày
 
@@ -80,7 +56,10 @@ Lúc nút đang bật, Android hiện biểu tượng **ghi màn hình / truyề
 
 Mỗi lần chạm là **đơn thật ở bếp**. Chụp nhầm thì giữ nút → `huỷ` ngay.
 
-## Đọc thông báo chuyển khoản (bản 1.3)
+## Đọc thông báo chuyển khoản (bản 1.3 trở lên, file `benoc-pos-thong-bao.apk`)
+
+Chỉ có ở bản **benoc-pos-thong-bao.apk** (trang Quản lý → Cài đặt có link tải). Bản này xin quyền đọc thông báo nên mở APK trên điện thoại sẽ bị Google Play Protect chặn: cài bằng máy tính qua cáp USB (`adb install`). Bản `benoc-pos.apk` không có tính năng này.
+
 
 Máy Android này đọc thông báo tiền vào của app **Techcombank Store Noti** → đơn tự chuyển sang **Đã thu · Chuyển khoản**, màn hình bếp / pha chế báo *"Đã nhận chuyển khoản 75.000đ · Bàn 12"*. Không mất phí.
 
@@ -125,14 +104,12 @@ Cần (làm một lần):
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| ⛔ Sai mã x-capture-key | Sửa mã đúng môi trường trong **Cài đặt chụp đơn** (mã PRODUCT và TEST khác nhau) |
-| 🧪 TEST · … AI đang quá tải / không lên đơn | Supabase Test chưa có khoá AI: thêm secret `GEMINI_API_KEY` cho project **benoc-pos-test** |
+| ⛔ Sai mã x-capture-key | Sửa mã trong **Cài đặt chụp đơn** |
 | Bấm **📸 Nút chụp đơn** không thấy nút cam | Chưa bật **Hiển thị trên ứng dụng khác**: Cài đặt → Ứng dụng → Bé Nốc POS → bật |
 | Nút cam biến mất sau một lúc | Máy tắt app chạy nền để tiết kiệm pin: Cài đặt → Ứng dụng → Bé Nốc POS → **Pin** → **Không hạn chế**. Xiaomi / Oppo / Vivo thêm **Tự khởi động** |
 | Ảnh gửi đi bị đen | App kia chặn chụp màn hình (ngân hàng…); Messenger / Zalo không bị |
 | ⚠️ Chưa lấy được hình | Chạm lại nút |
 | Chạm xong mà bếp không có đơn (sau ~30 giây) | Ảnh không có đoạn chat đặt món hoặc AI quá tải: chụp lại. Muốn biết lý do: bật **Đợi kết quả từng ảnh** rồi chụp lại |
-| 🧪 Không thấy dòng *🔤 OCR* | Đang ở PRODUCT, hoặc đã tắt **OCR trên máy** trong Cài đặt |
 | ⚠️ OCR lỗi: … | Ghi lại câu báo gửi người làm app; đơn vẫn gửi bình thường (không kèm OCR) |
 | Không đăng nhập được / trang trắng | **⋮** → **Tải lại trang**; kiểm tra mạng |
 
@@ -148,19 +125,21 @@ Cần (làm một lần):
 
 Mã nguồn ở `android/` (Kotlin, AndroidX; bản `ocr` thêm ONNX Runtime). Cần JDK 17+, Android SDK 35.
 
-Có **2 bản** cùng mã nguồn, cùng `applicationId` và khoá ký (cài đè qua lại được, giữ đăng nhập):
+Có **3 bản** cùng mã nguồn, cùng `applicationId` và khoá ký (cài đè qua lại được, giữ đăng nhập):
 
 | Bản | Dung lượng | Dùng cho |
 |---|---|---|
-| `lite` | ~140 KB | Bản đăng trên trang quán (`app/benoc-pos.apk`). **Không có OCR** |
+| `coban` | ~140 KB | Bản đăng trên trang quán (`public/app/benoc-pos.apk`). Không có OCR, **không có đọc thông báo chuyển khoản** (cài thẳng trên điện thoại được) |
+| `lite` | ~160 KB | `public/app/benoc-pos-thong-bao.apk`: như coban + **đọc thông báo chuyển khoản** (cài qua USB) |
 | `ocr` | ~39 MB | Test / đồ án: thêm OCR trên máy (ONNX Runtime + PP-OCRv5 mobile). Không đăng lên trang quán (Cloudflare Pages giới hạn 25 MB / file) |
 
 ```bash
 cd android
 echo "sdk.dir=/đường/dẫn/android-sdk" > local.properties
 # khoá ký: keystore.properties (storeFile, storePassword, keyAlias, keyPassword) — KHÔNG đưa lên git
-./gradlew assembleLiteRelease assembleOcrRelease
-cp app/build/outputs/apk/lite/release/app-lite-release.apk ../app/benoc-pos.apk
+./gradlew assembleCobanRelease assembleLiteRelease
+cp app/build/outputs/apk/coban/release/app-coban-release.apk ../public/app/benoc-pos.apk
+cp app/build/outputs/apk/lite/release/app-lite-release.apk ../public/app/benoc-pos-thong-bao.apk
 # bản ocr: app/build/outputs/apk/ocr/release/app-ocr-release.apk → gửi thẳng file cho máy test, không đưa lên git
 ```
 
@@ -178,10 +157,11 @@ Phải ký bằng **cùng khoá** thì điện thoại mới cài đè được;
 | `src/ocr/…/OcrEngine.kt`, `src/ocr/assets/ocr/` | Nạp mô hình từ assets, chạy OCR một ảnh. Thay mô hình: xem `tools/ocr/README.md` |
 | `src/lite/…/OcrEngine.kt` | Bản rỗng (`available = false`) cho bản lite |
 
-App dùng chung kênh `ios` của `bot-don` (cập nhật 33), phân biệt máy bằng `x-device`. Địa chỉ bot: PRODUCT `hixdacnaxfuxuccbajzn…/bot-don`, TEST `bsnpcinocphuruahpzwr…/bot-don`; mỗi project có secret `CAPTURE_KEY` riêng.
+App dùng chung kênh `ios` của `bot-don` (cập nhật 33), phân biệt máy bằng `x-device`. Địa chỉ bot: PRODUCT `hixdacnaxfuxuccbajzn…/bot-don` (secret `CAPTURE_KEY`). Địa chỉ TEST cũ không còn dùng.
 
 | Phiên bản | Thay đổi |
 |---|---|
+| 1.4 | Bỏ môi trường TEST (đã xoá): app luôn chạy PRODUCT. Menu khách gộp 1 mục (`index.html`). Thêm bản `coban` (không đọc thông báo) thay `benoc-pos.apk` 1.2 trên trang quán |
 | 1.3 | **Đọc thông báo chuyển khoản** (`BankNoti.kt`, `BankNotiActivity.kt`): NotificationListenerService đọc app ngân hàng đã chọn → `/api/bank-noti` (Cloudflare) → `bank_noti_ingest` (cập nhật 37) |
 | 1.2 | Tách 2 bản `lite` / `ocr`. Bản `ocr`: OCR trên máy ở chế độ TEST, gửi kèm ảnh, lưu bảng `ocr_mau` (cập nhật 34) để so với Gemini |
 | 1.1 | Nút chụp gửi theo môi trường đang chọn (mã / địa chỉ riêng PRODUCT và TEST), nút tím khi TEST |

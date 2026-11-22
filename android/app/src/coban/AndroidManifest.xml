@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bản "coban" (benoc-pos.apk đăng trên trang quán): bỏ đọc thông báo chuyển khoản để cài thẳng trên điện thoại không bị Play Protect chặn -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" tools:node="remove" />
+    <application>
+        <service android:name=".BankNotiService" tools:node="remove" />
+        <activity android:name=".BankNotiActivity" tools:node="remove" />
+    </application>
+</manifest>

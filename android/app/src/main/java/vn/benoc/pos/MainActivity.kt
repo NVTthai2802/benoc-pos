@@ -55,8 +55,7 @@ class MainActivity : ComponentActivity() {
         "quanly.html" to "Quản lý / chấm công",
         "bep.html" to "Bếp",
         "phache.html" to "Pha chế",
-        "index.html?menu=an" to "Menu khách · Ăn vặt",
-        "index.html?menu=tra" to "Menu khách · Trà, cà phê",
+        "index.html" to "Menu khách",
     )
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -167,7 +166,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); web.saveState(out) }
 
     // ------------------------------------------------------------------ màn hình POS
-    private fun baseUrl() = Prefs.SITE + if (prefs.testEnv) "test/" else ""
+    private fun baseUrl() = Prefs.SITE
 
     private fun openPage(path: String) {
         prefs.page = path
@@ -197,9 +196,8 @@ class MainActivity : ComponentActivity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, 1, 1, "Cài đặt chụp đơn")
             menu.add(0, 2, 2, "Sửa đơn vừa gửi")
-            menu.add(0, 6, 2, "Đọc thông báo chuyển khoản" + if (prefs.notiOn) (if (prefs.notiTest) " · ghi thử" else " · đang bật") else "")
+            if (hasBankNoti()) menu.add(0, 6, 2, "Đọc thông báo chuyển khoản" + if (prefs.notiOn) (if (prefs.notiTest) " · ghi thử" else " · đang bật") else "")
             menu.add(0, 3, 3, "Tải lại trang")
-            menu.add(0, 4, 4, if (prefs.testEnv) "Chuyển sang PRODUCT (quán dùng thật)" else "Chuyển sang TEST")
             menu.add(0, 5, 5, "Phiên bản " + BuildConfigCompat.version(this@MainActivity))
             setOnMenuItemClickListener {
                 when (it.itemId) {
@@ -207,18 +205,14 @@ class MainActivity : ComponentActivity() {
                     2 -> startActivity(Intent(this@MainActivity, EditOrderActivity::class.java))
                     6 -> startActivity(Intent(this@MainActivity, BankNotiActivity::class.java))
                     3 -> web.reload()
-                    4 -> {
-                        prefs.testEnv = !prefs.testEnv
-                        openPage(prefs.page.ifEmpty { "quanly.html" })
-                        BubbleService.refresh(this@MainActivity)
-                        if (prefs.testEnv && !prefs.readyFor(true))
-                            Toast.makeText(this@MainActivity, "Nút chụp đơn ở TEST cần mã bí mật TEST: ⋮ → Cài đặt chụp đơn.", Toast.LENGTH_LONG).show()
-                    }
                 }
                 true
             }
         }.show()
     }
+
+    /** Bản "coban" bỏ dịch vụ đọc thông báo khỏi manifest → ẩn mục này */
+    private fun hasBankNoti() = runCatching { packageManager.getServiceInfo(android.content.ComponentName(this, BankNotiService::class.java), 0) }.isSuccess
 
     private fun toggleBubble() {
         if (BubbleService.running) { BubbleService.stop(this); bubbleBtn.postDelayed({ refreshBar() }, 300) }
