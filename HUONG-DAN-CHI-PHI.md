@@ -8,6 +8,11 @@ Trang Monitoring (`/dashboard` của bot `benoc-health-bot`) có thêm mục **C
 - **Cảnh báo Telegram** (mỗi loại tối đa 1 lần / ngày): AI 1 ngày tốn quá ngưỡng, dự báo cả tháng vượt ngân sách, bị chặn hạn mức (HTTP 429) từ 5 lần / ngày, hạn mức gói miễn phí dùng quá 80%.
 - **Báo cáo 7h sáng** thêm mục "— Chi phí —": AI hôm qua, tháng này, dự báo, hạn mức dùng nhiều nhất.
 
+## Trạng thái trên Product (27/11/2026)
+
+- Đã chạy migration (version `20261127093615`), đã deploy `bot-don` (v120) và `chup-chat` (v69), đã cập nhật Worker `benoc-health-bot` (giữ nguyên biến, secret, KV, 2 lịch chạy) và thêm `CF_ACCOUNT_ID`.
+- **Còn thiếu `CF_API_TOKEN`** (bước 3 bên dưới): chưa có thì mục Cloudflare trên trang để trống. `SUPABASE_PAT` tuỳ chọn.
+
 ## Cài đặt (làm theo thứ tự)
 
 ### 1. Supabase: chạy migration
