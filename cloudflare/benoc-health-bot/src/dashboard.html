@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bé Nốc POS — Monitoring</title>
+<meta name="robots" content="noindex">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --border: rgba(11,11,11,0.10);
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --good-text: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --border: rgba(255,255,255,0.10);
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+    --good-text: #0ca30c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--page); border-bottom: 1px solid var(--border);
+  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+.grow { flex: 1; }
+.badge { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--border); font-weight: 600; font-size: 13px; background: var(--surface-1); }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface-1); color: var(--text-secondary); padding: 6px 12px; font: inherit; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); font-weight: 600; }
+.small { color: var(--muted); font-size: 12px; }
+nav { display: flex; gap: 4px; padding: 8px 16px 0; overflow-x: auto; }
+nav a { text-decoration: none; color: var(--text-secondary); padding: 6px 12px; border-radius: 8px; white-space: nowrap; }
+nav a:hover { background: var(--surface-1); }
+main { padding: 12px 16px 40px; max-width: 1400px; margin: 0 auto; }
+section { margin-top: 18px; scroll-margin-top: 70px; }
+section > h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.tile .k { color: var(--text-secondary); font-size: 12px; }
+.tile .v { font-size: 20px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 12px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.card h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
+.card .cv { position: relative; height: 240px; }
+.card.wide { grid-column: 1 / -1; }
+.empty { display: flex; height: 100%; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-secondary); font-weight: 600; }
+td.r, th.r { text-align: right; }
+.st { display: inline-flex; align-items: center; gap: 5px; }
+.meter { position: relative; height: 8px; border-radius: 4px; background: var(--grid); min-width: 80px; overflow: hidden; }
+.meter > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.tablewrap { overflow-x: auto; }
+#login { max-width: 360px; margin: 18vh auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+#login input { width: 100%; padding: 10px; font: inherit; border: 1px solid var(--axis); border-radius: 8px; background: var(--page); color: var(--text-primary); margin: 10px 0; }
+#login button, .btn { padding: 9px 14px; border-radius: 8px; border: 0; background: var(--text-primary); color: var(--surface-1); font: inherit; font-weight: 600; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); padding: 6px 10px; }
+.err { color: var(--critical); margin-top: 6px; }
+.inc { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin: 0 0 10px; }
+.inc > summary { font-size: 13px; color: var(--text-primary); margin: 0; line-height: 1.6; }
+.incbody h3 { font-size: 13px; margin: 12px 0 4px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div id="login" hidden>
+  <h1 style="font-size:17px;margin:0">Bé Nốc POS — Monitoring</h1>
+  <p class="small">Nhập mã xem trang (DASH_KEY).</p>
+  <form id="loginForm"><input id="keyInput" type="password" autocomplete="current-password" placeholder="Mã xem trang" required>
+  <button type="submit">Vào xem</button></form>
+  <div id="loginErr" class="err"></div>
+</div>
+
+<div id="app" hidden>
+<header>
+  <h1>Bé Nốc POS · Monitoring</h1>
+  <span id="statusBadge" class="badge"><span class="dot"></span><span>Đang tải…</span></span>
+  <span class="grow"></span>
+  <div class="seg" role="group" aria-label="Khoảng thời gian">
+    <button data-h="24" aria-pressed="true">24 giờ</button><button data-h="168">7 ngày</button><button data-h="720">30 ngày</button>
+  </div>
+  <span id="updated" class="small"></span>
+  <button id="refreshBtn" class="btn ghost" title="Tải lại">↻</button>
+  <button id="logoutBtn" class="btn ghost" title="Thoát">Thoát</button>
+</header>
+<nav>
+  <a href="#tong-quan">Tổng quan</a><a href="#he-thong">Hệ thống</a><a href="#van-hanh">Vận hành quán</a><a href="#thanh-toan">Thanh toán</a><a href="#bot">Bot & OCR</a><a href="#chi-phi">Chi phí</a><a href="#su-co">Sự cố</a>
+</nav>
+<main>
+  <section id="tong-quan"><h2>Tổng quan</h2><div class="tiles" id="tiles"></div></section>
+
+  <section id="he-thong"><h2>Hệ thống</h2>
+    <div class="tiles" id="sysTiles" style="margin-bottom:12px"></div>
+    <div class="grid">
+      <div class="card wide"><h3>Thời gian phản hồi</h3><div class="sub" id="latSub">ms · trung bình mỗi khung · đường nét đứt là ngưỡng chậm</div><div class="cv"><canvas id="cLatency"></canvas></div></div>
+      <div class="card"><h3>Uptime theo khung</h3><div class="sub">% lượt kiểm tra mà cả 4 dịch vụ đều trả lời</div><div class="cv"><canvas id="cUptime"></canvas></div></div>
+      <div class="card"><h3>Kết nối database</h3><div class="sub">số kết nối đang mở · nét đứt là giới hạn</div><div class="cv"><canvas id="cConns"></canvas></div></div>
+      <div class="card"><h3>Tải database</h3><div class="sub">giao dịch được ghi (commit) mỗi phút</div><div class="cv"><canvas id="cTpm"></canvas></div></div>
+      <div class="card"><h3>Đơn đang mở</h3><div class="sub">số đơn trong bảng orders tại mỗi lần kiểm tra</div><div class="cv"><canvas id="cActive"></canvas></div></div>
+      <div class="card"><h3>Dung lượng Storage theo bucket</h3><div class="sub">MB · gói Free 1 024 MB</div><div class="cv"><canvas id="cBuckets"></canvas></div></div>
+      <div class="card"><h3>Bảng lớn nhất</h3><div class="sub">MB · gồm cả index</div><div class="cv"><canvas id="cTables"></canvas></div></div>
+      <div class="card"><h3>Dung lượng database theo ngày</h3><div class="sub">MB · gói Free 500 MB</div><div class="cv"><canvas id="cDbGrowth"></canvas></div></div>
+    </div>
+  </section>
+
+  <section id="van-hanh"><h2>Vận hành quán</h2>
+    <div class="grid">
+      <div class="card wide"><h3>Hôm nay theo giờ</h3><div class="sub">số hoá đơn đã thanh toán · đường là trung bình 30 ngày cùng giờ</div><div class="cv"><canvas id="cToday"></canvas></div></div>
+      <div class="card wide"><h3>Doanh thu 30 ngày</h3><div class="sub">nghìn đồng · theo hình thức thanh toán</div><div class="cv"><canvas id="cRevenue"></canvas></div></div>
+      <div class="card"><h3>Số đơn theo hình thức</h3><div class="sub">hoá đơn mỗi ngày</div><div class="cv"><canvas id="cDine"></canvas></div></div>
+      <div class="card"><h3>Thời gian phục vụ</h3><div class="sub">phút · trung bình mỗi ngày</div><div class="cv"><canvas id="cWait"></canvas></div></div>
+      <div class="card wide"><h3>Món bán chạy 7 ngày</h3><div class="sub">số phần</div><div class="cv" style="height:300px"><canvas id="cTop"></canvas></div></div>
+    </div>
+  </section>
+
+  <section id="thanh-toan"><h2>Thanh toán</h2>
+    <div class="tiles" id="payTiles" style="margin-bottom:12px"></div>
+    <div class="grid">
+      <div class="card wide"><h3>Chuyển khoản nhận được</h3><div class="sub">số giao dịch mỗi ngày theo kết quả khớp đơn (đọc từ Store Noti)</div><div class="cv"><canvas id="cPay"></canvas></div></div>
+    </div>
+  </section>
+
+  <section id="bot"><h2>Bot & OCR</h2>
+    <div class="tiles" id="botTiles" style="margin-bottom:12px"></div>
+    <div class="grid">
+      <div class="card"><h3>Đơn bot lên</h3><div class="sub">số đơn mỗi ngày theo trạng thái</div><div class="cv"><canvas id="cDrafts"></canvas></div></div>
+      <div class="card"><h3>Đơn bot theo kênh</h3><div class="sub">30 ngày</div><div class="cv"><canvas id="cChannel"></canvas></div></div>
+      <div class="card"><h3>Ảnh gửi bot</h3><div class="sub">số ảnh mỗi ngày</div><div class="cv"><canvas id="cPhotos"></canvas></div></div>
+      <div class="card"><h3>Ảnh chụp chat (OCR)</h3><div class="sub">số ảnh mỗi ngày · ảnh lỗi</div><div class="cv"><canvas id="cCaptures"></canvas></div></div>
+    </div>
+  </section>
+
+  <section id="chi-phi"><h2>Chi phí & hạn mức</h2>
+    <div class="small" id="costNote" style="margin:-4px 0 10px"></div>
+    <div class="tiles" id="costTiles" style="margin-bottom:12px"></div>
+    <div class="grid">
+      <div class="card wide"><h3>Chi phí AI mỗi ngày</h3><div class="sub" id="costSub">đồng · cột: số tiền thật phải trả · nét đứt: nếu tính theo giá trả tiền</div><div class="cv"><canvas id="cAiCost"></canvas></div></div>
+      <div class="card"><h3>Token mỗi ngày</h3><div class="sub">nghìn token · vào gồm ảnh, ra gồm phần "suy nghĩ"</div><div class="cv"><canvas id="cTokens"></canvas></div></div>
+      <div class="card"><h3>Lượt gọi AI mỗi ngày</h3><div class="sub">thành công / lỗi (lỗi không tính tiền)</div><div class="cv"><canvas id="cAiCalls"></canvas></div></div>
+      <div class="card"><h3>Chi phí theo model</h3><div class="sub">đồng · 30 ngày · theo giá trả tiền</div><div class="cv"><canvas id="cByModel"></canvas></div></div>
+      <div class="card"><h3>Cloudflare Workers mỗi ngày</h3><div class="sub">lượt gọi (ngày UTC) · gói Free 100 000 lượt / ngày</div><div class="cv"><canvas id="cCfReq"></canvas></div></div>
+      <div class="card"><h3>Supabase egress mỗi ngày</h3><div class="sub">MB · ước tính từ nhật ký · gói Free 5 GB / tháng cho mỗi loại</div><div class="cv"><canvas id="cEgress"></canvas></div></div>
+      <div class="card"><h3>Lượt gọi Supabase mỗi ngày</h3><div class="sub">theo dịch vụ · đọc từ nhật ký API</div><div class="cv"><canvas id="cSbReq"></canvas></div></div>
+      <div class="card wide"><h3>Hạn mức gói miễn phí</h3><div class="sub">Cloudflare tính theo ngày UTC (reset 7h sáng VN) · Supabase tính theo tháng</div><div class="tablewrap" id="quotaTable"></div></div>
+      <div class="card wide"><h3>Chi tiết theo model</h3><div class="sub">30 ngày</div><div class="tablewrap" id="modelTable"></div>
+        <details><summary>Bảng giá đang dùng (USD / 1 triệu token)</summary><div class="tablewrap" id="priceTable"></div></details></div>
+    </div>
+  </section>
+
+  <section id="su-co"><h2>Sự cố & cảnh báo</h2>
+    <div class="card"><div id="incidents"></div></div>
+  </section>
+  <p class="small" style="margin-top:20px">Số liệu từ Supabase (project benoc-pos) do bot benoc-health-bot đo mỗi 5 phút; hạn mức Cloudflare / Supabase thu mỗi giờ. Trang tự tải lại mỗi phút.</p>
+</main>
+</div>
+
+<script>
+(() => {
+  const LS = "benoc_dash_key";
+  let key = localStorage.getItem(LS) || "";
+  let hours = 24, timer = null, data = null;
+  const charts = {};
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const S = () => [1,2,3,4,5,6,7,8].map((i) => css("--s" + i));
+  const nf = new Intl.NumberFormat("vi-VN");
+  const fmtN = (n) => n == null || isNaN(n) ? "—" : nf.format(Math.round(n));
+  const fmtVND = (n) => n == null ? "—" : nf.format(Math.round(n)) + "đ";
+  const fmtK = (n) => n == null ? "—" : nf.format(Math.round(n / 1000)) + "k";
+  const fmtMB = (b) => b == null ? "—" : (b / 1048576).toLocaleString("vi-VN", { maximumFractionDigits: 1 }) + " MB";
+  const fmtBytes = (b) => b == null ? "—" : b >= 1073741824 ? (b / 1073741824).toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " GB" : fmtMB(b);
+  const fmtTok = (n) => n == null ? "—" : n >= 1e6 ? (n / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " tr" : n >= 1e3 ? (n / 1e3).toLocaleString("vi-VN", { maximumFractionDigits: 1 }) + " k" : fmtN(n);
+  const fmtSmallVND = (n) => n == null ? "—" : n > 0 && n < 10 ? n.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + "đ" : fmtVND(n);
+  const tz = { timeZone: "Asia/Ho_Chi_Minh" };
+  const fmtTime = (t) => t ? new Date(t).toLocaleString("vi-VN", { ...tz, hour12: false, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+  const ago = (t) => { if (!t) return "—"; const m = Math.round((Date.now() - new Date(t)) / 60000);
+    return m < 1 ? "vừa xong" : m < 60 ? m + " phút trước" : m < 1440 ? Math.round(m / 60) + " giờ trước" : Math.round(m / 1440) + " ngày trước"; };
+  const dayLabel = (d) => { const [y, m, dd] = d.split("-"); return dd + "/" + m; };
+  const fillDays = (rows, n = 30) => { // đủ 30 ngày, ngày không có số liệu = 0
+    const map = new Map(rows.map((r) => [r.d, r])); const out = [];
+    const now = new Date(new Date().toLocaleString("en-US", tz));
+    for (let i = n - 1; i >= 0; i--) { const t = new Date(now); t.setDate(t.getDate() - i);
+      const d = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
+      out.push(map.get(d) || { d }); }
+    return out; };
+  const STATUS = {
+    ok:   { c: "--good",     icon: "●", t: "Ổn định" },
+    warn: { c: "--warning",  icon: "▲", t: "Chậm / cần xem" },
+    bad:  { c: "--critical", icon: "✕", t: "Sự cố" },
+    unk:  { c: "--muted",    icon: "?", t: "Chưa có số liệu" },
+  };
+
+  // ---------- Chart.js mặc định ----------
+  function applyDefaults() {
+    Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = css("--muted");
+    Chart.defaults.borderColor = css("--grid");
+    Chart.defaults.maintainAspectRatio = false;
+    Chart.defaults.animation = false;
+    Chart.defaults.plugins.legend.labels.boxWidth = 10;
+    Chart.defaults.plugins.legend.labels.boxHeight = 10;
+    Chart.defaults.plugins.legend.labels.useBorderRadius = true;
+    Chart.defaults.plugins.legend.labels.borderRadius = 3;
+    Chart.defaults.plugins.legend.labels.color = css("--text-secondary");
+    Chart.defaults.plugins.legend.align = "start";
+    Object.assign(Chart.defaults.plugins.tooltip, { backgroundColor: css("--surface-1"), titleColor: css("--text-primary"),
+      bodyColor: css("--text-secondary"), borderColor: css("--axis"), borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true });
+    Chart.defaults.elements.line.borderWidth = 2;
+    Chart.defaults.elements.line.tension = 0.25;
+    Chart.defaults.elements.point.radius = 0;
+    Chart.defaults.elements.point.hoverRadius = 5;
+    Chart.defaults.elements.point.hitRadius = 8;
+    Chart.defaults.elements.bar.borderRadius = 4;
+    Chart.defaults.elements.bar.borderSkipped = "start";
+  }
+
+  const axes = (opts = {}) => ({
+    x: { stacked: !!opts.stacked, grid: { display: false }, border: { color: css("--axis") }, ticks: { maxRotation: 0, autoSkipPadding: 12 } },
+    y: { stacked: !!opts.stacked, beginAtZero: opts.zero !== false, min: opts.min, max: opts.max, grid: { color: css("--grid") }, border: { display: false },
+         ticks: { callback: opts.tick || ((v) => fmtN(v)), maxTicksLimit: 6 } },
+  });
+
+  function draw(id, cfg, emptyText) {
+    const el = $(id); const box = el.parentElement;
+    const has = cfg.data.datasets.some((d) => !d._ref && d.data.some((v) => v != null && v !== 0 && !(typeof v === "object" && v.y == null)));
+    box.querySelector(".empty")?.remove();
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    if (!has) { el.hidden = true; const e = document.createElement("div"); e.className = "empty"; e.textContent = emptyText || "Chưa có số liệu"; box.appendChild(e); return; }
+    el.hidden = false;
+    cfg.options = cfg.options || {};
+    cfg.options.interaction = cfg.options.interaction || { mode: "index", intersect: false };
+    cfg.options.plugins = cfg.options.plugins || {};
+    if (cfg.data.datasets.filter((d) => !d._ref).length < 2) cfg.options.plugins.legend = { display: false };
+    charts[id] = new Chart(el, cfg);
+  }
+  const line = (label, data, color, extra = {}) => ({ type: "line", label, data, borderColor: color, backgroundColor: color, spanGaps: true, ...extra });
+  const ref = (label, data) => ({ type: "line", label, data, borderColor: css("--muted"), borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0, _ref: true });
+  const bar = (label, data, color, extra = {}) => ({ type: "bar", label, data, backgroundColor: color, borderColor: css("--surface-1"), borderWidth: { top: 0, left: 0, right: 0, bottom: 2 }, maxBarThickness: 28, ...extra });
+
+  // ---------- Tải số liệu ----------
+  async function load() {
+    try {
+      const r = await fetch("/api/data?hours=" + hours, { headers: { "x-key": key }, cache: "no-store" });
+      if (r.status === 401) { logout("Mã không đúng."); return; }
+      if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 200));
+      data = await r.json();
+      render();
+      $("updated").textContent = "Cập nhật " + new Date().toLocaleTimeString("vi-VN", { ...tz, hour12: false });
+    } catch (e) {
+      $("updated").textContent = "Lỗi tải: " + e.message;
+    }
+  }
+
+  function tile(k, v, s, status) {
+    const st = status ? STATUS[status] : null;
+    return `<div class="tile"><div class="k">${k}</div><div class="v">${st ? `<span class="st" style="color:var(${st.c})">${st.icon}</span> ` : ""}${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
+  }
+  const lvl = (v, warn, bad, higherIsWorse = true) => v == null ? "unk" : higherIsWorse ? (v >= bad ? "bad" : v >= warn ? "warn" : "ok") : (v <= bad ? "bad" : v <= warn ? "warn" : "ok");
+
+  function render() {
+    const D = data.d, A = data.alert || {}, slow = data.slow_ms || 1500;
+    const sum = D.summary || {}, cur = D.current || {}, last = cur.last, ops = D.ops || {}, pay = D.pay || {}, bot = D.bot || {};
+    const dbPct = cur.db_bytes / (data.db_limit_mb * 1048576) * 100;
+    const stPct = cur.storage_bytes / (data.storage_limit_mb * 1048576) * 100;
+    const lastAge = last ? (Date.now() - new Date(last.at)) / 60000 : Infinity;
+    let status = A.status || (last ? "ok" : "unk");
+    if (lastAge > 15) status = last ? "bad" : "unk";
+    const st = STATUS[status];
+    $("statusBadge").innerHTML = `<span class="dot" style="background:var(${st.c})"></span><span>${st.icon} ${st.t}${A.detail && status !== "ok" ? " · " + esc(A.detail) : ""}</span>`;
+    const label = hours === 24 ? "24 giờ" : hours === 168 ? "7 ngày" : "30 ngày";
+
+    // Tổng quan
+    $("tiles").innerHTML = [
+      tile("Lần kiểm tra gần nhất", last ? ago(last.at) : "—", last ? fmtTime(last.at) : "Bot chưa ghi mẫu nào", lastAge > 15 ? "bad" : "ok"),
+      tile("Uptime " + label, sum.uptime_all != null ? sum.uptime_all.toLocaleString("vi-VN") + "%" : "—", (sum.samples || 0) + " lượt kiểm tra", lvl(sum.uptime_all, 99.5, 98, false)),
+      tile("REST p50 / p95", fmtN(sum.p50?.rest) + " / " + fmtN(sum.p95?.rest) + " ms", "ngưỡng chậm " + fmtN(slow) + " ms", lvl(sum.p95?.rest, slow, slow * 3)),
+      tile("Database", dbPct.toFixed(1) + "%", fmtMB(cur.db_bytes) + " / " + data.db_limit_mb + " MB", lvl(dbPct, 70, 90)),
+      tile("Storage", stPct.toFixed(1) + "%", fmtMB(cur.storage_bytes) + " / " + data.storage_limit_mb + " MB", lvl(stPct, 70, 90)),
+      tile("Doanh thu hôm nay", fmtVND(ops.today?.revenue), fmtN(ops.today?.orders) + " hoá đơn"),
+      tile("Đơn đang mở", fmtN(ops.active_now), ops.stale_now ? ops.stale_now + " đơn từ hôm trước" : "không có đơn treo", ops.stale_now ? "warn" : "ok"),
+      tile("CK chưa khớp, chưa xem", fmtN(pay.unreviewed), "giao dịch không mã đơn", pay.unreviewed > 0 ? "warn" : "ok"),
+    ].join("");
+
+    // Hệ thống
+    const sr = D.series || [];
+    const tl = sr.map((r) => { const t = new Date(r.t); return hours <= 24
+      ? t.toLocaleTimeString("vi-VN", { ...tz, hour12: false, hour: "2-digit", minute: "2-digit" })
+      : t.toLocaleString("vi-VN", { ...tz, hour12: false, day: "2-digit", month: "2-digit", hour: "2-digit" }) + "h"; });
+    $("latSub").textContent = `ms · trung bình mỗi ${D.bucket_min >= 60 ? D.bucket_min / 60 + " giờ" : D.bucket_min + " phút"} · đường nét đứt là ngưỡng chậm (${fmtN(slow)} ms)`;
+    $("sysTiles").innerHTML = [
+      ["REST", "rest"], ["Auth", "auth"], ["Storage", "storage"], ["Trang order", "site"],
+    ].map(([n, k]) => tile(n, fmtN(sum.p50?.[k]) + " ms", "p95 " + fmtN(sum.p95?.[k]) + " ms · uptime " + (sum.uptime?.[k] ?? "—") + "%",
+      lvl(sum.uptime?.[k], 99.5, 98, false) === "ok" ? lvl(sum.p95?.[k], k === "site" ? slow * 2 : slow, (k === "site" ? slow * 2 : slow) * 3) : lvl(sum.uptime?.[k], 99.5, 98, false))).join("")
+      + tile("Kết nối DB", last ? last.conns + " / " + last.conns_max : "—", "đang mở", last ? lvl(last.conns / last.conns_max * 100, 70, 90) : "unk")
+      + tile("Bộ nhớ đệm", last?.cache_hit != null ? last.cache_hit + "%" : "—", "tỉ lệ đọc từ cache", last ? lvl(last.cache_hit, 95, 0, false) : "unk")
+      + tile("Khoá / truy vấn treo", last ? (last.locks || 0) + " / " + (last.long_q || 0) : "—", "chờ khoá / chạy > 5 phút", last ? (last.locks >= 5 ? "bad" : (last.locks || last.long_q) ? "warn" : "ok") : "unk")
+      + tile("Deadlock " + label, fmtN(sum.deadlocks || 0), "", sum.deadlocks ? "warn" : "ok");
+
+    const s = S();
+    draw("cLatency", { data: { labels: tl, datasets: [
+      line("REST", sr.map((r) => r.rest), s[0]), line("Auth", sr.map((r) => r.auth), s[1]),
+      line("Storage", sr.map((r) => r.storage), s[2]), line("Trang order", sr.map((r) => r.site), s[3]),
+      ref("Ngưỡng chậm", sr.map(() => slow)) ] },
+      options: { scales: axes({ tick: (v) => fmtN(v) + " ms" }) } }, "Bot chưa ghi mẫu nào. Số liệu xuất hiện sau lần kiểm tra 5 phút đầu tiên.");
+    draw("cUptime", { data: { labels: tl, datasets: [ bar("Uptime", sr.map((r) => r.up), s[0]) ] },
+      options: { scales: axes({ min: 0, max: 100, tick: (v) => v + "%" }) } });
+    draw("cConns", { data: { labels: tl, datasets: [ line("Kết nối", sr.map((r) => r.conns), s[0]), ref("Giới hạn", sr.map((r) => r.conns_max)) ] },
+      options: { scales: axes() } });
+    draw("cTpm", { data: { labels: tl, datasets: [ line("Commit / phút", sr.map((r) => r.tpm), s[0]) ] }, options: { scales: axes() } });
+    draw("cActive", { data: { labels: tl, datasets: [ line("Đơn đang mở", sr.map((r) => r.active_orders), s[0], { stepped: true, tension: 0 }) ] }, options: { scales: axes() } });
+    const bk = cur.storage_by_bucket || [];
+    draw("cBuckets", { data: { labels: bk.map((b) => b.bucket_id), datasets: [ bar("Dung lượng", bk.map((b) => b.bytes / 1048576), s[0], { borderWidth: 0 }) ] },
+      options: { indexAxis: "y", scales: { x: { grid: { color: css("--grid") }, ticks: { callback: (v) => fmtN(v) } }, y: { grid: { display: false } } },
+        plugins: { tooltip: { callbacks: { label: (c) => ` ${fmtMB(bk[c.dataIndex].bytes)} · ${bk[c.dataIndex].files} file` } } } } });
+    const tb = cur.top_tables || [];
+    draw("cTables", { data: { labels: tb.map((t) => t.name), datasets: [ bar("Dung lượng", tb.map((t) => t.bytes / 1048576), s[0], { borderWidth: 0 }) ] },
+      options: { indexAxis: "y", scales: { x: { grid: { color: css("--grid") }, ticks: { callback: (v) => v.toFixed(1) } }, y: { grid: { display: false } } },
+        plugins: { tooltip: { callbacks: { label: (c) => ` ${fmtMB(tb[c.dataIndex].bytes)} · ${fmtN(tb[c.dataIndex].rows_)} dòng` } } } } });
+    const dg = cur.db_growth || [];
+    draw("cDbGrowth", { data: { labels: dg.map((r) => dayLabel(r.d)), datasets: [ line("Database", dg.map((r) => r.bytes / 1048576), s[0], { pointRadius: 3 }) ] },
+      options: { scales: axes({ zero: false, tick: (v) => v.toFixed(1) }) } }, "Cần vài ngày số liệu để vẽ xu hướng.");
+
+    // Vận hành
+    const hrs = Array.from({ length: 15 }, (_, i) => i + 7); // 7h–21h
+    const th = new Map((ops.today_hourly || []).map((r) => [r.h, r])), ph = new Map((ops.peak_hours || []).map((r) => [r.h, r]));
+    draw("cToday", { data: { labels: hrs.map((h) => h + "h"), datasets: [
+      bar("Hôm nay", hrs.map((h) => th.get(h)?.orders ?? 0), s[0]),
+      line("Trung bình 30 ngày", hrs.map((h) => ph.get(h)?.avg_orders ?? 0), s[1], { borderDash: [], pointRadius: 2 }) ] },
+      options: { scales: axes(), plugins: { tooltip: { callbacks: { afterBody: (it) => { const r = th.get(hrs[it[0].dataIndex]); return r ? "Doanh thu: " + fmtVND(r.revenue) : ""; } } } } } });
+    const dd = fillDays(ops.daily || []), dl = dd.map((r) => dayLabel(r.d));
+    draw("cRevenue", { data: { labels: dl, datasets: [
+      bar("Chuyển khoản", dd.map((r) => r.transfer || 0), s[0]), bar("Tiền mặt", dd.map((r) => r.cash || 0), s[1]) ] },
+      options: { scales: axes({ stacked: true, tick: fmtK }), plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmtVND(c.raw)}`,
+        footer: (it) => "Tổng: " + fmtVND(dd[it[0].dataIndex].revenue || 0) + " · " + (dd[it[0].dataIndex].orders || 0) + " hoá đơn" } } } } });
+    draw("cDine", { data: { labels: dl, datasets: [
+      bar("Tại quán", dd.map((r) => r.tai_quan || 0), s[0]), bar("Mang về", dd.map((r) => r.mang_ve || 0), s[1]), bar("Giao hàng", dd.map((r) => r.giao_hang || 0), s[2]) ] },
+      options: { scales: axes({ stacked: true }) } });
+    const cap = (v) => v == null || v > 120 ? null : v; // bỏ số liệu lỗi (quên bấm xong món)
+    draw("cWait", { data: { labels: dl, datasets: [
+      line("Khách chờ (đặt → ra món)", dd.map((r) => cap(r.avg_wait)), s[0], { pointRadius: 2 }),
+      line("Bếp làm", dd.map((r) => cap(r.bep_min)), s[1], { pointRadius: 2 }),
+      line("Pha chế làm", dd.map((r) => cap(r.pha_che_min) || null), s[2], { pointRadius: 2 }) ] },
+      options: { scales: axes({ tick: (v) => v + "′" }), plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${c.raw} phút` } } } } });
+    const top = ops.top_items_7d || [];
+    draw("cTop", { data: { labels: top.map((t) => t.name), datasets: [ bar("Số phần", top.map((t) => t.qty), s[0], { borderWidth: 0 }) ] },
+      options: { indexAxis: "y", scales: { x: { grid: { color: css("--grid") } }, y: { grid: { display: false } } },
+        plugins: { tooltip: { callbacks: { label: (c) => ` ${c.raw} phần · ${fmtVND(top[c.dataIndex].revenue)}` } } } } });
+
+    // Thanh toán
+    const m = pay.method_30d || {}, mt = (m.tien_mat || 0) + (m.chuyen_khoan || 0);
+    const pd = fillDays(pay.daily || []), dev = (pay.devices || [])[0];
+    const devAge = dev ? (Date.now() - new Date(dev.last_at)) / 3600000 : null;
+    $("payTiles").innerHTML = [
+      tile("Chuyển khoản 30 ngày", mt ? Math.round(m.chuyen_khoan / mt * 100) + "%" : "—", fmtVND(m.chuyen_khoan)),
+      tile("Tiền mặt 30 ngày", mt ? Math.round(m.tien_mat / mt * 100) + "%" : "—", fmtVND(m.tien_mat)),
+      tile("CK không mã, chưa xem", fmtN(pay.unreviewed), "cần đối chiếu tay", pay.unreviewed > 0 ? "warn" : "ok"),
+      tile("Máy đọc thông báo", dev ? ago(dev.last_at) : "—", dev ? esc(dev.device) + " · " + dev.n + " giao dịch" : "chưa có", devAge == null ? "unk" : devAge > 24 ? "warn" : "ok"),
+    ].join("");
+    draw("cPay", { data: { labels: pd.map((r) => dayLabel(r.d)), datasets: [
+      bar("Đã khớp đơn", pd.map((r) => r.da_khop || 0), s[0]), bar("Đơn đã thu trước", pd.map((r) => r.don_da_thu || 0), s[1]), bar("Không mã đơn", pd.map((r) => r.khong_ma || 0), s[2]) ] },
+      options: { scales: axes({ stacked: true }), plugins: { tooltip: { callbacks: { footer: (it) => { const r = pd[it[0].dataIndex];
+        return r.n ? `Tổng ${r.n} GD · ${fmtVND(r.amount)}` + (r.khong_ma_amount ? ` · không mã ${fmtVND(r.khong_ma_amount)}` : "") : ""; } } } } } });
+
+    // Bot
+    const cd = fillDays(bot.captures_daily || []), dr = fillDays(bot.drafts_daily || []), phd = fillDays(bot.photos_daily || []);
+    const capN = cd.reduce((a, r) => a + (r.n || 0), 0), capErr = cd.reduce((a, r) => a + (r.errors || 0), 0);
+    const capMs = cd.filter((r) => r.avg_ms).map((r) => r.avg_ms);
+    $("botTiles").innerHTML = [
+      tile("Đơn bot 30 ngày", fmtN(dr.reduce((a, r) => a + (r.n || 0), 0)), fmtN(dr.reduce((a, r) => a + (r.huy || 0), 0)) + " đơn huỷ"),
+      tile("Ảnh chờ xử lý", fmtN(bot.pending_photos), "ảnh bot chưa đọc xong", bot.pending_photos > 0 ? "warn" : "ok"),
+      tile("OCR: thời gian đọc", capMs.length ? (capMs.reduce((a, b) => a + b, 0) / capMs.length / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 }) + " s" : "—", "trung bình mỗi ảnh"),
+      tile("OCR: ảnh lỗi 30 ngày", fmtN(capErr) + " / " + fmtN(capN), bot.last_error ? "lỗi gần nhất " + ago(bot.last_error.at) : "", capErr ? "warn" : "ok"),
+    ].join("") + (bot.last_error ? `<details class="tile" style="grid-column:1/-1"><summary>Lỗi OCR gần nhất (${fmtTime(bot.last_error.at)})</summary><div class="small" style="margin-top:6px;word-break:break-word">${esc(bot.last_error.error)}</div></details>` : "");
+    draw("cDrafts", { data: { labels: dr.map((r) => dayLabel(r.d)), datasets: [
+      bar("Đã duyệt", dr.map((r) => r.da_duyet || 0), s[0]), bar("Huỷ", dr.map((r) => r.huy || 0), s[1]), bar("Đang chờ", dr.map((r) => r.cho || 0), s[2]) ] },
+      options: { scales: axes({ stacked: true }) } });
+    const ch = Object.entries(bot.drafts_by_channel || {}).sort((a, b) => b[1] - a[1]);
+    const chName = { ios: "iPhone (chụp màn hình)", zalo: "Zalo", telegram: "Telegram", fb: "Facebook", android: "Android" };
+    draw("cChannel", { data: { labels: ch.map(([k]) => chName[k] || k), datasets: [ bar("Đơn", ch.map(([, v]) => v), s[0], { borderWidth: 0 }) ] },
+      options: { indexAxis: "y", scales: { x: { grid: { color: css("--grid") } }, y: { grid: { display: false } } } } });
+    draw("cPhotos", { data: { labels: phd.map((r) => dayLabel(r.d)), datasets: [ bar("Ảnh", phd.map((r) => r.n || 0), s[0]) ] }, options: { scales: axes() } });
+    draw("cCaptures", { data: { labels: cd.map((r) => dayLabel(r.d)), datasets: [
+      bar("Đọc được", cd.map((r) => (r.n || 0) - (r.errors || 0)), s[0]), bar("Lỗi", cd.map((r) => r.errors || 0), s[1]) ] },
+      options: { scales: axes({ stacked: true }), plugins: { tooltip: { callbacks: { footer: (it) => { const r = cd[it[0].dataIndex]; return r.avg_ms ? "Trung bình " + (r.avg_ms / 1000).toFixed(1) + " s/ảnh" : ""; } } } } } });
+
+    renderCost(cur, s);
+
+    // Sự cố
+    const inc = D.incidents || [];
+    const why = (r) => { const p = [];
+      for (const [k, n] of [["rest", "REST"], ["auth", "Auth"], ["storage", "Storage"], ["site", "Trang order"]]) {
+        if (r[k + "_ok"] === false) p.push(n + " lỗi"); else if (r[k + "_ms"] > (k === "site" ? slow * 2 : slow)) p.push(n + " chậm " + fmtN(r[k + "_ms"]) + " ms"); }
+      if (r.locks) p.push(r.locks + " chờ khoá"); if (r.long_q) p.push(r.long_q + " truy vấn treo"); return p.join(", "); };
+    const lvlOf = (r) => (r.rest_ok === false || r.auth_ok === false || r.storage_ok === false || r.site_ok === false || r.locks >= 5) ? "bad" : "warn";
+    const probes = inc.length
+        ? `<table><thead><tr><th>Thời điểm</th><th>Mức</th><th>Chi tiết</th></tr></thead><tbody>${inc.map((r) => { const l = STATUS[lvlOf(r)];
+            return `<tr><td>${fmtTime(r.at)}</td><td><span class="st" style="color:var(${l.c})">${l.icon}</span> ${l.t}</td><td>${esc(why(r))}</td></tr>`; }).join("")}</tbody></table>`
+        : `<p class="small">Không có lần đo API chậm / lỗi trong ${label}.</p>`;
+    const list = data.incidents;
+    $("incidents").innerHTML = (A.status && A.status !== "ok"
+        ? `<p><b>Đang có cảnh báo</b> từ ${fmtTime(A.since)}: ${esc(A.detail || "")}${A.alerted ? " · đã báo Telegram" : " · chưa đủ lâu để báo Telegram"}${A.fixes ? ` · bot đã ngắt ${A.fixes} truy vấn treo` : ""}</p>` : "")
+      + (list == null ? `<p class="small">Chưa đọc được nhật ký sự cố (cần chạy SQL cập nhật 49).</p>`
+        : list.length ? list.map(incidentCard).join("") : `<p class="small">Không có sự cố nào trong 30 ngày.</p>`)
+      + `<details><summary>Các lần đo API chậm / lỗi (${inc.length})</summary>${probes}</details>`;
+  }
+
+  // ---------- Một sự cố ----------
+  const REC = {
+    tu_hoi_phuc:   { c: "--good-text", t: "Tự hồi phục", s: "Bot không phải can thiệp" },
+    bot_can_thiep: { c: "--s1",        t: "Bot đã can thiệp", s: "Bot ngắt truy vấn treo / giao dịch bỏ dở" },
+    dang:          { c: "--critical",  t: "Đang diễn ra", s: "" },
+  };
+  const hhmm = (t) => t ? new Date(t).toLocaleTimeString("vi-VN", { ...tz, hour12: false, hour: "2-digit", minute: "2-digit" }) : "—";
+  function connBars(cb, max) {
+    const g = cb && cb.groups; if (!g) return `<p class="small">Không có số liệu chia nhóm (sự cố trước cập nhật 49).</p>`;
+    const rows = Object.entries(g).sort((a, b) => b[1] - a[1]);
+    const tot = rows.reduce((t, [, n]) => t + n, 0) || 1;
+    return `<table><tbody>${rows.map(([k, n]) => `<tr><td>${esc(k)}</td><td class="num" style="width:40px;text-align:right">${n}</td>
+      <td style="width:45%"><div class="meter"><span style="width:${Math.round(100 * n / (max || tot))}%;background:var(--s1)"></span></div></td></tr>`).join("")}</tbody></table>`
+      + (cb.states ? `<p class="small">Trạng thái: ${Object.entries(cb.states).map(([k, n]) => esc(k) + " " + n).join(" · ")}</p>` : "");
+  }
+  const connShort = (cb) => cb && cb.groups ? Object.entries(cb.groups).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => esc(k) + " " + n).join(", ") : "";
+  function incidentCard(x) {
+    const l = STATUS[x.level] || STATUS.warn, r = REC[x.ended_at ? (x.recovery || "tu_hoi_phuc") : "dang"];
+    const ctx = x.context || {}, migs = ctx.migrations || [], top = (ctx.requests && ctx.requests.top) || [], acts = x.actions || [];
+    const tl = x.timeline || [];
+    const events = [
+      ...migs.map((m) => ({ at: m.at, t: `Migration <b>${esc(m.name)}</b> chạy trên Product` })),
+      ...acts.map((a) => ({ at: a.at, t: `🛠 Bot ngắt ${a.n} truy vấn: ${(a.items || []).map((i) => esc(i.user) + " " + esc(i.state) + " " + i.secs + "s").join("; ")}` })),
+      { at: x.started_at, t: `Bắt đầu: ${esc(x.first_detail || "")}` },
+      ...(x.alerted_at ? [{ at: x.alerted_at, t: "Gửi cảnh báo Telegram" }] : []),
+      ...(x.ended_at ? [{ at: x.ended_at, t: `Bình thường lại — ${r.t.toLowerCase()}` }] : []),
+    ].sort((a, b) => new Date(a.at) - new Date(b.at));
+    return `<details class="inc" ${x.ended_at ? "" : "open"}><summary>
+        <span class="st" style="color:var(${l.c})">${l.icon}</span> <b>${fmtTime(x.started_at)} → ${x.ended_at ? hhmm(x.ended_at) : "nay"}</b>
+        · ${x.minutes} phút · ${esc(x.last_detail || x.first_detail || "")}
+        · <b style="color:var(${r.c})">${r.t}</b>${x.alerted ? " · đã báo Telegram" : " · thoáng qua, không báo"}</summary>
+      <div class="incbody">
+        ${x.note ? `<p><b>Phân tích:</b> ${esc(x.note)}</p>` : ""}
+        <p class="small">${r.s}${x.peak_conns ? ` · kết nối đông nhất ${x.peak_conns}/${x.conns_max}` : ""}</p>
+        <div class="grid2">
+          <div><h3>Kết nối DB lúc đông nhất</h3>${connBars(x.peak_conn_by, x.conns_max)}</div>
+          <div><h3>Diễn biến</h3><table><tbody>${events.map((e) => `<tr><td style="white-space:nowrap">${hhmm(e.at)}</td><td>${e.t}</td></tr>`).join("")}</tbody></table></div>
+        </div>
+        ${top.length ? `<h3>Gọi API nhiều nhất lúc sự cố</h3>${ctx.requests.note ? `<p class="small">${esc(ctx.requests.note)}</p>` : ""}
+          <table><thead><tr><th>Đường dẫn</th><th class="r">Lượt</th><th>Từ</th></tr></thead><tbody>${top.map((t) => `<tr><td>${esc(t.path)}</td><td class="r num">${fmtN(t.n)}</td><td class="small">${esc(t.who || "")}</td></tr>`).join("")}</tbody></table>` : ""}
+        <h3>Từng lần đo (5 phút/lần)</h3>
+        <div class="tablewrap"><table><thead><tr><th>Giờ</th><th>Kết nối</th><th>REST</th><th>Storage</th><th>Theo dịch vụ</th></tr></thead><tbody>${(x.around || []).map((s) => {
+          const hot = s.conns_max && s.conns / s.conns_max >= 0.7;
+          return `<tr${new Date(s.at) >= new Date(x.started_at) && (!x.ended_at || new Date(s.at) < new Date(x.ended_at)) ? ' style="background:color-mix(in srgb, var(--warning) 12%, transparent)"' : ""}>
+            <td>${hhmm(s.at)}</td><td class="num"${hot ? ' style="color:var(--critical);font-weight:600"' : ""}>${s.conns}/${s.conns_max}</td>
+            <td class="num">${fmtN(s.rest_ms)} ms</td><td class="num">${fmtN(s.storage_ms)} ms</td><td class="small">${connShort(s.conn_by)}</td></tr>`; }).join("")}</tbody></table></div>
+      </div></details>`;
+  }
+
+  // ---------- Chi phí & hạn mức ----------
+  function renderCost(cur, s) {
+    const C = data.cost, FREE = data.free || {}, src = data.cost_sources || {};
+    if (!C) {
+      $("costNote").textContent = "Chưa có số liệu chi phí" + (data.cost_error ? " (" + data.cost_error + ")" : "") + ". Chạy cập nhật 47 trên Supabase rồi tải lại.";
+      $("costTiles").innerHTML = ""; ["quotaTable", "modelTable", "priceTable"].forEach((id) => $(id).innerHTML = "");
+      ["cAiCost", "cTokens", "cAiCalls", "cByModel", "cCfReq", "cEgress", "cSbReq"].forEach((id) => draw(id, { data: { datasets: [] } }));
+      return;
+    }
+    const st = C.settings || {}, rate = Number(st.usd_vnd || 26100), ai = C.ai || {};
+    const vnd = (usd) => usd == null ? null : Number(usd) * rate;
+    const day = Math.max(1, C.day_of_month || 1), dim = C.days_in_month || 30;
+    const mtdReal = vnd(ai.mtd?.real_usd || 0), mtdList = vnd(ai.mtd?.list_usd || 0);
+    const projReal = mtdReal / day * dim, projList = mtdList / day * dim;
+    const budget = Number(st.budget_vnd_month || 0);
+    const fixed = (st.fixed_costs || []).reduce((a, f) => a + (Number(f.vnd_thang) || 0) + (Number(f.vnd_nam) || 0) / 12, 0);
+    const orders = ai.online_orders_mtd || 0;
+    const errs = ai.errors_today || {}, e429 = Number(errs["429"] || 0);
+    const unpriced = (ai.by_model || []).filter((m) => m.unpriced).map((m) => m.model);
+    const notes = [];
+    notes.push(`Gemini: ${st.gemini_paid ? "gói trả tiền" : "gói miễn phí (chi phí thật = 0, cột \"nếu trả tiền\" để biết khi bật thanh toán)"} · Claude: ${st.claude_paid ? "trả tiền" : "miễn phí"} · tỷ giá ${fmtN(rate)}đ/USD.`);
+    if (!src.cloudflare) notes.push("Chưa cài CF_API_TOKEN / CF_ACCOUNT_ID nên chưa có số liệu Cloudflare.");
+    if (!src.supabase_logs) notes.push("Chưa cài SUPABASE_PAT nên chưa có egress / lượt gọi Supabase.");
+    if (unpriced.length) notes.push("Model chưa có giá: " + unpriced.join(", ") + " (thêm vào bảng ai_prices).");
+    $("costNote").textContent = notes.join(" ");
+    $("costSub").textContent = `đồng · cột: số tiền thật phải trả · nét đứt: nếu tính theo giá trả tiền · tỷ giá ${fmtN(rate)}đ/USD`;
+
+    const month = C.cloud?.month || {};
+    const egU = month["supabase:egress_uncached_bytes"], egC = month["supabase:egress_cached_bytes"];
+    const egLim = FREE["supabase:egress_uncached_bytes"]?.limit || 5368709120;
+    $("costTiles").innerHTML = [
+      tile("AI hôm nay", fmtSmallVND(vnd(ai.today?.real_usd || 0)), (ai.today?.calls || 0) + " lượt · nếu trả tiền " + fmtSmallVND(vnd(ai.today?.list_usd || 0))),
+      tile("AI tháng này", fmtSmallVND(mtdReal), budget ? "ngân sách " + fmtVND(budget) + " · " + Math.round(mtdReal / budget * 100) + "%" : "chưa đặt ngân sách",
+        budget ? lvl(mtdReal / budget * 100, 70, 100) : null),
+      tile("Dự báo cả tháng", fmtSmallVND(projReal), "nếu trả tiền " + fmtSmallVND(projList), budget ? lvl(projReal / budget * 100, 80, 100) : null),
+      tile("AI mỗi đơn online", orders ? fmtSmallVND(mtdList / orders) : "—", orders + " đơn bot tháng này · theo giá trả tiền"),
+      tile("Token tháng này", fmtTok(ai.mtd?.in || 0) + " / " + fmtTok((ai.mtd?.out || 0) + (ai.mtd?.think || 0)), "vào / ra · cache " + fmtTok(ai.mtd?.cached || 0)),
+      tile("Lỗi AI hôm nay", fmtN(ai.today?.errors || 0), e429 ? e429 + " lần bị từ chối vì hết hạn mức (429)" : "không bị chặn hạn mức", e429 >= 5 ? "bad" : (ai.today?.errors ? "warn" : "ok")),
+      tile("Egress Supabase tháng", egU != null ? fmtBytes(egU) : "—", egC != null ? "qua cache " + fmtBytes(egC) + " · mỗi loại 5 GB" : "cần SUPABASE_PAT",
+        egU != null ? lvl(Math.max(egU, egC || 0) / egLim * 100, 70, 90) : "unk"),
+      tile("Chi phí cố định", fmtVND(fixed), (st.fixed_costs || []).length ? (st.fixed_costs || []).map((f) => esc(f.ten)).join(", ") : "chưa khai báo (tên miền…)"),
+      tile("Tổng ước tính tháng", fmtSmallVND(projReal + fixed), "AI dự báo + cố định · cloud gói Free"),
+    ].join("");
+
+    // Chi phí AI mỗi ngày
+    const daily = ai.daily || [];
+    const byDay = (prov, f) => { const m = new Map(); for (const r of daily) if (!prov || r.provider === prov) m.set(r.d, (m.get(r.d) || 0) + Number(f(r) || 0)); return m; };
+    const days = fillDays([], C.days || 30).map((r) => r.d), dl = days.map(dayLabel);
+    const provs = [...new Set(daily.map((r) => r.provider))];
+    const pName = { gemini: "Gemini", claude: "Claude" };
+    const listAll = byDay(null, (r) => r.list_usd);
+    draw("cAiCost", { data: { labels: dl, datasets: [
+      ...provs.map((p, i) => { const m = byDay(p, (r) => r.real_usd); return bar(pName[p] || p, days.map((d) => vnd(m.get(d) || 0)), s[i]); }),
+      line("Nếu trả tiền", days.map((d) => vnd(listAll.get(d) || 0)), css("--muted"), { borderDash: [5, 4], borderWidth: 1.5, pointRadius: 2 }) ] },
+      options: { scales: axes({ stacked: true, tick: (v) => fmtSmallVND(v) }), plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmtSmallVND(c.raw)}`,
+        footer: (it) => { const d = days[it[0].dataIndex]; const n = byDay(null, (r) => r.calls).get(d) || 0; return n + " lượt gọi"; } } } } } },
+      "Chưa có lượt gọi AI nào được ghi. Số liệu xuất hiện sau khi cập nhật bot-don / chup-chat và có đơn mới.");
+    const tin = byDay(null, (r) => r.in_tok), tout = byDay(null, (r) => r.out_tok);
+    draw("cTokens", { data: { labels: dl, datasets: [
+      bar("Vào", days.map((d) => (tin.get(d) || 0) / 1000), s[0]), bar("Ra", days.map((d) => (tout.get(d) || 0) / 1000), s[1]) ] },
+      options: { scales: axes({ stacked: true, tick: (v) => fmtN(v) + "k" }), plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmtTok(c.raw * 1000)} token` } } } } });
+    const calls = byDay(null, (r) => r.calls), errsD = byDay(null, (r) => r.errors);
+    draw("cAiCalls", { data: { labels: dl, datasets: [
+      bar("Thành công", days.map((d) => (calls.get(d) || 0) - (errsD.get(d) || 0)), s[0]), bar("Lỗi", days.map((d) => errsD.get(d) || 0), s[7]) ] },
+      options: { scales: axes({ stacked: true }) } });
+    const bm = (ai.by_model || []).filter((m) => m.list_usd != null);
+    draw("cByModel", { data: { labels: bm.map((m) => m.model), datasets: [ bar("Chi phí", bm.map((m) => vnd(m.list_usd)), s[0], { borderWidth: 0 }) ] },
+      options: { indexAxis: "y", scales: { x: { grid: { color: css("--grid") }, ticks: { callback: (v) => fmtSmallVND(v) } }, y: { grid: { display: false } } },
+        plugins: { tooltip: { callbacks: { label: (c) => { const m = bm[c.dataIndex]; return ` ${fmtSmallVND(c.raw)} · ${m.calls} lượt · ${fmtSmallVND(vnd(m.usd_per_call))}/lượt`; } } } } } });
+
+    // Cloud theo ngày (ngày UTC)
+    const cl = C.cloud?.daily || [];
+    const cdays = fillDays([], C.days || 30).map((r) => r.d), cdl = cdays.map(dayLabel);
+    const metric = (svc, mt) => { const mp = new Map(cl.filter((r) => r.service === svc && r.metric === mt).map((r) => [r.d, Number(r.value)])); return cdays.map((d) => mp.has(d) ? mp.get(d) : null); };
+    draw("cCfReq", { data: { labels: cdl, datasets: [
+      bar("Lượt gọi Workers", metric("cloudflare", "workers_requests"), s[0]), line("KV đọc", metric("cloudflare", "kv_read"), s[1], { pointRadius: 2 }),
+      line("KV ghi", metric("cloudflare", "kv_write"), s[2], { pointRadius: 2 }) ] }, options: { scales: axes() } },
+      src.cloudflare ? "Chưa có số liệu. Bot thu mỗi giờ (hoặc bấm ↻ sau khi gọi POST /api/cost)." : "Cài CF_API_TOKEN và CF_ACCOUNT_ID để đo.");
+    draw("cEgress", { data: { labels: cdl, datasets: [
+      bar("Không cache", metric("supabase", "egress_uncached_bytes").map((v) => v == null ? null : v / 1048576), s[0]),
+      bar("Qua cache", metric("supabase", "egress_cached_bytes").map((v) => v == null ? null : v / 1048576), s[1]) ] },
+      options: { scales: axes({ stacked: true, tick: (v) => fmtN(v) }), plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmtMB(c.raw * 1048576)}` } } } } },
+      src.supabase_logs ? "Chưa có số liệu. Bot thu mỗi giờ." : "Cài SUPABASE_PAT để đo egress.");
+    draw("cSbReq", { data: { labels: cdl, datasets: [
+      bar("REST", metric("supabase", "req_rest"), s[0]), bar("Storage", metric("supabase", "req_storage"), s[1]),
+      bar("Auth", metric("supabase", "req_auth"), s[2]), bar("Realtime", metric("supabase", "req_realtime"), s[3]),
+      line("Edge Function", metric("supabase", "function_invocations"), s[4], { pointRadius: 2 }) ] }, options: { scales: axes({ stacked: true }) } },
+      src.supabase_logs ? "Chưa có số liệu. Bot thu mỗi giờ." : "Cài SUPABASE_PAT để đo.");
+
+    // Bảng hạn mức
+    const latest = C.cloud?.latest || [];
+    const sbNow = C.supabase_now || {};
+    const rows = [];
+    for (const [k, f] of Object.entries(FREE)) {
+      const [svc, mt] = k.split(":");
+      let used = null, when = "";
+      if (f.period === "day") { const r = latest.find((x) => x.service === svc && x.metric === mt); if (r) { used = Number(r.value); when = dayLabel(r.d) + " (UTC)"; } }
+      else if (month[k] != null) { used = Number(month[k]); when = "tháng này"; }
+      rows.push({ name: f.name, used, limit: f.limit, bytes: f.bytes, when });
+    }
+    rows.push({ name: "Supabase: dung lượng database", used: sbNow.db_bytes, limit: (data.db_limit_mb || 500) * 1048576, bytes: true, when: "hiện tại" });
+    rows.push({ name: "Supabase: dung lượng Storage", used: sbNow.storage_bytes, limit: (data.storage_limit_mb || 1024) * 1048576, bytes: true, when: "hiện tại" });
+    rows.push({ name: "Supabase: người dùng hoạt động (MAU)", used: sbNow.mau, limit: 50000, when: "tháng này" });
+    for (const m of ai.today_by_model || []) if (m.rpd_limit) rows.push({ name: "Gemini miễn phí: " + m.model, used: m.calls, limit: m.rpd_limit, when: "hôm nay (giờ VN)" });
+    const pct = Number(st.alert_quota_pct || 80);
+    $("quotaTable").innerHTML = `<table><thead><tr><th>Hạn mức</th><th class="r">Đã dùng</th><th class="r">Giới hạn</th><th style="width:28%">Mức dùng</th><th>Kỳ</th></tr></thead><tbody>${rows.map((r) => {
+      const p = r.used == null ? null : r.used / r.limit * 100, l = p == null ? "unk" : lvl(p, pct, 95);
+      const fmt = (v) => r.bytes ? fmtBytes(v) : fmtN(v);
+      return `<tr><td>${esc(r.name)}</td><td class="r">${r.used == null ? "—" : fmt(r.used)}</td><td class="r">${fmt(r.limit)}</td>
+        <td>${p == null ? '<span class="small">chưa đo</span>' : `<div class="st" style="width:100%"><div class="meter" style="flex:1"><span style="width:${Math.min(100, Math.max(p, 0.5)).toFixed(1)}%;background:var(${STATUS[l].c})"></span></div><span>${p < 1 ? p.toFixed(2) : p.toFixed(0)}%</span></div>`}</td>
+        <td class="small">${esc(r.when)}</td></tr>`; }).join("")}</tbody></table>
+      <p class="small">Egress ước tính từ nhật ký API: chỉ cộng các phản hồi có ghi độ dài nên con số có thể thấp hơn thực tế. Số chính xác xem ở Supabase → Organization → Usage.</p>`;
+
+    // Bảng model
+    const bmAll = ai.by_model || [];
+    $("modelTable").innerHTML = bmAll.length ? `<table><thead><tr><th>Model</th><th class="r">Lượt</th><th class="r">Lỗi</th><th class="r">Token vào</th><th class="r">Cache</th><th class="r">Token ra</th><th class="r">Suy nghĩ</th><th class="r">TB thời gian</th><th class="r">Mỗi lượt</th><th class="r">Nếu trả tiền</th><th class="r">Thật</th></tr></thead><tbody>${bmAll.map((m) =>
+      `<tr><td>${esc(m.model)}${m.unpriced ? ' <span class="small">(chưa có giá)</span>' : ""}</td><td class="r">${fmtN(m.calls)}</td><td class="r">${fmtN(m.errors)}</td><td class="r">${fmtTok(m.in_tok)}</td><td class="r">${fmtTok(m.cached)}</td><td class="r">${fmtTok(m.out_tok)}</td><td class="r">${fmtTok(m.think)}</td>
+       <td class="r">${m.avg_ms ? (m.avg_ms / 1000).toFixed(1) + " s" : "—"}</td><td class="r">${fmtSmallVND(vnd(m.usd_per_call))}</td><td class="r">${fmtSmallVND(vnd(m.list_usd))}</td><td class="r">${fmtSmallVND(vnd(m.real_usd))}</td></tr>`).join("")}</tbody></table>`
+      + ((ai.by_source || []).length ? `<p class="small">Theo nguồn: ${(ai.by_source || []).map((x) => esc(x.source) + " " + fmtN(x.calls) + " lượt (" + fmtSmallVND(vnd(x.list_usd)) + ")").join(" · ")}</p>` : "")
+      : '<p class="small">Chưa có lượt gọi AI nào trong 30 ngày.</p>';
+    $("priceTable").innerHTML = `<table><thead><tr><th>Model</th><th>Từ ngày</th><th class="r">Vào</th><th class="r">Cache</th><th class="r">Ra</th><th>Ghi chú</th></tr></thead><tbody>${(C.prices || []).map((p) =>
+      `<tr><td>${esc(p.model)}</td><td>${esc(p.valid_from)}</td><td class="r">$${p.in_usd}</td><td class="r">${p.cached_usd == null ? "= vào" : "$" + p.cached_usd}</td><td class="r">$${p.out_usd}</td><td class="small">${esc(p.note || "")}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  // ---------- Đăng nhập / điều khiển ----------
+  function start() { $("login").hidden = true; $("app").hidden = false; applyDefaults(); load(); clearInterval(timer); timer = setInterval(load, 60000); }
+  function logout(msg) { localStorage.removeItem(LS); key = ""; clearInterval(timer); $("app").hidden = true; $("login").hidden = false; $("loginErr").textContent = msg || ""; }
+  $("loginForm").addEventListener("submit", (e) => { e.preventDefault(); key = $("keyInput").value.trim(); localStorage.setItem(LS, key); start(); });
+  $("logoutBtn").addEventListener("click", () => logout());
+  $("refreshBtn").addEventListener("click", load);
+  document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    hours = Number(b.dataset.h); load(); }));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { applyDefaults(); if (data) render(); });
+  if (key) start(); else logout();
+})();
+</script>
+</body>
+</html>
