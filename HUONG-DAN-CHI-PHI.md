@@ -16,7 +16,7 @@ Trang Monitoring (`/dashboard` của bot `benoc-health-bot`) có thêm mục **C
 npx supabase db push --db-url "$SUPABASE_DB_URL"
 ```
 
-Hoặc dán `supabase/migrations/20261127090000_chi_phi_cloud_ai.sql` vào SQL Editor. Chạy lại vẫn an toàn.
+Hoặc dán `supabase/migrations/20261127093615_chi_phi_cloud_ai.sql` vào SQL Editor. Chạy lại vẫn an toàn.
 
 ### 2. Supabase: deploy lại 2 function
 
