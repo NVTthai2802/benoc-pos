@@ -1062,6 +1062,7 @@ export type Database = {
           items: Json
           ordered_at: string
           paid_at: string
+          paid_real_at: string | null
           payment_method: string
           queue_number: number | null
           served_at: string | null
@@ -1082,6 +1083,7 @@ export type Database = {
           items: Json
           ordered_at: string
           paid_at?: string
+          paid_real_at?: string | null
           payment_method: string
           queue_number?: number | null
           served_at?: string | null
@@ -1102,6 +1104,7 @@ export type Database = {
           items?: Json
           ordered_at?: string
           paid_at?: string
+          paid_real_at?: string | null
           payment_method?: string
           queue_number?: number | null
           served_at?: string | null

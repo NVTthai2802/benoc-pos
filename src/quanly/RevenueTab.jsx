@@ -55,7 +55,9 @@ function InvoiceBox({ q }) {
     else content = <>
       <p className="small muted" style={{ margin: '6px 0 8px' }}>{words.length ? 'Tìm thấy ' + list.length + '/' + pool.length : list.length} hoá đơn · <b className="num">{vnd(sumOf(list))}</b> · tiền mặt {vnd(sumOf(list.filter(x => x.payment_method === 'tien_mat')))} · chuyển khoản {vnd(sumOf(list.filter(x => x.payment_method === 'chuyen_khoan')))}</p>
       <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Lúc</th><th>Số</th><th>Khách</th><th>Món</th><th className="r">Tổng</th><th>Trả bằng</th></tr></thead><tbody>
-        {list.map(x => <tr key={x.id}><td className="num">{hhmm(x.paid_at)}</td>
+        {list.map(x => <tr key={x.id}><td className="num">{x.paid_real_at
+            ? <>{hhmm(x.ordered_at)}<br /><small className="muted" title="Đơn hôm trước, hôm sau mới thu: doanh thu tính về ngày đặt">thu {new Date(x.paid_real_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></>
+            : hhmm(x.paid_at)}</td>
           <td className="num">{x.dine_type === 'giao_hang' ? <span className="pill pill-mute">Đi ship</span> : x.dine_type === 'mang_ve' ? <span className="pill pill-mute">Mang về</span> : x.queue_number}</td>
           <td className="who">{x.customer_name ? <><b>{x.customer_name}</b>{x.customer_phone && <><br /><span className="small muted">{x.customer_phone}</span></>}{x.address && <><br /><span className="small muted">{x.address}</span></>}</> : <span className="muted">—</span>}</td>
           <td><Html html={invoiceItems(x.items || [])} /></td><td className="r num">{vnd(x.total)}</td>
@@ -123,9 +125,11 @@ export default function RevenueTab({ q }) {
   sales.forEach(x => { const c = byCounter[payer(x)]; c.n++; c[x.payment_method] = (c[x.payment_method] || 0) + x.total; });
   let buckets;
   if (range === 'today') {
-    let h0 = 8, h1 = 22; sales.forEach(x => { const h = new Date(x.paid_at).getHours(); h0 = Math.min(h0, h); h1 = Math.max(h1, h); });
+    // Hoá đơn thu muộn (về ngày đặt, paid_at = 23:59:59): xếp theo giờ đặt
+    const hourOf = x => new Date(x.paid_real_at ? x.ordered_at : x.paid_at).getHours();
+    let h0 = 8, h1 = 22; sales.forEach(x => { const h = hourOf(x); h0 = Math.min(h0, h); h1 = Math.max(h1, h); });
     buckets = []; for (let h = h0; h <= h1; h++) buckets.push({ label: h + 'h', label2: h + ':00–' + (h + 1) + ':00', value: 0, count: 0 });
-    sales.forEach(x => { const b = buckets[new Date(x.paid_at).getHours() - h0]; b.value += x.total; b.count++; });
+    sales.forEach(x => { const b = buckets[hourOf(x) - h0]; b.value += x.total; b.count++; });
   } else {
     buckets = []; for (let d = new Date(r.from); d < r.to; d = addDays(d, 1)) buckets.push({ key: d.toDateString(), label: ddmm(d), label2: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()] + ' ' + ddmm(d), value: 0, count: 0 });
     const idx = new Map(buckets.map((b, i) => [b.key, i]));
