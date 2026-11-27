@@ -142,11 +142,62 @@ async function probeAndAlert(env) {
   const level = bad.length ? "bad" : warn.length ? "warn" : "ok";
   const detail = [...bad, ...warn].join("; ");
 
-  const alert = await updateAlert(env, level, detail);
-  return { level, detail, p, saved: !!sample, alert };
+  // ---- Bot tự xử lý an toàn: ngắt truy vấn treo / giao dịch bỏ dở > 5 phút của app ----
+  let fixed = null;
+  if (sample && level !== "ok") {
+    const cPct = sample.conns_max ? (sample.conns / sample.conns_max) * 100 : 0;
+    if (sample.long_q > 0 || sample.locks > 0 || cPct >= 90) {
+      const f = await rpcCall(env, "monitor_autofix", {});
+      if (f.ok && Array.isArray(f.body) && f.body.length) fixed = f.body;
+    }
+  }
+
+  const alert = await updateAlert(env, level, detail, sample, fixed);
+  return { level, detail, p, saved: !!sample, alert, fixed };
 }
 
-async function updateAlert(env, level, detail) {
+async function rpcCall(env, fn, body) {
+  const sb = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
+  return timed(`${sb}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY || ""), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Ghi sự cố vào bảng monitor_incidents (lỗi ghi không làm hỏng cảnh báo)
+async function incident(env, p) {
+  try {
+    const r = await rpcCall(env, "monitor_incident", { p });
+    return r.ok && r.body && typeof r.body === "object" ? r.body : null;
+  } catch { return null; }
+}
+
+// "API (PostgREST) 30 · Realtime 8 · Storage 6"
+function connText(cb) {
+  const g = cb && cb.groups;
+  if (!g) return "";
+  return Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} ${n}`).join(" · ");
+}
+
+// Đường dẫn gọi nhiều nhất trong khoảng sự cố (chỉ khi có SUPABASE_PAT)
+async function topRequests(env, fromMs, toMs) {
+  const ref = supabaseRef(env);
+  if (!env.SUPABASE_PAT || !ref) return null;
+  const sql = `select log_attributes['request.method'] m,
+      arrayStringConcat(arraySlice(splitByChar('/', splitByChar('?', log_attributes['request.path'])[1]), 1, 5), '/') path,
+      count() n, any(substring(log_attributes['request.headers.user_agent'], 1, 50)) ua
+    from logs where source = 'edge_logs' group by m, path order by n desc limit 8`;
+  const u = new URL(`https://api.supabase.com/v1/projects/${ref}/analytics/endpoints/logs.all`);
+  u.searchParams.set("sql", sql);
+  u.searchParams.set("iso_timestamp_start", new Date(fromMs - 5 * 60000).toISOString());
+  u.searchParams.set("iso_timestamp_end", new Date(toMs).toISOString());
+  const r = await timed(u.toString(), { headers: { Authorization: `Bearer ${env.SUPABASE_PAT}` } });
+  if (!r.ok || !r.body || !Array.isArray(r.body.result)) return null;
+  return r.body.result.map((x) => ({ path: `${x.path} (${x.m})`, n: Number(x.n), who: x.ua || "" }));
+}
+
+async function updateAlert(env, level, detail, sample = null, fixed = null) {
   const kv = env.ALERT_KV;
   const now = Date.now();
   let st = null;
@@ -154,13 +205,24 @@ async function updateAlert(env, level, detail) {
   st = st || { status: "ok", streak: 0, since: now, alerted: false };
 
   if (level === "ok") {
+    let inc = null;
+    if (st.incId) {
+      const top = st.alerted ? await topRequests(env, st.since, now) : null;
+      if (top) await incident(env, { op: "context", id: st.incId, context: { requests: { top } } });
+      inc = await incident(env, { op: "close", id: st.incId, alerted: !!st.alerted });
+    }
     if (st.alerted) {
       const mins = Math.max(1, Math.round((now - st.since) / 60000));
+      const botFixed = (inc && inc.recovery === "bot_can_thiep") || st.fixes > 0;
+      const migs = (inc && inc.context && inc.context.migrations) || [];
       await sendTelegram(env, [
         `✅ POS BÉ NỐC ĐÃ HỒI PHỤC`,
         `Sự cố kéo dài khoảng ${mins} phút (từ ${fmtTime(st.since)}).`,
         st.detail ? `Lỗi trước đó: ${st.detail}` : "",
-        dashLink(env),
+        botFixed ? `🛠 Bot đã can thiệp: ngắt ${st.fixes || "?"} truy vấn treo.` : `Cách hồi phục: tự hồi phục (bot không phải can thiệp).`,
+        inc && inc.peak_conns ? `Kết nối đông nhất: ${inc.peak_conns}/${inc.conns_max}${connText(inc.peak_conn_by) ? " — " + connText(inc.peak_conn_by) : ""}` : "",
+        migs.length ? `Có thể liên quan: migration ${migs.map((m) => m.name).join(", ")} chạy lúc ${migs.map((m) => fmtTime(m.at)).join(", ")}` : "",
+        dashLink(env) ? dashLink(env) + "#su-co" : "",
       ].filter(Boolean).join("\n"));
     }
     if (st.status !== "ok" || st.alerted) {
@@ -179,7 +241,16 @@ async function updateAlert(env, level, detail) {
     status: level, streak, detail,
     since: wasOk ? now : st.since,
     alerted: st.alerted, alertLevel: st.alertLevel, lastAlert: st.lastAlert,
+    incId: wasOk ? null : st.incId, fixes: wasOk ? 0 : st.fixes || 0,
   };
+  if (!next.incId) {
+    const inc = await incident(env, { op: "open", level, detail });
+    if (inc) next.incId = inc.id;
+  }
+  if (fixed && fixed.length && next.incId) {
+    await incident(env, { op: "action", id: next.incId, action: { type: "ngat_truy_van_treo", n: fixed.length, items: fixed } });
+    next.fixes += fixed.length;
+  }
 
   if (streak >= need && (!st.alerted || escalate || remind)) {
     const mins = Math.max(1, Math.round((now - next.since) / 60000));
@@ -187,6 +258,8 @@ async function updateAlert(env, level, detail) {
       level === "bad" ? `🔴 POS BÉ NỐC ĐANG GẶP SỰ CỐ` : `🟡 POS BÉ NỐC ĐANG CHẬM`,
       `${remind && !escalate ? "Vẫn chưa hết — " : ""}khoảng ${mins} phút (từ ${fmtTime(next.since)}).`,
       `Chi tiết: ${detail}`,
+      sample && connText(sample.conn_by) ? `Kết nối theo dịch vụ: ${connText(sample.conn_by)}` : "",
+      next.fixes ? `🛠 Bot đã ngắt ${next.fixes} truy vấn treo.` : "",
       level === "bad" ? `Nếu kéo dài: chuẩn bị order giấy dự phòng, xem status.supabase.com.` : "",
       dashLink(env),
     ].filter(Boolean).join("\n"));
@@ -194,6 +267,9 @@ async function updateAlert(env, level, detail) {
     next.alertLevel = level === "bad" || st.alertLevel === "bad" ? "bad" : "warn";
     next.lastAlert = now;
   }
+  // lần mở sự cố đã ghi 1 dòng diễn biến; các lần sau ghi thêm
+  if (next.incId && !wasOk) await incident(env, { op: "update", id: next.incId, level, detail, alerted: !!next.alerted });
+  else if (next.incId && next.alerted) await incident(env, { op: "update", id: next.incId, level, detail, alerted: true });
   await kvPut(kv, next);
   return next;
 }
@@ -402,13 +478,14 @@ async function dashboardData(env, hours) {
   const sb = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const headers = authHeaders(env.SUPABASE_SERVICE_KEY || "");
   const days = 30;
-  const [r, cost] = await Promise.all([
+  const [r, cost, incs] = await Promise.all([
     timed(`${sb}/rest/v1/rpc/monitor_dashboard`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ p_hours: Math.min(Math.max(hours || 24, 1), 840) }),
     }),
     getCost(env, days),
+    rpcCall(env, "monitor_incidents_list", { p_days: 30 }),
   ]);
   let alert = null;
   try { alert = env.ALERT_KV ? await env.ALERT_KV.get("alert", "json") : null; } catch {}
@@ -419,6 +496,7 @@ async function dashboardData(env, hours) {
     d: r.body,
     alert,
     cost: cost.c || null,
+    incidents: incs.ok && Array.isArray(incs.body) ? incs.body : null,
     cost_error: cost.error || null,
     free: FREE,
     cost_sources: { cloudflare: !!(env.CF_API_TOKEN && env.CF_ACCOUNT_ID), supabase_logs: !!env.SUPABASE_PAT },

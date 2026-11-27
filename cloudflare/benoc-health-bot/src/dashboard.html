@@ -70,6 +70,10 @@ td.r, th.r { text-align: right; }
 #login button, .btn { padding: 9px 14px; border-radius: 8px; border: 0; background: var(--text-primary); color: var(--surface-1); font: inherit; font-weight: 600; cursor: pointer; }
 .btn.ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); padding: 6px 10px; }
 .err { color: var(--critical); margin-top: 6px; }
+.inc { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin: 0 0 10px; }
+.inc > summary { font-size: 13px; color: var(--text-primary); margin: 0; line-height: 1.6; }
+.incbody h3 { font-size: 13px; margin: 12px 0 4px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
 details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; margin-top: 6px; }
 </style>
 </head>
@@ -405,12 +409,65 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px
         if (r[k + "_ok"] === false) p.push(n + " lỗi"); else if (r[k + "_ms"] > (k === "site" ? slow * 2 : slow)) p.push(n + " chậm " + fmtN(r[k + "_ms"]) + " ms"); }
       if (r.locks) p.push(r.locks + " chờ khoá"); if (r.long_q) p.push(r.long_q + " truy vấn treo"); return p.join(", "); };
     const lvlOf = (r) => (r.rest_ok === false || r.auth_ok === false || r.storage_ok === false || r.site_ok === false || r.locks >= 5) ? "bad" : "warn";
-    $("incidents").innerHTML = (A.status && A.status !== "ok"
-        ? `<p><b>Đang có cảnh báo</b> từ ${fmtTime(A.since)}: ${esc(A.detail || "")}${A.alerted ? " · đã báo Telegram" : ""}</p>` : "")
-      + (inc.length
+    const probes = inc.length
         ? `<table><thead><tr><th>Thời điểm</th><th>Mức</th><th>Chi tiết</th></tr></thead><tbody>${inc.map((r) => { const l = STATUS[lvlOf(r)];
             return `<tr><td>${fmtTime(r.at)}</td><td><span class="st" style="color:var(${l.c})">${l.icon}</span> ${l.t}</td><td>${esc(why(r))}</td></tr>`; }).join("")}</tbody></table>`
-        : `<p class="small">Không có lần kiểm tra bất thường trong ${label}.</p>`);
+        : `<p class="small">Không có lần đo API chậm / lỗi trong ${label}.</p>`;
+    const list = data.incidents;
+    $("incidents").innerHTML = (A.status && A.status !== "ok"
+        ? `<p><b>Đang có cảnh báo</b> từ ${fmtTime(A.since)}: ${esc(A.detail || "")}${A.alerted ? " · đã báo Telegram" : " · chưa đủ lâu để báo Telegram"}${A.fixes ? ` · bot đã ngắt ${A.fixes} truy vấn treo` : ""}</p>` : "")
+      + (list == null ? `<p class="small">Chưa đọc được nhật ký sự cố (cần chạy SQL cập nhật 49).</p>`
+        : list.length ? list.map(incidentCard).join("") : `<p class="small">Không có sự cố nào trong 30 ngày.</p>`)
+      + `<details><summary>Các lần đo API chậm / lỗi (${inc.length})</summary>${probes}</details>`;
+  }
+
+  // ---------- Một sự cố ----------
+  const REC = {
+    tu_hoi_phuc:   { c: "--good-text", t: "Tự hồi phục", s: "Bot không phải can thiệp" },
+    bot_can_thiep: { c: "--s1",        t: "Bot đã can thiệp", s: "Bot ngắt truy vấn treo / giao dịch bỏ dở" },
+    dang:          { c: "--critical",  t: "Đang diễn ra", s: "" },
+  };
+  const hhmm = (t) => t ? new Date(t).toLocaleTimeString("vi-VN", { ...tz, hour12: false, hour: "2-digit", minute: "2-digit" }) : "—";
+  function connBars(cb, max) {
+    const g = cb && cb.groups; if (!g) return `<p class="small">Không có số liệu chia nhóm (sự cố trước cập nhật 49).</p>`;
+    const rows = Object.entries(g).sort((a, b) => b[1] - a[1]);
+    const tot = rows.reduce((t, [, n]) => t + n, 0) || 1;
+    return `<table><tbody>${rows.map(([k, n]) => `<tr><td>${esc(k)}</td><td class="num" style="width:40px;text-align:right">${n}</td>
+      <td style="width:45%"><div class="meter"><span style="width:${Math.round(100 * n / (max || tot))}%;background:var(--s1)"></span></div></td></tr>`).join("")}</tbody></table>`
+      + (cb.states ? `<p class="small">Trạng thái: ${Object.entries(cb.states).map(([k, n]) => esc(k) + " " + n).join(" · ")}</p>` : "");
+  }
+  const connShort = (cb) => cb && cb.groups ? Object.entries(cb.groups).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => esc(k) + " " + n).join(", ") : "";
+  function incidentCard(x) {
+    const l = STATUS[x.level] || STATUS.warn, r = REC[x.ended_at ? (x.recovery || "tu_hoi_phuc") : "dang"];
+    const ctx = x.context || {}, migs = ctx.migrations || [], top = (ctx.requests && ctx.requests.top) || [], acts = x.actions || [];
+    const tl = x.timeline || [];
+    const events = [
+      ...migs.map((m) => ({ at: m.at, t: `Migration <b>${esc(m.name)}</b> chạy trên Product` })),
+      ...acts.map((a) => ({ at: a.at, t: `🛠 Bot ngắt ${a.n} truy vấn: ${(a.items || []).map((i) => esc(i.user) + " " + esc(i.state) + " " + i.secs + "s").join("; ")}` })),
+      { at: x.started_at, t: `Bắt đầu: ${esc(x.first_detail || "")}` },
+      ...(x.alerted_at ? [{ at: x.alerted_at, t: "Gửi cảnh báo Telegram" }] : []),
+      ...(x.ended_at ? [{ at: x.ended_at, t: `Bình thường lại — ${r.t.toLowerCase()}` }] : []),
+    ].sort((a, b) => new Date(a.at) - new Date(b.at));
+    return `<details class="inc" ${x.ended_at ? "" : "open"}><summary>
+        <span class="st" style="color:var(${l.c})">${l.icon}</span> <b>${fmtTime(x.started_at)} → ${x.ended_at ? hhmm(x.ended_at) : "nay"}</b>
+        · ${x.minutes} phút · ${esc(x.last_detail || x.first_detail || "")}
+        · <b style="color:var(${r.c})">${r.t}</b>${x.alerted ? " · đã báo Telegram" : " · thoáng qua, không báo"}</summary>
+      <div class="incbody">
+        ${x.note ? `<p><b>Phân tích:</b> ${esc(x.note)}</p>` : ""}
+        <p class="small">${r.s}${x.peak_conns ? ` · kết nối đông nhất ${x.peak_conns}/${x.conns_max}` : ""}</p>
+        <div class="grid2">
+          <div><h3>Kết nối DB lúc đông nhất</h3>${connBars(x.peak_conn_by, x.conns_max)}</div>
+          <div><h3>Diễn biến</h3><table><tbody>${events.map((e) => `<tr><td style="white-space:nowrap">${hhmm(e.at)}</td><td>${e.t}</td></tr>`).join("")}</tbody></table></div>
+        </div>
+        ${top.length ? `<h3>Gọi API nhiều nhất lúc sự cố</h3>${ctx.requests.note ? `<p class="small">${esc(ctx.requests.note)}</p>` : ""}
+          <table><thead><tr><th>Đường dẫn</th><th class="r">Lượt</th><th>Từ</th></tr></thead><tbody>${top.map((t) => `<tr><td>${esc(t.path)}</td><td class="r num">${fmtN(t.n)}</td><td class="small">${esc(t.who || "")}</td></tr>`).join("")}</tbody></table>` : ""}
+        <h3>Từng lần đo (5 phút/lần)</h3>
+        <div class="tablewrap"><table><thead><tr><th>Giờ</th><th>Kết nối</th><th>REST</th><th>Storage</th><th>Theo dịch vụ</th></tr></thead><tbody>${(x.around || []).map((s) => {
+          const hot = s.conns_max && s.conns / s.conns_max >= 0.7;
+          return `<tr${new Date(s.at) >= new Date(x.started_at) && (!x.ended_at || new Date(s.at) < new Date(x.ended_at)) ? ' style="background:color-mix(in srgb, var(--warning) 12%, transparent)"' : ""}>
+            <td>${hhmm(s.at)}</td><td class="num"${hot ? ' style="color:var(--critical);font-weight:600"' : ""}>${s.conns}/${s.conns_max}</td>
+            <td class="num">${fmtN(s.rest_ms)} ms</td><td class="num">${fmtN(s.storage_ms)} ms</td><td class="small">${connShort(s.conn_by)}</td></tr>`; }).join("")}</tbody></table></div>
+      </div></details>`;
   }
 
   // ---------- Chi phí & hạn mức ----------
