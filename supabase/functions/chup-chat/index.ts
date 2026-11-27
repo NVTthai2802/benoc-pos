@@ -149,6 +149,24 @@ export function summary(ai: any, trung: boolean): string {
   return [`${trung ? "Ảnh đã gửi trước đó · " : ""}${ten} · ${tin.length} tin / ${muc.length} mục`, ...cuoi].join("\n");
 }
 
+// ---------- Ghi token (cập nhật 47) ----------
+// Mỗi lần gọi Gemini ghi 1 dòng vào ai_usage: model, số token, thời gian. Không ghi nội dung ảnh / chữ.
+// deno-lint-ignore no-explicit-any
+function logAi(o: { model: string; ok: boolean; status: number; ms: number; usage?: any }) {
+  const u = o.usage ?? {}, n = (x: unknown) => Math.max(0, Math.round(Number(x) || 0));
+  const p = (async () => {
+    try {
+      const { error } = await sb.from("ai_usage").insert({
+        source: "chup-chat", provider: "gemini", model: o.model, ok: o.ok, http_status: o.status, ms: o.ms, images: 1,
+        in_tokens: n(u.promptTokenCount) + n(u.toolUsePromptTokenCount), cached_tokens: n(u.cachedContentTokenCount),
+        out_tokens: n(u.candidatesTokenCount), think_tokens: n(u.thoughtsTokenCount),
+      });
+      if (error) console.warn("Ghi ai_usage lỗi (đã chạy cập nhật 47 chưa?)", error.message);
+    } catch (e) { console.warn("Ghi ai_usage lỗi", e); }
+  })();
+  RT?.waitUntil?.(p);
+}
+
 // ---------- Gemini ----------
 
 async function transcribe(bytes: Uint8Array<ArrayBuffer>, mime: string) {
@@ -181,6 +199,7 @@ async function transcribe(bytes: Uint8Array<ArrayBuffer>, mime: string) {
           },
         );
         if (!r.ok) {
+          logAi({ model, ok: false, status: r.status, ms: Date.now() - t0 });
           const t = await r.text();
           last = `${model} HTTP ${r.status}: ${t.slice(0, 200)}`;
           if (r.status === 400 && think && /think/i.test(t)) { think = false; continue; }
@@ -190,10 +209,12 @@ async function transcribe(bytes: Uint8Array<ArrayBuffer>, mime: string) {
           break; // lỗi khác (400/404): sang model sau
         }
         const data = await r.json();
+        logAi({ model, ok: true, status: r.status, ms: Date.now() - t0, usage: data?.usageMetadata });   // ghi trước khi đọc JSON: đọc hỏng vẫn tính token
         const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
         const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ""));
         return { model, ms: Date.now() - t0, json: parsed };
       } catch (e) {
+        if ((e as Error)?.name === "TimeoutError" || (e as Error)?.name === "TypeError") logAi({ model, ok: false, status: 0, ms: Date.now() - t0 });
         last = `${model}: ${(e as Error).message}`;
       }
     }

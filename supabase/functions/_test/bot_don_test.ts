@@ -586,3 +586,13 @@ Deno.test('OCR: thiếu bảng ocr_mau (Product) hay OCR hỏng thì vẫn lên 
   const r = await shortcut(t, fd, { 'x-capture-key': 'khoaPhimTat123', 'x-device': 'android-test', 'x-wait': '1' }, ORDER);
   assertEquals(r.status, 200); assertEquals(t.orders.length, 1); assertEquals((t.ocr_mau || []).length, 0);
 });
+
+Deno.test('ai_usage: đọc đúng số token Gemini / Claude (cập nhật 47)', () => {
+  const g = bot.aiUsageRow({ source: 'bot-don', provider: 'gemini', model: 'gemini-3.5-flash-lite', ok: true, status: 200, ms: 900, images: 2,
+    usage: { promptTokenCount: 5000, cachedContentTokenCount: 1200, candidatesTokenCount: 300, thoughtsTokenCount: 40, toolUsePromptTokenCount: 10 } });
+  assertEquals([g.in_tokens, g.cached_tokens, g.out_tokens, g.think_tokens, g.images], [5010, 1200, 300, 40, 2]);
+  const c = bot.aiUsageRow({ source: 'bot-don', provider: 'claude', model: 'claude-haiku-5-5', ok: true, usage: { input_tokens: 800, cache_read_input_tokens: 200, output_tokens: 90 } });
+  assertEquals([c.in_tokens, c.cached_tokens, c.out_tokens, c.think_tokens], [1000, 200, 90, 0]);
+  const e = bot.aiUsageRow({ source: 'bot-don', provider: 'gemini', model: 'x', ok: false, status: 429 });
+  assertEquals([e.in_tokens, e.out_tokens, e.http_status], [0, 0, 429]);
+});

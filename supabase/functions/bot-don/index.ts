@@ -257,6 +257,26 @@ export function parseJson(t: string): AiOut {
 }
 
 
+// ---------------------------------------------------------------------
+// Ghi token mỗi lần gọi AI vào bảng ai_usage (cập nhật 47) để theo dõi chi phí trên trang Monitoring.
+// Chỉ ghi số token / thời gian / model, KHÔNG ghi nội dung tin nhắn hay ảnh. Lỗi ghi thì bỏ qua, đơn vẫn lên.
+// ---------------------------------------------------------------------
+export function aiUsageRow(o: { source: string; provider: string; model: string; ok: boolean; status?: number; ms?: number; images?: number; usage?: any }) {
+  const u = o.usage || {}, n = (x: unknown) => Math.max(0, Math.round(Number(x) || 0));
+  const t = o.provider === 'claude'
+    ? { in_tokens: n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens), cached_tokens: n(u.cache_read_input_tokens), out_tokens: n(u.output_tokens), think_tokens: 0 }
+    : { in_tokens: n(u.promptTokenCount) + n(u.toolUsePromptTokenCount), cached_tokens: n(u.cachedContentTokenCount), out_tokens: n(u.candidatesTokenCount), think_tokens: n(u.thoughtsTokenCount) };
+  return { source: o.source, provider: o.provider, model: o.model, ok: o.ok, http_status: o.status ?? null, ms: o.ms ?? null, images: n(o.images), ...t };
+}
+function logAi(o: { provider: string; model: string; ok: boolean; status?: number; ms?: number; images?: number; usage?: any }) {
+  if (env('BOT_NO_SERVE')) return;   // chạy test: không ghi
+  const p = (async () => {
+    try { const { error } = await db().from('ai_usage').insert(aiUsageRow({ source: 'bot-don', ...o })); if (error) console.warn('Ghi ai_usage lỗi (đã chạy cập nhật 47 chưa?)', error.message); }
+    catch (e) { console.warn('Ghi ai_usage lỗi', e); }
+  })();
+  const ER = (globalThis as any).EdgeRuntime; if (ER && ER.waitUntil) ER.waitUntil(p);
+}
+
 export type Img = { mime: string; b64: string };
 // Model nhanh chạy trước; model "suy nghĩ" (3.8-flash) chậm, chỉ để cuối làm dự phòng.
 const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-flash'];
@@ -298,8 +318,12 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
         try {
           r = await call(thinkCfg(model));
           if (r.status === 400 && thinkCfg(model)) { console.warn('Gemini ' + model + ' không nhận thinkingConfig, gọi lại không có'); r = await call(null); }   // model không hỗ trợ tuỳ chọn suy nghĩ
-        } catch (e) { err = 'Gemini ' + model + ': ' + String((e as Error)?.name === 'TimeoutError' ? 'quá ' + Math.round(Math.min(per, left) / 1000) + ' giây' : e); retry = true; console.warn(err); continue; }
-        if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model; console.log('⏱ AI ' + model + ' ' + (Date.now() - t0) + 'ms' + (images.length ? ' · ' + images.length + ' ảnh' : ' · chữ')); break; }
+        } catch (e) { err = 'Gemini ' + model + ': ' + String((e as Error)?.name === 'TimeoutError' ? 'quá ' + Math.round(Math.min(per, left) / 1000) + ' giây' : e); retry = true; console.warn(err);
+          logAi({ provider: 'gemini', model, ok: false, status: 0, ms: Date.now() - t0, images: images.length }); continue; }
+        if (r.ok) { const j = await r.json(); text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''; err = ''; used = model;
+          logAi({ provider: 'gemini', model, ok: true, status: r.status, ms: Date.now() - t0, images: images.length, usage: j?.usageMetadata });
+          console.log('⏱ AI ' + model + ' ' + (Date.now() - t0) + 'ms' + (images.length ? ' · ' + images.length + ' ảnh' : ' · chữ')); break; }
+        logAi({ provider: 'gemini', model, ok: false, status: r.status, ms: Date.now() - t0, images: images.length });
         err = 'Gemini ' + model + ' ' + r.status + ': ' + (await r.text()).slice(0, 300);
         console.warn(err);
         if (r.status === 401) { retry = false; break; }
@@ -310,13 +334,15 @@ export async function askAi(system: string, user: string, images: Img[] = []): P
     if (err) throw new Error(err);
   } else {
     const content: any[] = [...images.flatMap((im, i) => [{ type: 'text', text: 'Ảnh ' + (i + 1) + ':' }, { type: 'image', source: { type: 'base64', media_type: im.mime, data: im.b64 } }]), { type: 'text', text: user }];
+    const t0 = Date.now(), cm = env('CLAUDE_MODEL', 'claude-haiku-5-5');
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: env('CLAUDE_MODEL', 'claude-haiku-5-5'), max_tokens: 3000, temperature: 0, system, messages: [{ role: 'user', content }] }),
       signal: AbortSignal.timeout(Math.max(per, 60000)),
     });
-    if (!r.ok) throw new Error('Claude ' + r.status + ': ' + (await r.text()).slice(0, 300));
-    const j = await r.json(); text = (j?.content || []).map((c: any) => c.text || '').join(''); used = env('CLAUDE_MODEL', 'claude-haiku-5-5');
+    if (!r.ok) { logAi({ provider: 'claude', model: cm, ok: false, status: r.status, ms: Date.now() - t0, images: images.length }); throw new Error('Claude ' + r.status + ': ' + (await r.text()).slice(0, 300)); }
+    const j = await r.json(); text = (j?.content || []).map((c: any) => c.text || '').join(''); used = cm;
+    logAi({ provider: 'claude', model: cm, ok: true, status: r.status, ms: Date.now() - t0, images: images.length, usage: j?.usage });
   }
   return Object.assign(parseJson(text), { _model: used });
 }
